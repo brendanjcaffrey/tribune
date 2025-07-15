@@ -1,0 +1,10 @@
+source 'https://rubygems.org'
+
+gem 'connection_pool'
+gem 'pg'
+gem 'puma'
+gem 'rack-test'
+gem 'rackup'
+gem 'rspec'
+gem 'sinatra'
+gem 'sinatra-contrib'
