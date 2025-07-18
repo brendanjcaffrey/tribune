@@ -1,0 +1,9 @@
+database_host: localhost
+database_port: 5432
+database_username: user
+database_password:
+database_name: tribune
+test_database_name: tribune-test
+-- generate with: ruby -rsecurerandom -e 'p SecureRandom.hex(32)'
+secret: [something]
+server_port: 1847

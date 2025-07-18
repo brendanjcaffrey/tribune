@@ -1,0 +1,8 @@
+database_host: localhost
+database_port: 5432
+database_username: ci
+database_password: ci
+database_name: tribune
+test_database_name: tribune-test
+secret: a8248a741a7228e4ddb9f812c96c4af6bd60cda154519214ff60589d5fcc01c8
+server_port: 1847
