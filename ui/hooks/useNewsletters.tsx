@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useFileStorageState } from "@/hooks/useFileStorageState";
 
-function parseTimestamp(ts: string): Date {
+export function parseTimestamp(ts: string): Date {
   const [date, timeZone] = ts.split(" ");
   let [time] = timeZone.split("+");
   if (time.includes(".")) {
@@ -37,7 +37,9 @@ const NewslettersContext = createContext<NewslettersContextValue>({
 export function useNewsletters() {
   const value = use(NewslettersContext);
   if (!value) {
-    throw new Error("useNewsletters must be wrapped in a <NewslettersProvider />");
+    throw new Error(
+      "useNewsletters must be wrapped in a <NewslettersProvider />",
+    );
   }
   return value;
 }
@@ -95,8 +97,10 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
           all.push(...validItems);
           if (
             data.result.length < 100 ||
-            parseTimestamp(data.result[data.result.length - 1]?.updated_at ?? "1970-01-01 00:00:00+00") <
-              threeMonthsAgo
+            parseTimestamp(
+              data.result[data.result.length - 1]?.updated_at ??
+                "1970-01-01 00:00:00+00",
+            ) < threeMonthsAgo
           ) {
             break;
           }
@@ -122,7 +126,9 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
   }, [authState, setNewsletters]);
 
   return (
-    <NewslettersContext.Provider value={{ newsletters: newsletters ?? [], isLoading: loading }}>
+    <NewslettersContext.Provider
+      value={{ newsletters: newsletters ?? [], isLoading: loading }}
+    >
       {children}
     </NewslettersContext.Provider>
   );
