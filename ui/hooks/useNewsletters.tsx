@@ -1,7 +1,17 @@
 import { use, createContext, type PropsWithChildren } from "react";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useStorageState } from "@/hooks/useStorageState";
+import { useFileStorageState } from "@/hooks/useFileStorageState";
+
+function parseTimestamp(ts: string): Date {
+  const [date, timeZone] = ts.split(" ");
+  let [time] = timeZone.split("+");
+  if (time.includes(".")) {
+    const [hms, frac] = time.split(".");
+    time = `${hms}.${frac.substring(0, 3)}`;
+  }
+  return new Date(`${date}T${time}Z`);
+}
 
 export interface Newsletter {
   id: number;
@@ -35,7 +45,7 @@ export function useNewsletters() {
 export function NewslettersProvider({ children }: PropsWithChildren) {
   const { state: authState } = useAuth();
   const [[loading, newsletters], setNewsletters] =
-    useStorageState<Newsletter[]>("newsletters");
+    useFileStorageState<Newsletter[]>("newsletters");
 
   useEffect(() => {
     if (!authState) {
@@ -80,12 +90,12 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
             console.warn("Pagination parameters not echoed back correctly");
           }
           const validItems = data.result.filter(
-            (n) => new Date(n.updated_at) >= threeMonthsAgo,
+            (n) => parseTimestamp(n.updated_at) >= threeMonthsAgo,
           );
           all.push(...validItems);
           if (
-            data.result.length < 50 ||
-            new Date(data.result[data.result.length - 1]?.updated_at ?? 0) <
+            data.result.length < 100 ||
+            parseTimestamp(data.result[data.result.length - 1]?.updated_at ?? "1970-01-01 00:00:00+00") <
               threeMonthsAgo
           ) {
             break;
