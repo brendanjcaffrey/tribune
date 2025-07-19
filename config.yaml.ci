@@ -6,3 +6,4 @@ database_name: tribune
 test_database_name: tribune-test
 secret: a8248a741a7228e4ddb9f812c96c4af6bd60cda154519214ff60589d5fcc01c8
 server_port: 1847
+newsletters_dir: .

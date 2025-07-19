@@ -700,4 +700,219 @@ RSpec.describe 'Tribune Server' do
       expect(item['deleted']).to eq(true)
     end
   end
+
+  describe 'POST /newsletters' do
+    before(:all) do
+      @test_file_path = Tempfile.new('test_newsletter.epub')
+      @test_file_path.write('test test test')
+      @tmpdir = Dir.mktmpdir('test_newsletter_upload')
+      CONFIG.newsletters_dir = @tmpdir
+    end
+
+    before(:each) do
+      create_user
+
+      @metadata = { 'title' => 'Test Title', 'author' => 'Test Author' }
+      @file = Rack::Test::UploadedFile.new(@test_file_path.path, 'application/epub+zip')
+    end
+
+    after(:each) do
+      Dir.foreach(@tmpdir) do |f|
+        fn = File.join(@tmpdir, f)
+        File.delete(fn) if f != '.' && f != '..'
+      end
+    end
+
+    after(:all) do
+      @test_file_path.close! if @test_file_path
+      FileUtils.remove_entry(@tmpdir) if @tmpdir
+      @test_file_path = @tmpdir = nil
+    end
+
+    it 'should return an error if no auth header' do
+      post '/newsletters'
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if expired jwt' do
+      post '/newsletters', {}, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if invalid jwt' do
+      post '/newsletters', {}, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if there\'s no file' do
+      post '/newsletters', {
+        metadata: @metadata.to_json
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if there\'s no metadata' do
+      post '/newsletters', {
+        file: @file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if metadata is not valid json' do
+      post '/newsletters', {
+        metadata: '{{{{',
+        file: @file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if metadata.title is not valid' do
+      @metadata['title'] = nil
+      post '/newsletters', {
+        metadata: @metadata.to_json,
+        file: @file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+
+      @metadata['title'] = ''
+      post '/newsletters', {
+        metadata: @metadata.to_json,
+        file: @file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if metadata.author is not valid' do
+      @metadata['author'] = nil
+      post '/newsletters', {
+        metadata: @metadata.to_json,
+        file: @file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+
+      @metadata['author'] = ''
+      post '/newsletters', {
+        metadata: @metadata.to_json,
+        file: @file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if metadata.author is not valid' do
+      @metadata['author'] = nil
+      post '/newsletters', {
+        metadata: @metadata.to_json,
+        file: @file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+
+      @metadata['author'] = ''
+      post '/newsletters', {
+        metadata: @metadata.to_json,
+        file: @file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should create a database entry and move the file into place' do
+      post '/newsletters', {
+        metadata: @metadata.to_json,
+        file: @file
+      }, get_auth_header
+      expect(last_response).to be_ok
+      expect(File).to exist(File.join(@tmpdir, 'd41d8cd98f00b204e9800998ecf8427e.epub'))
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['created_at'])).to be_within(HALF_SECOND).of(Time.now)
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+      expect(item['title']).to eq(@metadata['title'])
+      expect(item['author']).to eq(@metadata['author'])
+      expect(item['filename']).to eq('d41d8cd98f00b204e9800998ecf8427e.epub')
+      expect(item['read']).to eq(false)
+      expect(item['deleted']).to eq(false)
+    end
+
+    it 'should create a database entry with a creation time if specified' do
+      @metadata['created_at'] = BASE_TIME.iso8601(6)
+      post '/newsletters', {
+        metadata: @metadata.to_json,
+        file: @file
+      }, get_auth_header
+      expect(last_response).to be_ok
+      expect(File).to exist(File.join(@tmpdir, 'd41d8cd98f00b204e9800998ecf8427e.epub'))
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['created_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+      expect(item['title']).to eq(@metadata['title'])
+      expect(item['author']).to eq(@metadata['author'])
+      expect(item['filename']).to eq('d41d8cd98f00b204e9800998ecf8427e.epub')
+      expect(item['read']).to eq(false)
+      expect(item['deleted']).to eq(false)
+    end
+  end
+
+  describe 'GET /newsletters/:id/epub' do
+    before(:all) do
+      @tmpdir = Dir.mktmpdir('test_newsletter_read')
+      CONFIG.newsletters_dir = @tmpdir
+    end
+    before(:each) do
+      create_user
+      create_newsletter(id: 1, updated_at: BASE_TIME, read: true, filename: 'd41d8cd98f00b204e9800998ecf8427e.epub')
+    end
+
+    after(:all) do
+      FileUtils.remove_entry(@tmpdir) if @tmpdir
+    end
+
+    it 'should return an error if no auth header' do
+      get '/newsletters/1/epub'
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if expired jwt' do
+      get '/newsletters/1/epub', {}, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if invalid jwt' do
+      get '/newsletters/1/epub', {}, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if non-numeric id' do
+      get '/newsletters/hi/epub', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if too small id' do
+      get '/newsletters/0/epub', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if non-existant id' do
+      get '/newsletters/2/epub', {}, get_auth_header
+      expect(last_response.status).to eq(404)
+    end
+
+    it 'should return an error if the file doesn\'t exist' do
+      get '/newsletters/1/epub', {}, get_auth_header
+      expect(last_response.status).to eq(500)
+    end
+
+    it 'should return the file contents' do
+      File.open(File.join(@tmpdir, 'd41d8cd98f00b204e9800998ecf8427e.epub'), 'w') do |f|
+        f.write('test test test')
+      end
+
+      get '/newsletters/1/epub', {}, get_auth_header
+      expect(last_response).to be_ok
+      expect(last_response.body).to eq('test test test')
+    end
+  end
 end
