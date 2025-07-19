@@ -1,12 +1,15 @@
 import { Stack, SplashScreen } from "expo-router";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { NewslettersProvider } from "@/hooks/useNewsletters";
 
 export default function Root() {
   // Set up the auth context and render our layout inside of it.
   return (
     <AuthProvider>
-      <SplashScreenController />
-      <RootNavigator />
+      <NewslettersProvider>
+        <SplashScreenController />
+        <RootNavigator />
+      </NewslettersProvider>
     </AuthProvider>
   );
 }
