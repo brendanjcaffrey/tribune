@@ -1,7 +1,8 @@
-import { use, createContext, type PropsWithChildren, useEffect } from "react";
+import { use, createContext, type PropsWithChildren } from "react";
 import { useStorageState } from "@/hooks/useStorageState";
 
 interface AuthState {
+  host: string;
   jwt: string;
   username: string;
 }
@@ -9,15 +10,13 @@ interface AuthState {
 const AuthContext = createContext<{
   setAuthState: (auth: AuthState) => void;
   clearAuthState: () => void;
-  jwt?: string | null;
-  username?: string | null;
+  state: AuthState | null;
   isLoggedIn: boolean;
   isLoading: boolean;
 }>({
   setAuthState: (_: AuthState) => null,
   clearAuthState: () => null,
-  jwt: null,
-  username: null,
+  state: null,
   isLoggedIn: false,
   isLoading: false,
 });
@@ -44,8 +43,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         clearAuthState: () => {
           setAuthState(null);
         },
-        jwt: authState?.jwt ?? null,
-        username: authState?.username ?? null,
+        state: authState ?? null,
         isLoggedIn: !!authState?.jwt,
         isLoading,
       }}

@@ -49,7 +49,7 @@ export default function SignIn() {
       const data = await response.json();
 
       if (response.ok) {
-        setAuthState({ jwt: data.jwt, username });
+        setAuthState({ host, jwt: data.jwt, username });
         return null;
       } else {
         Alert.alert("Login Failed", data.message || "Invalid credentials.");
