@@ -21,6 +21,7 @@ GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at,
 GET_NEWSLETTERS_BEFORE_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) < ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
 
 CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, filename) VALUES ($1, $2, $3);'
+CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, filename, created_at) VALUES ($1, $2, $3, $4);'
 
 MARK_NEWSLETTER_READ_QUERY = 'UPDATE newsletters SET read = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1;'
 MARK_NEWSLETTER_UNREAD_QUERY = 'UPDATE newsletters SET read = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = $1;'

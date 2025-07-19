@@ -6,6 +6,7 @@ require 'rspec/core/rake_task'
 require 'shellwords'
 require 'tty/command'
 require_relative 'server/config'
+require_relative 'server/jwt'
 
 def db_args(config)
   "-h #{config.database_host.shellescape} -p #{config.database_port.to_i} -U #{config.database_username.shellescape}"
@@ -124,5 +125,14 @@ namespace :user do
     ensure
       db.close if db
     end
+  end
+
+  task :jwt do
+    config = Config.load
+
+    print 'Enter username: '
+    username = STDIN.gets.strip
+
+    puts build_jwt(username, config.secret)
   end
 end

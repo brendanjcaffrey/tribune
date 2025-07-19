@@ -17,5 +17,5 @@ CREATE TABLE newsletters (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_newsletters_updated_at_id ON items(updated_at, id);
+CREATE INDEX idx_newsletters_updated_at_id ON newsletters(updated_at, id);
 
