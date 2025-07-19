@@ -492,6 +492,46 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
       expect(item['read']).to eq(true)
     end
+
+    it 'should not change the updated_at timestamp if already read' do
+      create_newsletter(id: 2, updated_at: BASE_TIME, read: true)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(true)
+
+      put '/newsletters/2/read', {}, get_auth_header
+      expect(last_response).to be_ok
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(true)
+    end
+
+    it 'should return a 404 and not change the updated_at timestamp if deleted' do
+      create_newsletter(id: 2, updated_at: BASE_TIME, read: false, deleted: true)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(false)
+      expect(item['deleted']).to eq(true)
+
+      put '/newsletters/2/unread', {}, get_auth_header
+      expect(last_response.status).to eq(404)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(false)
+      expect(item['deleted']).to eq(true)
+    end
   end
 
   describe 'PUT /newsletters/:id/unread' do
@@ -546,6 +586,46 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
       expect(item['read']).to eq(false)
     end
+
+    it 'should not change the changed_at timestamp if already unread' do
+      create_newsletter(id: 2, updated_at: BASE_TIME, read: false)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(false)
+
+      put '/newsletters/2/unread', {}, get_auth_header
+      expect(last_response).to be_ok
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(false)
+    end
+
+    it 'should return a 404 and not change the updated_at timestamp if deleted' do
+      create_newsletter(id: 2, updated_at: BASE_TIME, read: true, deleted: true)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(true)
+      expect(item['deleted']).to eq(true)
+
+      put '/newsletters/2/unread', {}, get_auth_header
+      expect(last_response.status).to eq(404)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(true)
+      expect(item['deleted']).to eq(true)
+    end
   end
 
   describe 'DELETE /newsletters/:id' do
@@ -582,6 +662,25 @@ RSpec.describe 'Tribune Server' do
     it 'should return an error if non-existant id' do
       delete '/newsletters/2', {}, get_auth_header
       expect(last_response.status).to eq(404)
+    end
+
+    it 'should return a 404 and not change the updated_at timestamp if already deleted' do
+      create_newsletter(id: 2, updated_at: BASE_TIME, deleted: true)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['deleted']).to eq(true)
+
+      delete '/newsletters/2', {}, get_auth_header
+      expect(last_response.status).to eq(404)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['deleted']).to eq(true)
     end
 
     it 'should set deleted to true if id exists' do

@@ -23,9 +23,27 @@ GET_NEWSLETTERS_BEFORE_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at
 CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, filename) VALUES ($1, $2, $3);'
 CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, filename, created_at) VALUES ($1, $2, $3, $4);'
 
-MARK_NEWSLETTER_READ_QUERY = 'UPDATE newsletters SET read = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1;'
-MARK_NEWSLETTER_UNREAD_QUERY = 'UPDATE newsletters SET read = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = $1;'
-DELETE_NEWSLETTER_QUERY = 'UPDATE newsletters SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1;'
+MARK_NEWSLETTER_READ_QUERY = <<~SQL
+  UPDATE newsletters
+  SET
+      read = TRUE,
+      updated_at = CASE
+                    WHEN read = FALSE THEN CURRENT_TIMESTAMP
+                    ELSE updated_at
+                   END
+  WHERE id = $1 AND deleted = FALSE;
+SQL
+MARK_NEWSLETTER_UNREAD_QUERY = <<~SQL
+  UPDATE newsletters
+  SET
+      read = FALSE,
+      updated_at = CASE
+                    WHEN read = TRUE THEN CURRENT_TIMESTAMP
+                    ELSE updated_at
+                   END
+  WHERE id = $1 AND deleted = FALSE;
+SQL
+DELETE_NEWSLETTER_QUERY = 'UPDATE newsletters SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted = FALSE;'
 
 CONFIG = Config.load
 DB_POOL = ConnectionPool.new(size: 5, timeout: 5) do
