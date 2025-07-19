@@ -27,6 +27,8 @@ namespace :db do
     command.run("dropdb #{db_args(config)} #{config.database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })
   end
+
+  task reset: %i[db:drop db:create]
 end
 
 namespace :testdb do
@@ -45,6 +47,8 @@ namespace :testdb do
     command.run("dropdb #{db_args(config)} #{config.test_database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })
   end
+
+  task reset: %i[testdb:drop testdb:create]
 end
 
 namespace :server do
