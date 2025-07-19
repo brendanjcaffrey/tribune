@@ -13,6 +13,7 @@ SHA256 = {
 
 BASE_TIME = Time.new(2025, 1, 1, 0, 0, 0.456789).utc
 HALF_MICROSECOND = Rational(1, 2_000_000)
+HALF_SECOND = Rational(1, 2)
 CREATE_TEST_USER_QUERY = 'INSERT INTO users (username, password_sha256) VALUES ($1, $2);'
 CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, filename, read, deleted, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);'
 UPDATE_TEST_NEWSLETTER_UPDATED_AT = 'UPDATE newsletters SET updated_at = $1 WHERE id = $2;'
@@ -134,12 +135,12 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return false if expired jwt' do
+    it 'should return an error if expired jwt' do
       put '/auth', {}, get_expired_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return false if invalid jwt' do
+    it 'should return an error if invalid jwt' do
       put '/auth', {}, get_invalid_auth_header
       expect(last_response.status).to eq(401)
     end
@@ -157,7 +158,7 @@ RSpec.describe 'Tribune Server' do
     end
   end
 
-  describe 'GET /newsletter' do
+  describe 'GET /newsletters' do
     before(:each) do
       create_user
     end
@@ -167,12 +168,12 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return false if expired jwt' do
+    it 'should return an error if expired jwt' do
       get '/newsletters', {}, get_expired_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return false if invalid jwt' do
+    it 'should return an error if invalid jwt' do
       get '/newsletters', {}, get_invalid_auth_header
       expect(last_response.status).to eq(401)
     end
@@ -436,6 +437,168 @@ RSpec.describe 'Tribune Server' do
       expect(body['meta']['before_timestamp']).to eq(BASE_TIME.iso8601(6))
       expect(body['meta']['before_id']).to eq(6)
       expect(body['result'].map { _1['id'] }).to eq((1..5).to_a.reverse)
+    end
+  end
+
+  describe 'PUT /newsletters/:id/read' do
+    before(:each) do
+      create_user
+      create_newsletter(id: 1, updated_at: BASE_TIME)
+    end
+
+    it 'should return an error if no auth header' do
+      put '/newsletters/1/read'
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if expired jwt' do
+      put '/newsletters/1/read', {}, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if invalid jwt' do
+      put '/newsletters/1/read', {}, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if non-numeric id' do
+      put '/newsletters/hi/read', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if too small id' do
+      put '/newsletters/0/read', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if non-existant id' do
+      put '/newsletters/2/read', {}, get_auth_header
+      expect(last_response.status).to eq(404)
+    end
+
+    it 'should set read to true if id exists' do
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(false)
+
+      put '/newsletters/1/read', {}, get_auth_header
+      expect(last_response.status).to eq(200)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
+      expect(item['read']).to eq(true)
+    end
+  end
+
+  describe 'PUT /newsletters/:id/unread' do
+    before(:each) do
+      create_user
+      create_newsletter(id: 1, updated_at: BASE_TIME, read: true)
+    end
+
+    it 'should return an error if no auth header' do
+      put '/newsletters/1/unread'
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if expired jwt' do
+      put '/newsletters/1/unread', {}, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if invalid jwt' do
+      put '/newsletters/1/unread', {}, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if non-numeric id' do
+      put '/newsletters/hi/unread', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if too small id' do
+      put '/newsletters/0/unread', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if non-existant id' do
+      put '/newsletters/2/unread', {}, get_auth_header
+      expect(last_response.status).to eq(404)
+    end
+
+    it 'should set read to true if id exists' do
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to eq(true)
+
+      put '/newsletters/1/unread', {}, get_auth_header
+      expect(last_response.status).to eq(200)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
+      expect(item['read']).to eq(false)
+    end
+  end
+
+  describe 'DELETE /newsletters/:id' do
+    before(:each) do
+      create_user
+      create_newsletter(id: 1, updated_at: BASE_TIME)
+    end
+
+    it 'should return an error if no auth header' do
+      delete '/newsletters/1'
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if expired jwt' do
+      delete '/newsletters/1', {}, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if invalid jwt' do
+      delete '/newsletters/1', {}, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'should return an error if non-numeric id' do
+      delete '/newsletters/hi', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if too small id' do
+      delete '/newsletters/0', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'should return an error if non-existant id' do
+      delete '/newsletters/2', {}, get_auth_header
+      expect(last_response.status).to eq(404)
+    end
+
+    it 'should set deleted to true if id exists' do
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['deleted']).to eq(false)
+
+      delete '/newsletters/1', {}, get_auth_header
+      expect(last_response.status).to eq(200)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
+      expect(item['deleted']).to eq(true)
     end
   end
 end

@@ -22,6 +22,10 @@ GET_NEWSLETTERS_BEFORE_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at
 
 CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, filename) VALUES ($1, $2, $3);'
 
+MARK_NEWSLETTER_READ_QUERY = 'UPDATE newsletters SET read = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1;'
+MARK_NEWSLETTER_UNREAD_QUERY = 'UPDATE newsletters SET read = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = $1;'
+DELETE_NEWSLETTER_QUERY = 'UPDATE newsletters SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1;'
+
 CONFIG = Config.load
 DB_POOL = ConnectionPool.new(size: 5, timeout: 5) do
   PG.connect(
@@ -42,6 +46,14 @@ helpers do
       result = conn.exec_params(sql, params)
     end
     result.to_a
+  end
+
+  def update_query(sql, params = [])
+    result = nil
+    DB_POOL.with do |conn|
+      result = conn.exec_params(sql, params)
+    end
+    result.cmd_tuples
   end
 
   def get_validated_username
@@ -118,6 +130,30 @@ get '/newsletters' do
   end
 
   json({ meta: meta, result: result })
+end
+
+put '/newsletters/:id/read' do
+  halt 401, 'Unauthorized' unless authed?
+  halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
+  result = update_query(MARK_NEWSLETTER_READ_QUERY, [params[:id].to_i])
+  halt 404, 'Newsletter not found' if result.zero?
+  'Marked as read'
+end
+
+put '/newsletters/:id/unread' do
+  halt 401, 'Unauthorized' unless authed?
+  halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
+  result = update_query(MARK_NEWSLETTER_UNREAD_QUERY, [params[:id].to_i])
+  halt 404, 'Newsletter not found' if result.zero?
+  'Marked as read'
+end
+
+delete '/newsletters/:id' do
+  halt 401, 'Unauthorized' unless authed?
+  halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
+  result = update_query(DELETE_NEWSLETTER_QUERY, [params[:id].to_i])
+  halt 404, 'Newsletter not found' if result.zero?
+  'Marked as read'
 end
 
 post '/newsletters' do
