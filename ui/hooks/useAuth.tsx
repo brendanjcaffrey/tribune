@@ -1,7 +1,7 @@
 import { use, createContext, type PropsWithChildren } from "react";
-import { useStorageState } from "@/hooks/useStorageState";
+import { useSecureStorage } from "@/hooks/useStorage";
 
-interface AuthState {
+export interface AuthState {
   host: string;
   jwt: string;
   username: string;
@@ -32,7 +32,7 @@ export function useAuth() {
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [[isLoading, authState], setAuthState] =
-    useStorageState<AuthState>("auth");
+    useSecureStorage<AuthState>("auth");
 
   return (
     <AuthContext

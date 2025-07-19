@@ -1,7 +1,14 @@
-import { use, createContext, type PropsWithChildren } from "react";
+import {
+  use,
+  createContext,
+  type PropsWithChildren,
+  useRef,
+  useCallback,
+  useState,
+} from "react";
 import { useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { useFileStorageState } from "@/hooks/useFileStorageState";
+import { AuthState, useAuth } from "@/hooks/useAuth";
+import { useStorage } from "@/hooks/useStorage";
 
 export function parseTimestamp(ts: string): Date {
   const [date, timeZone] = ts.split(" ");
@@ -27,12 +34,30 @@ export interface Newsletter {
 interface NewslettersContextValue {
   newsletters: Newsletter[];
   isLoading: boolean;
+  syncInProgress: boolean;
+  clear: () => void;
+  sync: () => void;
 }
 
 const NewslettersContext = createContext<NewslettersContextValue>({
   newsletters: [],
   isLoading: false,
+  syncInProgress: false,
+  clear: () => {},
+  sync: () => {},
 });
+
+interface NewsletterResponseMeta {
+  before_timestamp?: string;
+  before_id?: number;
+  after_timestamp?: string;
+  after_id?: number;
+}
+
+interface NewslettersResposne {
+  meta: NewsletterResponseMeta;
+  result: Newsletter[];
+}
 
 export function useNewsletters() {
   const value = use(NewslettersContext);
@@ -45,91 +70,224 @@ export function useNewsletters() {
 }
 
 export function NewslettersProvider({ children }: PropsWithChildren) {
-  const { state: authState } = useAuth();
-  const [[loading, newsletters], setNewsletters] =
-    useFileStorageState<Newsletter[]>("newsletters");
+  const { state: auth, isLoading: authLoading } = useAuth();
+  const [[initialSyncDoneLoading, initialSyncDone], setInitialSyncDone] =
+    useStorage<boolean>("initialSyncDone");
+  const [[newslettersLoading, newsletters], setNewsletters] =
+    useStorage<Newsletter[]>("newsletters");
+  const [syncToggle, setSyncToggle] = useState(false);
+  const isLoading = authLoading || newslettersLoading || initialSyncDoneLoading;
+  const syncInProgressRef = useRef(false);
 
-  useEffect(() => {
-    if (!authState) {
-      setNewsletters([]);
+  const clear = useCallback(() => {
+    setNewsletters([]);
+    setInitialSyncDone(false);
+  }, [setNewsletters, setInitialSyncDone]);
+
+  const sync = useCallback(() => {
+    if (syncInProgressRef.current) {
       return;
     }
-    const { host, jwt } = authState;
+    setSyncToggle((prev) => !prev);
+  }, [setSyncToggle]);
 
-    let cancelled = false;
-
-    async function sync() {
-      const all: Newsletter[] = [];
-      let beforeTimestamp: string | undefined;
-      let beforeId: number | undefined;
-      const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-
-      while (true) {
-        const params = new URLSearchParams();
-        if (beforeTimestamp && beforeId !== undefined) {
-          params.append("before_timestamp", beforeTimestamp);
-          params.append("before_id", beforeId.toString());
-        }
-        const url = `${host}/newsletters?${params.toString()}`;
-        try {
-          const resp = await fetch(url, {
-            headers: { Authorization: `Bearer ${jwt}` },
-          });
-          if (!resp.ok) {
-            console.warn("Failed to fetch newsletters", resp.status);
-            break;
-          }
-          const data = (await resp.json()) as {
-            meta: any;
-            result: Newsletter[];
-          };
-          if (
-            (beforeTimestamp || beforeId !== undefined) &&
-            (data.meta.before_timestamp !== beforeTimestamp ||
-              data.meta.before_id !== beforeId)
-          ) {
-            console.warn("Pagination parameters not echoed back correctly");
-          }
-          const validItems = data.result.filter(
-            (n) => parseTimestamp(n.updated_at) >= threeMonthsAgo,
-          );
-          all.push(...validItems);
-          if (
-            data.result.length < 100 ||
-            parseTimestamp(
-              data.result[data.result.length - 1]?.updated_at ??
-                "1970-01-01 00:00:00+00",
-            ) < threeMonthsAgo
-          ) {
-            break;
-          }
-          const last = data.result[data.result.length - 1];
-          beforeTimestamp = last.updated_at;
-          beforeId = last.id;
-        } catch (e) {
-          console.error("Error syncing newsletters", e);
-          break;
-        }
-      }
-
-      if (!cancelled) {
-        setNewsletters(all);
-      }
+  useEffect(() => {
+    if (syncInProgressRef.current) {
+      return;
+    }
+    if (isLoading) {
+      return;
+    }
+    if (!auth) {
+      return;
     }
 
-    sync();
+    syncInProgressRef.current = true;
+    let controller = new AbortController();
+    if (!initialSyncDone) {
+      performInitialSync(auth, controller.signal)
+        .then((newsletters) => {
+          if (!controller.signal.aborted && newsletters) {
+            setNewsletters(newsletters);
+            setInitialSyncDone(true);
+          }
+        })
+        .catch((e) => {
+          if (!controller.signal.aborted) {
+            console.error("Error during initial sync", e);
+            setNewsletters([]);
+            setInitialSyncDone(false);
+          }
+        })
+        .finally(() => {
+          syncInProgressRef.current = false;
+        });
+    } else {
+      const newestNewsletter =
+        newsletters && newsletters.length > 0 ? newsletters[0] : null;
+      performUpdateSync(
+        auth,
+        newestNewsletter?.updated_at,
+        newestNewsletter?.id,
+        newsletters ?? [],
+        controller.signal,
+      )
+        .then((newsletters) => {
+          if (!controller.signal.aborted && newsletters) {
+            setNewsletters(newsletters);
+            setInitialSyncDone(true);
+          }
+        })
+        .catch((e) => {
+          if (!controller.signal.aborted) {
+            console.error("Error during update sync", e);
+            setNewsletters([]);
+            setInitialSyncDone(false);
+          }
+        })
+        .finally(() => {
+          syncInProgressRef.current = false;
+        });
+    }
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [authState, setNewsletters]);
+  }, [isLoading, auth, syncToggle, setNewsletters, setInitialSyncDone]);
 
   return (
     <NewslettersContext.Provider
-      value={{ newsletters: newsletters ?? [], isLoading: loading }}
+      value={{
+        newsletters: newsletters ?? [],
+        isLoading,
+        syncInProgress: syncInProgressRef.current,
+        clear,
+        sync,
+      }}
     >
       {children}
     </NewslettersContext.Provider>
   );
+}
+
+async function performInitialSync(
+  auth: AuthState,
+  abortSignal: AbortSignal,
+): Promise<Newsletter[] | null> {
+  const all: Newsletter[] = [];
+  let beforeTimestamp: string | undefined;
+  let beforeId: number | undefined;
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+  while (true) {
+    const params = new URLSearchParams();
+    if (beforeTimestamp && beforeId !== undefined) {
+      params.append("before_timestamp", beforeTimestamp);
+      params.append("before_id", beforeId.toString());
+    }
+
+    try {
+      const url = `${auth.host}/newsletters?${params.toString()}`;
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${auth.jwt}` },
+        signal: abortSignal,
+      });
+      if (!resp.ok) {
+        console.warn("Failed to fetch newsletters", resp.status);
+        return null;
+      }
+
+      const data = (await resp.json()) as NewslettersResposne;
+      if (
+        (beforeTimestamp || beforeId !== undefined) &&
+        (data.meta.before_timestamp !== beforeTimestamp ||
+          data.meta.before_id !== beforeId)
+      ) {
+        console.error(
+          `Pagination parameters not echoed back correctly ${beforeTimestamp} vs ${data.meta.before_timestamp}, ${beforeId} vs ${data.meta.before_id}`,
+        );
+        return null;
+      }
+
+      const validItems = data.result.filter(
+        (n) => !n.deleted && parseTimestamp(n.updated_at) >= threeMonthsAgo,
+      );
+      all.push(...validItems);
+
+      if (
+        data.result.length < 100 ||
+        parseTimestamp(
+          data.result[data.result.length - 1]?.updated_at ??
+            "1970-01-01 00:00:00+00",
+        ) < threeMonthsAgo
+      ) {
+        break;
+      }
+
+      const last = data.result[data.result.length - 1];
+      beforeTimestamp = last.updated_at;
+      beforeId = last.id;
+    } catch (e) {
+      console.error("Error syncing newsletters", e);
+      return null;
+    }
+  }
+
+  return all;
+}
+
+async function performUpdateSync(
+  auth: AuthState,
+  afterTimestamp: string | undefined,
+  afterId: number | undefined,
+  current: Newsletter[],
+  abortSignal: AbortSignal,
+): Promise<Newsletter[] | null> {
+  let beforeTimestamp: string | undefined;
+  let beforeId: number | undefined;
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+  const params = new URLSearchParams();
+  if (afterTimestamp && afterId !== undefined) {
+    params.append("after_timestamp", afterTimestamp);
+    params.append("after_id", afterId.toString());
+  }
+
+  try {
+    const url = `${auth.host}/newsletters?${params.toString()}`;
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${auth.jwt}` },
+      signal: abortSignal,
+    });
+    if (!resp.ok) {
+      console.warn("Failed to fetch newsletters", resp.status);
+      return null;
+    }
+
+    const data = (await resp.json()) as NewslettersResposne;
+    if (
+      (beforeTimestamp || beforeId !== undefined) &&
+      (data.meta.before_timestamp !== beforeTimestamp ||
+        data.meta.before_id !== beforeId)
+    ) {
+      console.error(
+        `Pagination parameters not echoed back correctly ${beforeTimestamp} vs ${data.meta.before_timestamp}, ${beforeId} vs ${data.meta.before_id}`,
+      );
+      return null;
+    }
+
+    // TODO if it's been a while since the last sync, we might need multiple calls of this
+    const updatedIds = new Set(data.result.map((n) => n.id));
+    let filteredCurrent = current.filter(
+      (n) =>
+        !updatedIds.has(n.id) && parseTimestamp(n.updated_at) >= threeMonthsAgo,
+    );
+    let filteredUpdated = data.result.filter((n) => !n.deleted);
+    return [...filteredUpdated, ...filteredCurrent];
+  } catch (e) {
+    console.error("Error syncing newsletters", e);
+    return null;
+  }
 }

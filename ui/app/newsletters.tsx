@@ -1,14 +1,19 @@
-import { View, FlatList } from "react-native";
+import { View, FlatList, RefreshControl } from "react-native";
 import { List, IconButton, Searchbar, Icon } from "react-native-paper";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useNewsletters, parseTimestamp } from "@/hooks/useNewsletters";
-import { Redirect, Stack } from "expo-router";
-import { useEffect, useState } from "react";
+import { Redirect, Stack, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 
 export default function Index() {
   const { isLoggedIn, clearAuthState } = useAuth();
-  const { newsletters } = useNewsletters();
+  const {
+    newsletters,
+    syncInProgress: newsletterSyncInProgress,
+    clear: clearNewsletters,
+    sync: syncNewsletters,
+  } = useNewsletters();
   const [filteredNewsletters, setFilteredNewsletters] = useState(newsletters);
   const [searchText, setSearchText] = useState("");
 
@@ -23,9 +28,20 @@ export default function Index() {
     }
   }, [searchText, newsletters]);
 
+  useFocusEffect(
+    useCallback(() => {
+      syncNewsletters();
+    }, [syncNewsletters]),
+  );
+
   if (!isLoggedIn) {
     return <Redirect href="/sign-in" />;
   }
+
+  let logout = () => {
+    clearAuthState();
+    clearNewsletters();
+  };
 
   return (
     <View style={{ flex: 1, padding: 4 }}>
@@ -33,7 +49,11 @@ export default function Index() {
         options={{
           title: "Newsletters",
           headerLeft: () => (
-            <IconButton icon="logout" onPress={clearAuthState} />
+            <IconButton
+              icon="logout"
+              onPress={logout}
+              disabled={newsletterSyncInProgress}
+            />
           ),
         }}
       />
@@ -45,12 +65,19 @@ export default function Index() {
       <FlatList
         data={filteredNewsletters}
         keyExtractor={(n) => n.id.toString()}
+        refreshControl={
+          <RefreshControl
+            refreshing={newsletterSyncInProgress}
+            onRefresh={syncNewsletters}
+          />
+        }
         renderItem={({ item }) => (
           <List.Item
             description={`${item.author} • ${parseTimestamp(item.created_at).toLocaleDateString()}`}
             title={item.title}
             titleNumberOfLines={0}
             descriptionNumberOfLines={0}
+            right={() => <Icon source="cloud-download-outline" size={20} />}
           />
         )}
       />
