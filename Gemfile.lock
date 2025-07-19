@@ -4,6 +4,8 @@ GEM
     base64 (0.3.0)
     connection_pool (2.5.3)
     diff-lcs (1.6.2)
+    jwt (3.1.2)
+      base64
     logger (1.7.0)
     multi_json (1.16.0)
     mustermann (3.0.3)
@@ -65,6 +67,7 @@ PLATFORMS
 
 DEPENDENCIES
   connection_pool
+  jwt (~> 3.1)
   pg
   puma
   rack-test

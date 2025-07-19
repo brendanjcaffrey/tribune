@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Redirect } from "expo-router";
 
 export default function Index() {
-  const { isLoggedIn, signOut } = useAuth();
+  const { isLoggedIn, clearAuthState } = useAuth();
 
   if (!isLoggedIn) {
     return <Redirect href="/sign-in" />;
@@ -14,7 +14,7 @@ export default function Index() {
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
       <Text
         onPress={() => {
-          signOut();
+          clearAuthState();
         }}
       >
         Sign Out

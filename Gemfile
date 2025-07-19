@@ -1,6 +1,7 @@
 source 'https://rubygems.org'
 
 gem 'connection_pool'
+gem 'jwt', '~> 3.1'
 gem 'pg'
 gem 'puma'
 gem 'rack-test'

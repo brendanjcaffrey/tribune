@@ -12,6 +12,10 @@ Start the server with `rake server:run`.
 
 Start the UI in development mode with `rake ui:run`. The react native CLI should provide options to launch on iOS/Android/etc.
 
+### Creating a User
+
+Run `rake user:create` and it will prompt you for a username and password.
+
 ### Running the tests
 
 Ensure the test database is created with `rake testdb:create`, then run `rake server:spec`.

@@ -7,15 +7,15 @@ interface AuthState {
 }
 
 const AuthContext = createContext<{
-  signIn: (auth: AuthState) => void;
-  signOut: () => void;
+  setAuthState: (auth: AuthState) => void;
+  clearAuthState: () => void;
   jwt?: string | null;
   username?: string | null;
   isLoggedIn: boolean;
   isLoading: boolean;
 }>({
-  signIn: (_: AuthState) => null,
-  signOut: () => null,
+  setAuthState: (_: AuthState) => null,
+  clearAuthState: () => null,
   jwt: null,
   username: null,
   isLoggedIn: false,
@@ -38,10 +38,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   return (
     <AuthContext
       value={{
-        signIn: (auth: AuthState) => {
+        setAuthState: (auth: AuthState) => {
           setAuthState(auth);
         },
-        signOut: () => {
+        clearAuthState: () => {
           setAuthState(null);
         },
         jwt: authState?.jwt ?? null,

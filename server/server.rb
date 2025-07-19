@@ -6,10 +6,13 @@ require 'sinatra/contrib'
 require 'json'
 require 'pg'
 require_relative './config'
+require_relative './jwt'
 
 NEWSLETTERS_PATH = File.join("#{File.expand_path(__dir__)}/../", 'newsletters')
 
 ANY_USERS_EXIST_QUERY = 'SELECT EXISTS(SELECT 1 FROM users);'
+VALID_USERNAME_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1);'
+VALID_USERNAME_AND_PASSWORD_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND password_sha256 = $2);'
 
 GET_NEWSLETTERS_QUERY = 'SELECT id, title, author, filename, updated_at FROM newsletters;'
 GET_NEWSLETTERS_AFTER_QUERY = 'SELECT id, title, author, filename, updated_at FROM newsletters WHERE updated_at > $1;'
@@ -34,6 +37,31 @@ helpers do
     end
     result.to_a
   end
+
+  def get_validated_username
+    auth_header = request.env['HTTP_AUTHORIZATION']
+    return nil if auth_header.nil? || !auth_header.start_with?('Bearer ')
+
+    token = auth_header.gsub('Bearer ', '')
+    begin
+      payload, header = decode_jwt(token, CONFIG.secret)
+    rescue StandardError
+      return nil
+    end
+
+    exp = header['exp']
+    return nil if exp.nil? || Time.now > Time.at(exp.to_i)
+
+    username = payload['username']
+    valid = query(VALID_USERNAME_QUERY, [username])[0]['exists'] == 't'
+    return nil unless valid
+
+    username
+  end
+
+  def authed?
+    !get_validated_username.nil?
+  end
 end
 
 set :port, CONFIG.server_port
@@ -42,6 +70,26 @@ set :lock, true
 get '/users' do
   result = query(ANY_USERS_EXIST_QUERY)
   json any: result[0]['exists'] == 't'
+end
+
+post '/auth' do
+  halt 400, 'Missing username or password' if !params[:username] || !params[:password]
+
+  username = params[:username]
+  password_sha256 = Digest::SHA256.hexdigest(params[:password])
+  result = query(VALID_USERNAME_AND_PASSWORD_QUERY, [username, password_sha256])
+  halt 401, 'Unauthorized' if result[0]['exists'] != 't'
+
+  resp = { jwt: build_jwt(username, CONFIG.secret) }
+  json resp
+end
+
+put '/auth' do
+  username = get_validated_username
+  halt 401, 'Unauthorized' if username.nil?
+
+  resp = { jwt: build_jwt(username, CONFIG.secret) }
+  json resp
 end
 
 get '/newsletter' do
@@ -72,7 +120,6 @@ post '/newsletter' do
 
   begin
     metadata = JSON.parse(params[:metadata])
-    puts "Metadata: #{metadata.inspect}"
   rescue JSON::ParserError => e
     halt 400, "Invalid JSON: #{e.message}"
   end
