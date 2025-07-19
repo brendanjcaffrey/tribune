@@ -1,0 +1,135 @@
+import { use, createContext, type PropsWithChildren } from "react";
+import { useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useFileStorageState } from "@/hooks/useFileStorageState";
+
+export function parseTimestamp(ts: string): Date {
+  const [date, timeZone] = ts.split(" ");
+  let [time] = timeZone.split("+");
+  if (time.includes(".")) {
+    const [hms, frac] = time.split(".");
+    time = `${hms}.${frac.substring(0, 3)}`;
+  }
+  return new Date(`${date}T${time}Z`);
+}
+
+export interface Newsletter {
+  id: number;
+  title: string;
+  author: string;
+  filename: string;
+  read: boolean;
+  deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface NewslettersContextValue {
+  newsletters: Newsletter[];
+  isLoading: boolean;
+}
+
+const NewslettersContext = createContext<NewslettersContextValue>({
+  newsletters: [],
+  isLoading: false,
+});
+
+export function useNewsletters() {
+  const value = use(NewslettersContext);
+  if (!value) {
+    throw new Error(
+      "useNewsletters must be wrapped in a <NewslettersProvider />",
+    );
+  }
+  return value;
+}
+
+export function NewslettersProvider({ children }: PropsWithChildren) {
+  const { state: authState } = useAuth();
+  const [[loading, newsletters], setNewsletters] =
+    useFileStorageState<Newsletter[]>("newsletters");
+
+  useEffect(() => {
+    if (!authState) {
+      setNewsletters([]);
+      return;
+    }
+    const { host, jwt } = authState;
+
+    let cancelled = false;
+
+    async function sync() {
+      const all: Newsletter[] = [];
+      let beforeTimestamp: string | undefined;
+      let beforeId: number | undefined;
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+      while (true) {
+        const params = new URLSearchParams();
+        if (beforeTimestamp && beforeId !== undefined) {
+          params.append("before_timestamp", beforeTimestamp);
+          params.append("before_id", beforeId.toString());
+        }
+        const url = `${host}/newsletters?${params.toString()}`;
+        try {
+          const resp = await fetch(url, {
+            headers: { Authorization: `Bearer ${jwt}` },
+          });
+          if (!resp.ok) {
+            console.warn("Failed to fetch newsletters", resp.status);
+            break;
+          }
+          const data = (await resp.json()) as {
+            meta: any;
+            result: Newsletter[];
+          };
+          if (
+            (beforeTimestamp || beforeId !== undefined) &&
+            (data.meta.before_timestamp !== beforeTimestamp ||
+              data.meta.before_id !== beforeId)
+          ) {
+            console.warn("Pagination parameters not echoed back correctly");
+          }
+          const validItems = data.result.filter(
+            (n) => parseTimestamp(n.updated_at) >= threeMonthsAgo,
+          );
+          all.push(...validItems);
+          if (
+            data.result.length < 100 ||
+            parseTimestamp(
+              data.result[data.result.length - 1]?.updated_at ??
+                "1970-01-01 00:00:00+00",
+            ) < threeMonthsAgo
+          ) {
+            break;
+          }
+          const last = data.result[data.result.length - 1];
+          beforeTimestamp = last.updated_at;
+          beforeId = last.id;
+        } catch (e) {
+          console.error("Error syncing newsletters", e);
+          break;
+        }
+      }
+
+      if (!cancelled) {
+        setNewsletters(all);
+      }
+    }
+
+    sync();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authState, setNewsletters]);
+
+  return (
+    <NewslettersContext.Provider
+      value={{ newsletters: newsletters ?? [], isLoading: loading }}
+    >
+      {children}
+    </NewslettersContext.Provider>
+  );
+}
