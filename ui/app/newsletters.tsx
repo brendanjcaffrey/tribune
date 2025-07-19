@@ -1,10 +1,10 @@
-import { View, FlatList, RefreshControl } from "react-native";
+import { View, FlatList, RefreshControl, AppState } from "react-native";
 import { List, IconButton, Searchbar, Icon } from "react-native-paper";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useNewsletters, parseTimestamp } from "@/hooks/useNewsletters";
 import { Redirect, Stack, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export default function Index() {
   const { isLoggedIn, clearAuthState } = useAuth();
@@ -16,6 +16,7 @@ export default function Index() {
   } = useNewsletters();
   const [filteredNewsletters, setFilteredNewsletters] = useState(newsletters);
   const [searchText, setSearchText] = useState("");
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
     if (searchText) {
@@ -33,6 +34,23 @@ export default function Index() {
       syncNewsletters();
     }, [syncNewsletters]),
   );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === "active"
+      ) {
+        syncNewsletters();
+      }
+
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   if (!isLoggedIn) {
     return <Redirect href="/sign-in" />;
