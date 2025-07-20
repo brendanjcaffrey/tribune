@@ -1,8 +1,8 @@
 import { View, FlatList, RefreshControl, AppState } from "react-native";
 import { List, IconButton, Searchbar, Icon } from "react-native-paper";
 
-import { useAuth } from "@/hooks/useAuth";
-import { useNewsletters, parseTimestamp } from "@/hooks/useNewsletters";
+import { useAuth } from "../hooks/useAuth";
+import { useNewsletters, parseTimestamp } from "../hooks/useNewsletters";
 import { Redirect, Stack, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 

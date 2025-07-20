@@ -10,7 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { TextInput, Button, Text } from "react-native-paper";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "../hooks/useAuth";
 
 export default function SignIn() {
   const [host, setHost] = useState("");

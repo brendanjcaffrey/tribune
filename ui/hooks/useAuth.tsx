@@ -1,5 +1,5 @@
 import { use, createContext, type PropsWithChildren } from "react";
-import { useSecureStorage } from "@/hooks/useStorage";
+import { useSecureStorage } from "./useStorage";
 
 export interface AuthState {
   host: string;

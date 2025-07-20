@@ -8,9 +8,9 @@ import {
 } from "react";
 import { useEffect } from "react";
 import * as FileSystem from "expo-file-system";
-import { Alert, ToastAndroid, Platform } from "react-native";
-import { AuthState, useAuth } from "@/hooks/useAuth";
-import { useStorage } from "@/hooks/useStorage";
+import { Alert } from "react-native";
+import { AuthState, useAuth } from "./useAuth";
+import { useStorage } from "./useStorage";
 
 export function parseTimestamp(ts: string): Date {
   const [date, timeZone] = ts.split(" ");

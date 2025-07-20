@@ -10,7 +10,7 @@ Start the server with `rake server:run`.
 
 ### Running the UI
 
-Start the UI in development mode with `rake ui:run`. The react native CLI should provide options to launch on iOS/Android/etc.
+Run the iOS app with `rake ui:run_ios` and the Android app with `rake ui:run_android`. If you encounter errors, try running `rake ui:doctor`. Note that in the iOS simulator, you can connect to a local server with `http://localhost:1847`, but in the Android simulator, you'll need to use `http://192.168.X.Y:1847` (or whatever your computer's IP is).
 
 ### Creating a User
 

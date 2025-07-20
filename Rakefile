@@ -90,10 +90,24 @@ namespace :ui do
     end
   end
 
-  desc 'Run the react native development server'
-  task :run do
+  desc 'Run the ios app'
+  task :run_ios do
     Dir.chdir('ui') do
-      exec('npm run start')
+      exec('npx react-native run-ios')
+    end
+  end
+
+  desc 'Run the android app'
+  task :run_android do
+    Dir.chdir('ui') do
+      exec('npx react-native run-android')
+    end
+  end
+
+  desc 'Run the react native doctor'
+  task :doctor do
+    Dir.chdir('ui') do
+      exec('npx react-native doctor')
     end
   end
 
