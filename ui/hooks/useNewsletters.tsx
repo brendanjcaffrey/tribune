@@ -7,6 +7,8 @@ import {
   useState,
 } from "react";
 import { useEffect } from "react";
+import * as FileSystem from "expo-file-system";
+import { Alert, ToastAndroid, Platform } from "react-native";
 import { AuthState, useAuth } from "@/hooks/useAuth";
 import { useStorage } from "@/hooks/useStorage";
 
@@ -29,6 +31,8 @@ export interface Newsletter {
   deleted: boolean;
   created_at: string;
   updated_at: string;
+  downloadStatus?: "pending" | "downloading" | "downloaded";
+  filePath?: string;
 }
 
 interface NewslettersContextValue {
@@ -78,11 +82,28 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
   const [syncToggle, setSyncToggle] = useState(false);
   const isLoading = authLoading || newslettersLoading || initialSyncDoneLoading;
   const syncInProgressRef = useRef(false);
+  const downloadingRef = useRef(false);
+  const newslettersRef = useRef<Newsletter[]>(newsletters ?? []);
+
+  useEffect(() => {
+    newslettersRef.current = newsletters ?? [];
+  }, [newsletters]);
 
   const clear = useCallback(() => {
     setNewsletters([]);
     setInitialSyncDone(false);
   }, [setNewsletters, setInitialSyncDone]);
+
+  const updateNewsletter = useCallback(
+    (id: number, partial: Partial<Newsletter>) => {
+      const updated = newslettersRef.current.map((n) =>
+        n.id === id ? { ...n, ...partial } : n,
+      );
+      newslettersRef.current = updated;
+      setNewsletters(updated);
+    },
+    [setNewsletters],
+  );
 
   const sync = useCallback(() => {
     if (syncInProgressRef.current) {
@@ -155,6 +176,78 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
     };
   }, [isLoading, auth, syncToggle, setNewsletters, setInitialSyncDone]);
 
+  useEffect(() => {
+    if (downloadingRef.current) {
+      return;
+    }
+    if (!auth) {
+      return;
+    }
+    const pending = (newslettersRef.current || [])
+      .filter((n) => !n.read && n.downloadStatus !== "downloaded")
+      .sort((a, b) => {
+        const at = parseTimestamp(a.updated_at);
+        const bt = parseTimestamp(b.updated_at);
+        if (at > bt) return -1;
+        if (at < bt) return 1;
+        return b.id - a.id;
+      });
+    if (pending.length === 0) {
+      return;
+    }
+
+    downloadingRef.current = true;
+
+    const downloadNext = async (index: number) => {
+      if (index >= pending.length) {
+        downloadingRef.current = false;
+        return;
+      }
+
+      const item = pending[index];
+      updateNewsletter(item.id, { downloadStatus: "downloading" });
+      const dest = `${FileSystem.documentDirectory}${item.id}.epub`;
+      let delay = 500;
+      let success = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await FileSystem.downloadAsync(
+            `${auth.host}/newsletters/${item.id}/epub`,
+            dest,
+            { headers: { Authorization: `Bearer ${auth.jwt}` } },
+          );
+          success = true;
+          break;
+        } catch (e) {
+          console.error("Failed to download", e);
+          if (Platform.OS === "android") {
+            ToastAndroid.show(
+              `Failed to download ${item.title}`,
+              ToastAndroid.SHORT,
+            );
+          } else {
+            Alert.alert("Download failed", `Failed to download ${item.title}`);
+          }
+          await new Promise((r) => setTimeout(r, delay));
+          delay *= 2;
+        }
+      }
+
+      if (success) {
+        updateNewsletter(item.id, {
+          downloadStatus: "downloaded",
+          filePath: dest,
+        });
+      } else {
+        updateNewsletter(item.id, { downloadStatus: "pending" });
+      }
+
+      downloadNext(index + 1);
+    };
+
+    downloadNext(0);
+  }, [auth, updateNewsletter]);
+
   return (
     <NewslettersContext.Provider
       value={{
@@ -210,9 +303,11 @@ async function performInitialSync(
         return null;
       }
 
-      const validItems = data.result.filter(
-        (n) => !n.deleted && parseTimestamp(n.updated_at) >= threeMonthsAgo,
-      );
+      const validItems = data.result
+        .filter(
+          (n) => !n.deleted && parseTimestamp(n.updated_at) >= threeMonthsAgo,
+        )
+        .map((n) => ({ ...n, downloadStatus: "pending" as const }));
       all.push(...validItems);
 
       if (
@@ -284,8 +379,28 @@ async function performUpdateSync(
       (n) =>
         !updatedIds.has(n.id) && parseTimestamp(n.updated_at) >= threeMonthsAgo,
     );
-    let filteredUpdated = data.result.filter((n) => !n.deleted);
-    return [...filteredUpdated, ...filteredCurrent];
+    let filteredUpdated = data.result
+      .filter((n) => !n.deleted)
+      .map((n) => {
+        const existing = current.find((c) => c.id === n.id);
+        return {
+          ...n,
+          downloadStatus: existing?.downloadStatus ?? "pending",
+          filePath: existing?.filePath,
+        };
+      });
+    const next = [...filteredUpdated, ...filteredCurrent];
+    const remainingIds = new Set(next.map((n) => n.id));
+    await Promise.all(
+      current
+        .filter((n) => !remainingIds.has(n.id) && n.filePath)
+        .map((n) =>
+          FileSystem.deleteAsync(n.filePath!, { idempotent: true }).catch((e) =>
+            console.warn("Failed to delete", e),
+          ),
+        ),
+    );
+    return next;
   } catch (e) {
     console.error("Error syncing newsletters", e);
     return null;
