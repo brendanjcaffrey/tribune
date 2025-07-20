@@ -12,6 +12,8 @@ def db_args(config)
   "-h #{config.database_host.shellescape} -p #{config.database_port.to_i} -U #{config.database_username.shellescape}"
 end
 
+command = TTY::Command.new
+
 namespace :db do
   desc 'Create the main database and apply the schema'
   task :create do
@@ -61,13 +63,11 @@ end
 namespace :server do
   desc 'Install ruby dependencies for the server'
   task :install do
-    command = TTY::Command.new
-    command.run('bundle')
+    exec('bundle')
   end
 
   desc 'Lint the ruby code'
   task :lint do
-    command = TTY::Command.new
     command.run('bundle exec rubocop Rakefile server/')
   end
 
@@ -93,13 +93,37 @@ namespace :ui do
   desc 'Run the react native development server'
   task :run do
     Dir.chdir('ui') do
-      exec('npx expo start')
+      exec('npm run start')
+    end
+  end
+
+  desc 'Lint the ui code'
+  task :lint do
+    Dir.chdir('ui') do
+      command.run('npm run lint')
+    end
+  end
+
+  desc 'Format code in the ui code'
+  task :format do
+    Dir.chdir('ui') do
+      exec('npm run format')
+    end
+  end
+
+  desc 'Check formatting in the ui code'
+  task :format_check do
+    Dir.chdir('ui') do
+      command.run('npm run format:check')
     end
   end
 end
 
 desc 'Install ruby & node dependencies'
 task install: %i[server:install ui:install]
+
+desc 'Run all checks'
+task checks: %i[server:lint ui:lint ui:format_check]
 
 namespace :user do
   desc 'Create a user interactively'

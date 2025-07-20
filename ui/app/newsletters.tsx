@@ -50,7 +50,7 @@ export default function Index() {
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [syncNewsletters]);
 
   if (!isLoggedIn) {
     return <Redirect href="/sign-in" />;
