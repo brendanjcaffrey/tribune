@@ -13,4 +13,3 @@ def build_jwt(username, secret, expires_after = JWT_EXPIRY)
   headers = { exp: Time.now.to_i + expires_after }
   JWT.encode({ username: username }, secret, JWT_ALGO, headers)
 end
-

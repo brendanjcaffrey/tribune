@@ -64,3 +64,17 @@ jobs:
         webhook_token: ${{ secrets.WEBHOOK_TOKEN }}
         username: "github"
         message: "Rspec tests failed for ${{ github.repository }} on commit ${{ github.sha }}. https://github.com/brendanjcaffrey/tribune/actions/runs/${{ github.run_id }}"
+
+    - name: rubocop
+      id: rubocop
+      run: bundle exec rake server:lint
+
+    - name: format & lint
+      id: format_lint
+      if: ${{ failure() && steps.rubocop.conclusion == 'failure' }}
+      uses: appleboy/discord-action@master
+      with:
+        webhook_id: ${{ secrets.WEBHOOK_ID }}
+        webhook_token: ${{ secrets.WEBHOOK_TOKEN }}
+        username: "github"
+        message: "Rubocop checks failed for ${{ github.repository }} on commit ${{ github.sha }}. https://github.com/brendanjcaffrey/tribune/actions/runs/${{ github.run_id }}"

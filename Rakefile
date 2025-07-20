@@ -13,6 +13,7 @@ def db_args(config)
 end
 
 namespace :db do
+  desc 'Create the main database and apply the schema'
   task :create do
     config = Config.load
     command = TTY::Command.new
@@ -22,6 +23,7 @@ namespace :db do
                 env: { 'PGPASSWORD' => config.database_password })
   end
 
+  desc 'Drop the main database'
   task :drop do
     config = Config.load
     command = TTY::Command.new
@@ -29,10 +31,12 @@ namespace :db do
                 env: { 'PGPASSWORD' => config.database_password })
   end
 
+  desc 'Drop & recreate the main database'
   task reset: %i[db:drop db:create]
 end
 
 namespace :testdb do
+  desc 'Create the test database and apply the schema'
   task :create do
     config = Config.load
     command = TTY::Command.new
@@ -42,6 +46,7 @@ namespace :testdb do
                 env: { 'PGPASSWORD' => config.database_password })
   end
 
+  desc 'Drop the test database'
   task :drop do
     config = Config.load
     command = TTY::Command.new
@@ -49,31 +54,43 @@ namespace :testdb do
                 env: { 'PGPASSWORD' => config.database_password })
   end
 
+  desc 'Drop & recreate the test database'
   task reset: %i[testdb:drop testdb:create]
 end
 
 namespace :server do
+  desc 'Install ruby dependencies for the server'
   task :install do
     command = TTY::Command.new
     command.run('bundle')
   end
 
+  desc 'Lint the ruby code'
+  task :lint do
+    command = TTY::Command.new
+    command.run('bundle exec rubocop Rakefile server/')
+  end
+
+  desc 'Run the ruby server'
   task :run do
     ruby 'server/server.rb'
   end
 
+  desc 'Run the server tests'
   RSpec::Core::RakeTask.new(:spec) do |t|
     t.pattern = Dir.glob('server/spec/*_spec.rb')
   end
 end
 
 namespace :ui do
+  desc 'Install node dependencies for the ui'
   task :install do
     Dir.chdir('ui') do
       exec('npm install')
     end
   end
 
+  desc 'Run the react native development server'
   task :run do
     Dir.chdir('ui') do
       exec('npx expo start')
@@ -81,21 +98,23 @@ namespace :ui do
   end
 end
 
+desc 'Install ruby & node dependencies'
 task install: %i[server:install ui:install]
 
 namespace :user do
+  desc 'Create a user interactively'
   task :create do
     config = Config.load
 
     print 'Enter username: '
-    username = STDIN.gets.strip
+    username = $stdin.gets.strip
 
     print 'Enter password: '
-    password = STDIN.noecho(&:gets).strip
+    password = $stdin.noecho(&:gets).strip
     puts
 
     print 'Confirm password: '
-    password_confirmation = STDIN.noecho(&:gets).strip
+    password_confirmation = $stdin.noecho(&:gets).strip
     puts
 
     if password != password_confirmation
@@ -105,6 +124,7 @@ namespace :user do
 
     hashed_password = Digest::SHA256.hexdigest(password)
 
+    db = nil
     begin
       db = PG.connect(
         dbname: config.database_name,
@@ -123,15 +143,16 @@ namespace :user do
     rescue PG::Error => e
       puts "❌ Error creating user: #{e.message}"
     ensure
-      db.close if db
+      db&.close
     end
   end
 
+  desc 'Generate a JWT for a user interactively'
   task :jwt do
     config = Config.load
 
     print 'Enter username: '
-    username = STDIN.gets.strip
+    username = $stdin.gets.strip
 
     puts build_jwt(username, config.secret)
   end

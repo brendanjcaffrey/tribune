@@ -2,6 +2,7 @@
 
 require 'rack/test'
 require 'rspec'
+require 'rspec/temp_dir'
 
 ENV['RACK_ENV'] = 'test'
 
@@ -25,11 +26,11 @@ RSpec.describe 'Tribune Server' do
     Sinatra::Application
   end
 
-  before(:each) do
+  before do
     DB_POOL.with { |conn| conn.exec('BEGIN') }
   end
 
-  after(:each) do
+  after do
     DB_POOL.with { |conn| conn.exec('ROLLBACK') }
   end
 
@@ -66,7 +67,7 @@ RSpec.describe 'Tribune Server' do
   end
 
   describe 'GET /users' do
-    it 'should return that no users exists' do
+    it 'returns that no users exists' do
       get '/users'
       expect(last_response).to be_ok
       expect(last_response.body).to eq('{"any":false}')
@@ -80,41 +81,41 @@ RSpec.describe 'Tribune Server' do
   end
 
   describe 'POST /auth' do
-    before(:each) do
+    before do
       create_user
     end
 
-    it 'should return 400 for no params' do
+    it 'returns 400 for no params' do
       post '/auth'
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return 400 for missing username' do
+    it 'returns 400 for missing username' do
       post '/auth', { password: 'pass' }
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return 400 for missing password' do
+    it 'returns 400 for missing password' do
       post '/auth', { username: 'user' }
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return 401 for invalid credentials' do
+    it 'returns 401 for invalid credentials' do
       post '/auth', { username: 'invaliduser', password: 'invalidpassword' }
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return 401 for invalid username' do
+    it 'returns 401 for invalid username' do
       post '/auth', { username: 'testuserx', password: 'testpassword' }
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return 401 for invalid password' do
+    it 'returns 401 for invalid password' do
       post '/auth', { username: 'testuser', password: 'testpasswordx' }
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return a jwt for valid username and password' do
+    it 'returns a jwt for valid username and password' do
       post '/auth', { username: 'testuser', password: 'testpassword' }
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
@@ -126,26 +127,26 @@ RSpec.describe 'Tribune Server' do
   end
 
   describe 'PUT /auth' do
-    before(:each) do
+    before do
       create_user
     end
 
-    it 'should return an error if no auth header' do
+    it 'returns an error if no auth header' do
       put '/auth'
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if expired jwt' do
+    it 'returns an error if expired jwt' do
       put '/auth', {}, get_expired_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if invalid jwt' do
+    it 'returns an error if invalid jwt' do
       put '/auth', {}, get_invalid_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return a new token if valid jwt' do
+    it 'returns a new token if valid jwt' do
       auth_header = get_auth_header
       put '/auth', {}, auth_header
       expect(last_response).to be_ok
@@ -159,26 +160,26 @@ RSpec.describe 'Tribune Server' do
   end
 
   describe 'GET /newsletters' do
-    before(:each) do
+    before do
       create_user
     end
 
-    it 'should return an error if no auth header' do
+    it 'returns an error if no auth header' do
       get '/newsletters'
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if expired jwt' do
+    it 'returns an error if expired jwt' do
       get '/newsletters', {}, get_expired_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if invalid jwt' do
+    it 'returns an error if invalid jwt' do
       get '/newsletters', {}, get_invalid_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return nothing if the database is empty' do
+    it 'returns nothing if the database is empty' do
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
 
@@ -186,7 +187,7 @@ RSpec.describe 'Tribune Server' do
       expect(body).to eq('meta' => {}, 'result' => [])
     end
 
-    it 'should return an item if it exists' do
+    it 'returns an item if it exists' do
       create_newsletter(id: 1)
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
@@ -200,13 +201,13 @@ RSpec.describe 'Tribune Server' do
       expect(item['title']).to eq('t1')
       expect(item['author']).to eq('a1')
       expect(item['filename']).to eq('f1')
-      expect(item['read']).to eq(false)
-      expect(item['deleted']).to eq(false)
+      expect(item['read']).to be(false)
+      expect(item['deleted']).to be(false)
       expect(Time.parse(item['created_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
     end
 
-    it 'should return only the newest 100 items' do
+    it 'returns only the newest 100 items' do
       105.times do |i|
         create_newsletter(id: i + 1)
       end
@@ -219,7 +220,7 @@ RSpec.describe 'Tribune Server' do
       expect(body['result'].map { _1['id'] }).to eq((6..105).to_a.reverse)
     end
 
-    it 'should validate after params if at least one is present' do
+    it 'validates after params if at least one is present' do
       get '/newsletters', { after_timestamp: BASE_TIME.iso8601(6) }, get_auth_header
       expect(last_response.status).to eq(400)
 
@@ -239,7 +240,7 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(400)
     end
 
-    it 'should support pagination with after' do
+    it 'supports pagination with after' do
       5.times do |i|
         create_newsletter(id: i + 1)
       end
@@ -301,7 +302,7 @@ RSpec.describe 'Tribune Server' do
       expect(body['result'].size).to eq(0)
     end
 
-    it 'should support id tiebreakers with after' do
+    it 'supports id tiebreakers with after' do
       100.times do |i|
         create_newsletter(id: i + 1, updated_at: BASE_TIME)
       end
@@ -324,7 +325,7 @@ RSpec.describe 'Tribune Server' do
       expect(body['result'].map { _1['id'] }).to eq((101..105).to_a.reverse)
     end
 
-    it 'should return the item if the newest item got updated' do
+    it 'returns the item if the newest item got updated' do
       create_newsletter(id: 1, updated_at: BASE_TIME)
 
       get '/newsletters', {}, get_auth_header
@@ -352,7 +353,7 @@ RSpec.describe 'Tribune Server' do
       expect(body['result'].size).to eq(1)
     end
 
-    it 'should validate before params if at least one is present' do
+    it 'validates before params if at least one is present' do
       get '/newsletters', { before_timestamp: BASE_TIME.iso8601(6) }, get_auth_header
       expect(last_response.status).to eq(400)
 
@@ -372,7 +373,7 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(400)
     end
 
-    it 'should support pagination with before' do
+    it 'supports pagination with before' do
       5.times do |i|
         create_newsletter(id: i + 1)
       end
@@ -420,7 +421,7 @@ RSpec.describe 'Tribune Server' do
       expect(body['result'].size).to eq(0)
     end
 
-    it 'should support id tiebreakers with before' do
+    it 'supports id tiebreakers with before' do
       105.times do |i|
         create_newsletter(id: i + 1, updated_at: BASE_TIME)
       end
@@ -441,47 +442,47 @@ RSpec.describe 'Tribune Server' do
   end
 
   describe 'PUT /newsletters/:id/read' do
-    before(:each) do
+    before do
       create_user
       create_newsletter(id: 1, updated_at: BASE_TIME)
     end
 
-    it 'should return an error if no auth header' do
+    it 'returns an error if no auth header' do
       put '/newsletters/1/read'
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if expired jwt' do
+    it 'returns an error if expired jwt' do
       put '/newsletters/1/read', {}, get_expired_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if invalid jwt' do
+    it 'returns an error if invalid jwt' do
       put '/newsletters/1/read', {}, get_invalid_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if non-numeric id' do
+    it 'returns an error if non-numeric id' do
       put '/newsletters/hi/read', {}, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if too small id' do
+    it 'returns an error if too small id' do
       put '/newsletters/0/read', {}, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if non-existant id' do
+    it 'returns an error if non-existant id' do
       put '/newsletters/2/read', {}, get_auth_header
       expect(last_response.status).to eq(404)
     end
 
-    it 'should set read to true if id exists' do
+    it 'sets read to true if id exists' do
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(false)
+      expect(item['read']).to be(false)
 
       put '/newsletters/1/read', {}, get_auth_header
       expect(last_response.status).to eq(200)
@@ -490,17 +491,17 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
-      expect(item['read']).to eq(true)
+      expect(item['read']).to be(true)
     end
 
-    it 'should not change the updated_at timestamp if already read' do
+    it 'does not change the updated_at timestamp if already read' do
       create_newsletter(id: 2, updated_at: BASE_TIME, read: true)
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(true)
+      expect(item['read']).to be(true)
 
       put '/newsletters/2/read', {}, get_auth_header
       expect(last_response).to be_ok
@@ -509,18 +510,18 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(true)
+      expect(item['read']).to be(true)
     end
 
-    it 'should return a 404 and not change the updated_at timestamp if deleted' do
+    it 'returns a 404 and not change the updated_at timestamp if deleted' do
       create_newsletter(id: 2, updated_at: BASE_TIME, read: false, deleted: true)
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(false)
-      expect(item['deleted']).to eq(true)
+      expect(item['read']).to be(false)
+      expect(item['deleted']).to be(true)
 
       put '/newsletters/2/unread', {}, get_auth_header
       expect(last_response.status).to eq(404)
@@ -529,53 +530,53 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(false)
-      expect(item['deleted']).to eq(true)
+      expect(item['read']).to be(false)
+      expect(item['deleted']).to be(true)
     end
   end
 
   describe 'PUT /newsletters/:id/unread' do
-    before(:each) do
+    before do
       create_user
       create_newsletter(id: 1, updated_at: BASE_TIME, read: true)
     end
 
-    it 'should return an error if no auth header' do
+    it 'returns an error if no auth header' do
       put '/newsletters/1/unread'
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if expired jwt' do
+    it 'returns an error if expired jwt' do
       put '/newsletters/1/unread', {}, get_expired_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if invalid jwt' do
+    it 'returns an error if invalid jwt' do
       put '/newsletters/1/unread', {}, get_invalid_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if non-numeric id' do
+    it 'returns an error if non-numeric id' do
       put '/newsletters/hi/unread', {}, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if too small id' do
+    it 'returns an error if too small id' do
       put '/newsletters/0/unread', {}, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if non-existant id' do
+    it 'returns an error if non-existant id' do
       put '/newsletters/2/unread', {}, get_auth_header
       expect(last_response.status).to eq(404)
     end
 
-    it 'should set read to true if id exists' do
+    it 'sets read to true if id exists' do
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(true)
+      expect(item['read']).to be(true)
 
       put '/newsletters/1/unread', {}, get_auth_header
       expect(last_response.status).to eq(200)
@@ -584,17 +585,17 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
-      expect(item['read']).to eq(false)
+      expect(item['read']).to be(false)
     end
 
-    it 'should not change the changed_at timestamp if already unread' do
+    it 'does not change the changed_at timestamp if already unread' do
       create_newsletter(id: 2, updated_at: BASE_TIME, read: false)
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(false)
+      expect(item['read']).to be(false)
 
       put '/newsletters/2/unread', {}, get_auth_header
       expect(last_response).to be_ok
@@ -603,18 +604,18 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(false)
+      expect(item['read']).to be(false)
     end
 
-    it 'should return a 404 and not change the updated_at timestamp if deleted' do
+    it 'returns a 404 and not change the updated_at timestamp if deleted' do
       create_newsletter(id: 2, updated_at: BASE_TIME, read: true, deleted: true)
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(true)
-      expect(item['deleted']).to eq(true)
+      expect(item['read']).to be(true)
+      expect(item['deleted']).to be(true)
 
       put '/newsletters/2/unread', {}, get_auth_header
       expect(last_response.status).to eq(404)
@@ -623,55 +624,55 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['read']).to eq(true)
-      expect(item['deleted']).to eq(true)
+      expect(item['read']).to be(true)
+      expect(item['deleted']).to be(true)
     end
   end
 
   describe 'DELETE /newsletters/:id' do
-    before(:each) do
+    before do
       create_user
       create_newsletter(id: 1, updated_at: BASE_TIME)
     end
 
-    it 'should return an error if no auth header' do
+    it 'returns an error if no auth header' do
       delete '/newsletters/1'
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if expired jwt' do
+    it 'returns an error if expired jwt' do
       delete '/newsletters/1', {}, get_expired_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if invalid jwt' do
+    it 'returns an error if invalid jwt' do
       delete '/newsletters/1', {}, get_invalid_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if non-numeric id' do
+    it 'returns an error if non-numeric id' do
       delete '/newsletters/hi', {}, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if too small id' do
+    it 'returns an error if too small id' do
       delete '/newsletters/0', {}, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if non-existant id' do
+    it 'returns an error if non-existant id' do
       delete '/newsletters/2', {}, get_auth_header
       expect(last_response.status).to eq(404)
     end
 
-    it 'should return a 404 and not change the updated_at timestamp if already deleted' do
+    it 'returns a 404 and not change the updated_at timestamp if already deleted' do
       create_newsletter(id: 2, updated_at: BASE_TIME, deleted: true)
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['deleted']).to eq(true)
+      expect(item['deleted']).to be(true)
 
       delete '/newsletters/2', {}, get_auth_header
       expect(last_response.status).to eq(404)
@@ -680,15 +681,15 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['deleted']).to eq(true)
+      expect(item['deleted']).to be(true)
     end
 
-    it 'should set deleted to true if id exists' do
+    it 'sets deleted to true if id exists' do
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
-      expect(item['deleted']).to eq(false)
+      expect(item['deleted']).to be(false)
 
       delete '/newsletters/1', {}, get_auth_header
       expect(last_response.status).to eq(200)
@@ -697,218 +698,189 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
-      expect(item['deleted']).to eq(true)
+      expect(item['deleted']).to be(true)
     end
   end
 
   describe 'POST /newsletters' do
-    before(:all) do
-      @test_file_path = Tempfile.new('test_newsletter.epub')
-      @test_file_path.write('test test test')
-      @tmpdir = Dir.mktmpdir('test_newsletter_upload')
-      CONFIG.newsletters_dir = @tmpdir
-    end
+    include_context 'uses temp dir'
 
-    before(:each) do
-      create_user
-
-      @metadata = { 'title' => 'Test Title', 'author' => 'Test Author' }
-      @file = Rack::Test::UploadedFile.new(@test_file_path.path, 'application/epub+zip')
-    end
-
-    after(:each) do
-      Dir.foreach(@tmpdir) do |f|
-        fn = File.join(@tmpdir, f)
-        File.delete(fn) if f != '.' && f != '..'
+    let(:test_file_path) do
+      Tempfile.new('test_newsletter.epub').tap do |f|
+        f.write('test test test')
       end
     end
 
-    after(:all) do
-      @test_file_path.close! if @test_file_path
-      FileUtils.remove_entry(@tmpdir) if @tmpdir
-      @test_file_path = @tmpdir = nil
+    let(:file) do
+      Rack::Test::UploadedFile.new(test_file_path.path, 'application/epub+zip')
     end
 
-    it 'should return an error if no auth header' do
+    let(:metadata) do
+      { 'title' => 'Test Title', 'author' => 'Test Author' }
+    end
+
+    before do
+      create_user
+      CONFIG.newsletters_dir = temp_dir
+    end
+
+    it 'returns an error if no auth header' do
       post '/newsletters'
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if expired jwt' do
+    it 'returns an error if expired jwt' do
       post '/newsletters', {}, get_expired_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if invalid jwt' do
+    it 'returns an error if invalid jwt' do
       post '/newsletters', {}, get_invalid_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if there\'s no file' do
+    it 'returns an error if there is no file' do
       post '/newsletters', {
-        metadata: @metadata.to_json
+        metadata: metadata.to_json
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if there\'s no metadata' do
+    it 'returns an error if there is no metadata' do
       post '/newsletters', {
-        file: @file
+        file: file
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if metadata is not valid json' do
+    it 'returns an error if metadata is not valid json' do
       post '/newsletters', {
         metadata: '{{{{',
-        file: @file
+        file: file
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if metadata.title is not valid' do
-      @metadata['title'] = nil
+    it 'returns an error if metadata.title is not valid' do
+      metadata['title'] = nil
       post '/newsletters', {
-        metadata: @metadata.to_json,
-        file: @file
+        metadata: metadata.to_json,
+        file: file
       }, get_auth_header
       expect(last_response.status).to eq(400)
 
-      @metadata['title'] = ''
+      metadata['title'] = ''
       post '/newsletters', {
-        metadata: @metadata.to_json,
-        file: @file
-      }, get_auth_header
-      expect(last_response.status).to eq(400)
-    end
-
-    it 'should return an error if metadata.author is not valid' do
-      @metadata['author'] = nil
-      post '/newsletters', {
-        metadata: @metadata.to_json,
-        file: @file
-      }, get_auth_header
-      expect(last_response.status).to eq(400)
-
-      @metadata['author'] = ''
-      post '/newsletters', {
-        metadata: @metadata.to_json,
-        file: @file
+        metadata: metadata.to_json,
+        file: file
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if metadata.author is not valid' do
-      @metadata['author'] = nil
+    it 'returns an error if metadata.author is not valid' do
+      metadata['author'] = nil
       post '/newsletters', {
-        metadata: @metadata.to_json,
-        file: @file
+        metadata: metadata.to_json,
+        file: file
       }, get_auth_header
       expect(last_response.status).to eq(400)
 
-      @metadata['author'] = ''
+      metadata['author'] = ''
       post '/newsletters', {
-        metadata: @metadata.to_json,
-        file: @file
+        metadata: metadata.to_json,
+        file: file
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should create a database entry and move the file into place' do
+    it 'creates a database entry and move the file into place' do
       post '/newsletters', {
-        metadata: @metadata.to_json,
-        file: @file
+        metadata: metadata.to_json,
+        file: file
       }, get_auth_header
       expect(last_response).to be_ok
-      expect(File).to exist(File.join(@tmpdir, 'd41d8cd98f00b204e9800998ecf8427e.epub'))
+      expect(File).to exist(File.join(temp_dir, 'd41d8cd98f00b204e9800998ecf8427e.epub'))
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['created_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
-      expect(item['title']).to eq(@metadata['title'])
-      expect(item['author']).to eq(@metadata['author'])
+      expect(item['title']).to eq(metadata['title'])
+      expect(item['author']).to eq(metadata['author'])
       expect(item['filename']).to eq('d41d8cd98f00b204e9800998ecf8427e.epub')
-      expect(item['read']).to eq(false)
-      expect(item['deleted']).to eq(false)
+      expect(item['read']).to be(false)
+      expect(item['deleted']).to be(false)
     end
 
-    it 'should create a database entry with a creation time if specified' do
-      @metadata['created_at'] = BASE_TIME.iso8601(6)
+    it 'creates a database entry with a creation time if specified' do
+      metadata['created_at'] = BASE_TIME.iso8601(6)
       post '/newsletters', {
-        metadata: @metadata.to_json,
-        file: @file
+        metadata: metadata.to_json,
+        file: file
       }, get_auth_header
       expect(last_response).to be_ok
-      expect(File).to exist(File.join(@tmpdir, 'd41d8cd98f00b204e9800998ecf8427e.epub'))
+      expect(File).to exist(File.join(temp_dir, 'd41d8cd98f00b204e9800998ecf8427e.epub'))
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['created_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
-      expect(item['title']).to eq(@metadata['title'])
-      expect(item['author']).to eq(@metadata['author'])
+      expect(item['title']).to eq(metadata['title'])
+      expect(item['author']).to eq(metadata['author'])
       expect(item['filename']).to eq('d41d8cd98f00b204e9800998ecf8427e.epub')
-      expect(item['read']).to eq(false)
-      expect(item['deleted']).to eq(false)
+      expect(item['read']).to be(false)
+      expect(item['deleted']).to be(false)
     end
   end
 
   describe 'GET /newsletters/:id/epub' do
-    before(:all) do
-      @tmpdir = Dir.mktmpdir('test_newsletter_read')
-      CONFIG.newsletters_dir = @tmpdir
-    end
-    before(:each) do
+    include_context 'uses temp dir'
+
+    before do
       create_user
       create_newsletter(id: 1, updated_at: BASE_TIME, read: true, filename: 'd41d8cd98f00b204e9800998ecf8427e.epub')
+      CONFIG.newsletters_dir = temp_dir
     end
 
-    after(:all) do
-      FileUtils.remove_entry(@tmpdir) if @tmpdir
-    end
-
-    it 'should return an error if no auth header' do
+    it 'returns an error if no auth header' do
       get '/newsletters/1/epub'
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if expired jwt' do
+    it 'returns an error if expired jwt' do
       get '/newsletters/1/epub', {}, get_expired_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if invalid jwt' do
+    it 'returns an error if invalid jwt' do
       get '/newsletters/1/epub', {}, get_invalid_auth_header
       expect(last_response.status).to eq(401)
     end
 
-    it 'should return an error if non-numeric id' do
+    it 'returns an error if non-numeric id' do
       get '/newsletters/hi/epub', {}, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if too small id' do
+    it 'returns an error if too small id' do
       get '/newsletters/0/epub', {}, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
-    it 'should return an error if non-existant id' do
+    it 'returns an error if non-existant id' do
       get '/newsletters/2/epub', {}, get_auth_header
       expect(last_response.status).to eq(404)
     end
 
-    it 'should return an error if the file doesn\'t exist' do
+    it 'returns an error if the file does not exist' do
       get '/newsletters/1/epub', {}, get_auth_header
       expect(last_response.status).to eq(500)
     end
 
-    it 'should return the file contents' do
-      File.open(File.join(@tmpdir, 'd41d8cd98f00b204e9800998ecf8427e.epub'), 'w') do |f|
-        f.write('test test test')
-      end
+    it 'returns the file contents' do
+      File.write(File.join(temp_dir, 'd41d8cd98f00b204e9800998ecf8427e.epub'), 'test test test')
 
       get '/newsletters/1/epub', {}, get_auth_header
       expect(last_response).to be_ok
