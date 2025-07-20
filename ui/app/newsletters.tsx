@@ -6,6 +6,12 @@ import { useNewsletters, parseTimestamp } from "@/hooks/useNewsletters";
 import { Redirect, Stack, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+const statusIcons: Record<"pending" | "downloading" | "downloaded", string> = {
+  pending: "cloud-download-outline",
+  downloading: "progress-download",
+  downloaded: "check-circle-outline",
+};
+
 export default function Index() {
   const { isLoggedIn, clearAuthState } = useAuth();
   const {
@@ -95,7 +101,12 @@ export default function Index() {
             title={item.title}
             titleNumberOfLines={0}
             descriptionNumberOfLines={0}
-            right={() => <Icon source="cloud-download-outline" size={20} />}
+            right={() => (
+              <Icon
+                source={statusIcons[item.downloadStatus ?? "pending"]}
+                size={20}
+              />
+            )}
           />
         )}
       />
