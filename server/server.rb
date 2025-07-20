@@ -12,15 +12,15 @@ ANY_USERS_EXIST_QUERY = 'SELECT EXISTS(SELECT 1 FROM users);'
 VALID_USERNAME_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1);'
 VALID_USERNAME_AND_PASSWORD_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND password_sha256 = $2);'
 
-GET_NEWSLETTERS_QUERY_START = 'SELECT id, title, author, filename, read, deleted, created_at, updated_at FROM newsletters'
+GET_NEWSLETTERS_QUERY_START = 'SELECT id, title, author, read, deleted, created_at, updated_at FROM newsletters'
 GET_NEWSLETTERS_QUERY_END = 'ORDER BY updated_at DESC, id DESC LIMIT 100;'
 GET_NEWSLETTERS_QUERY = "#{GET_NEWSLETTERS_QUERY_START} #{GET_NEWSLETTERS_QUERY_END}".freeze
 GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) > ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
 GET_NEWSLETTERS_BEFORE_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) < ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
 
-CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, filename) VALUES ($1, $2, $3);'
-CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, filename, created_at) VALUES ($1, $2, $3, $4);'
-GET_NEWSLETTER_FILENAME_QUERY = 'SELECT filename FROM newsletters WHERE id = $1 AND deleted = FALSE;'
+CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author) VALUES ($1, $2) RETURNING id;'
+CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, created_at) VALUES ($1, $2, $3) RETURNING id;'
+NEWSLETTER_EXISTS_QUERY = 'SELECT EXISTS(SELECT 1 FROM newsletters WHERE id = $1 AND deleted = FALSE);'
 
 MARK_NEWSLETTER_READ_QUERY = <<~SQL
   UPDATE newsletters
@@ -163,7 +163,7 @@ put '/newsletters/:id/unread' do
   halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
   result = update_query(MARK_NEWSLETTER_UNREAD_QUERY, [params[:id].to_i])
   halt 404, 'Newsletter not found' if result.zero?
-  'Marked as read'
+  'Marked as unread'
 end
 
 delete '/newsletters/:id' do
@@ -171,7 +171,7 @@ delete '/newsletters/:id' do
   halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
   result = update_query(DELETE_NEWSLETTER_QUERY, [params[:id].to_i])
   halt 404, 'Newsletter not found' if result.zero?
-  'Marked as read'
+  'Marked as deleted'
 end
 
 post '/newsletters' do
@@ -189,25 +189,28 @@ post '/newsletters' do
   author = metadata['author']
   halt 400, 'Missing title or author in metadata' if title.nil? || title.empty? || author.nil? || author.empty?
 
-  ebook_md5 = Digest::MD5.file(tempfile).hexdigest
-  new_path = File.join(CONFIG.newsletters_dir, "#{ebook_md5}.epub")
-  FileUtils.move(tempfile.path, new_path)
+  result = if metadata['created_at']
+             query(CREATE_NEWSLETTER_AT_TIME_QUERY, [title, author, metadata['created_at']])
+           else
+             query(CREATE_NEWSLETTER_QUERY, [title, author])
+           end
 
-  if metadata['created_at']
-    query(CREATE_NEWSLETTER_AT_TIME_QUERY, [title, author, "#{ebook_md5}.epub", metadata['created_at']])
+  if (id = result[0]['id'])
+    new_path = File.join(CONFIG.newsletters_dir, "#{id}.epub")
+    FileUtils.move(tempfile.path, new_path)
+    json({ id: id.to_i })
   else
-    query(CREATE_NEWSLETTER_QUERY, [title, author, "#{ebook_md5}.epub"])
+    halt 500, 'Failed to create newsletter'
   end
-  'Upload successful'
 end
 
 get '/newsletters/:id/epub' do
   halt 401, 'Unauthorized' unless authed?
   halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
-  result = query(GET_NEWSLETTER_FILENAME_QUERY, [params[:id].to_i])
-  halt 404, 'Newsletter not found' if result.empty?
+  exists = query(NEWSLETTER_EXISTS_QUERY, [params[:id]])[0]['exists'] == 't'
+  halt 404, 'Newsletter not found' unless exists
 
-  file_path = File.join(CONFIG.newsletters_dir, result[0]['filename'])
+  file_path = File.join(CONFIG.newsletters_dir, "#{params[:id]}.epub")
   if File.exist?(file_path)
     send_file file_path, filename: params[:filename], type: 'application/epub+zip'
   else

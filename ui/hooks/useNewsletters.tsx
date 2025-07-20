@@ -26,7 +26,6 @@ export interface Newsletter {
   id: number;
   title: string;
   author: string;
-  filename: string;
   read: boolean;
   deleted: boolean;
   created_at: string;

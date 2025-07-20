@@ -16,7 +16,7 @@ BASE_TIME = Time.new(2025, 1, 1, 0, 0, 0.456789).utc
 HALF_MICROSECOND = Rational(1, 2_000_000)
 HALF_SECOND = Rational(1, 2)
 CREATE_TEST_USER_QUERY = 'INSERT INTO users (username, password_sha256) VALUES ($1, $2);'
-CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, filename, read, deleted, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);'
+CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, read, deleted, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7);'
 UPDATE_TEST_NEWSLETTER_UPDATED_AT = 'UPDATE newsletters SET updated_at = $1 WHERE id = $2;'
 
 RSpec.describe 'Tribune Server' do
@@ -55,14 +55,13 @@ RSpec.describe 'Tribune Server' do
   end
 
   # newsletters
-  def create_newsletter(id:, title: nil, author: nil, filename: nil, read: false, deleted: false, created_at: nil, updated_at: nil)
+  def create_newsletter(id:, title: nil, author: nil, read: false, deleted: false, created_at: nil, updated_at: nil)
     title ||= "t#{id}"
     author ||= "a#{id}"
-    filename ||= "f#{id}"
     created_at ||= BASE_TIME + id
     updated_at ||= BASE_TIME + id
     DB_POOL.with do |conn|
-      conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, filename, read, deleted, created_at.iso8601(6), updated_at.iso8601(6)])
+      conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, read, deleted, created_at.iso8601(6), updated_at.iso8601(6)])
     end
   end
 
@@ -200,7 +199,6 @@ RSpec.describe 'Tribune Server' do
       expect(item['id']).to eq(1)
       expect(item['title']).to eq('t1')
       expect(item['author']).to eq('a1')
-      expect(item['filename']).to eq('f1')
       expect(item['read']).to be(false)
       expect(item['deleted']).to be(false)
       expect(Time.parse(item['created_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
@@ -799,7 +797,8 @@ RSpec.describe 'Tribune Server' do
         file: file
       }, get_auth_header
       expect(last_response).to be_ok
-      expect(File).to exist(File.join(temp_dir, 'd41d8cd98f00b204e9800998ecf8427e.epub'))
+      id = JSON.parse(last_response.body)['id']
+      expect(File).to exist(File.join(temp_dir, "#{id}.epub"))
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
@@ -808,7 +807,6 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(item['title']).to eq(metadata['title'])
       expect(item['author']).to eq(metadata['author'])
-      expect(item['filename']).to eq('d41d8cd98f00b204e9800998ecf8427e.epub')
       expect(item['read']).to be(false)
       expect(item['deleted']).to be(false)
     end
@@ -820,7 +818,8 @@ RSpec.describe 'Tribune Server' do
         file: file
       }, get_auth_header
       expect(last_response).to be_ok
-      expect(File).to exist(File.join(temp_dir, 'd41d8cd98f00b204e9800998ecf8427e.epub'))
+      id = JSON.parse(last_response.body)['id']
+      expect(File).to exist(File.join(temp_dir, "#{id}.epub"))
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
@@ -829,7 +828,6 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(item['title']).to eq(metadata['title'])
       expect(item['author']).to eq(metadata['author'])
-      expect(item['filename']).to eq('d41d8cd98f00b204e9800998ecf8427e.epub')
       expect(item['read']).to be(false)
       expect(item['deleted']).to be(false)
     end
@@ -840,7 +838,7 @@ RSpec.describe 'Tribune Server' do
 
     before do
       create_user
-      create_newsletter(id: 1, updated_at: BASE_TIME, read: true, filename: 'd41d8cd98f00b204e9800998ecf8427e.epub')
+      create_newsletter(id: 1, updated_at: BASE_TIME, read: true)
       CONFIG.newsletters_dir = temp_dir
     end
 
@@ -880,7 +878,7 @@ RSpec.describe 'Tribune Server' do
     end
 
     it 'returns the file contents' do
-      File.write(File.join(temp_dir, 'd41d8cd98f00b204e9800998ecf8427e.epub'), 'test test test')
+      File.write(File.join(temp_dir, '1.epub'), 'test test test')
 
       get '/newsletters/1/epub', {}, get_auth_header
       expect(last_response).to be_ok
