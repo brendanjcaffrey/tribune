@@ -63,7 +63,7 @@ end
 namespace :server do
   desc 'Install ruby dependencies for the server'
   task :install do
-    exec('bundle')
+    command.run('bundle')
   end
 
   desc 'Lint the ruby code'
@@ -86,7 +86,7 @@ namespace :ui do
   desc 'Install node dependencies for the ui'
   task :install do
     Dir.chdir('ui') do
-      exec('npm install')
+      command.run('npm install')
     end
   end
 

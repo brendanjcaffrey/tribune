@@ -79,6 +79,7 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
   const [[newslettersLoading, newsletters], setNewsletters] =
     useStorage<Newsletter[]>("newsletters");
   const [syncToggle, setSyncToggle] = useState(false);
+  const [downloadToggle, setDownloadToggle] = useState(false);
   const isLoading = authLoading || newslettersLoading || initialSyncDoneLoading;
   const syncInProgressRef = useRef(false);
   const downloadingRef = useRef(false);
@@ -141,6 +142,7 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
         })
         .finally(() => {
           syncInProgressRef.current = false;
+          setDownloadToggle((prev) => !prev);
         });
     } else {
       const newestNewsletter =
@@ -167,6 +169,7 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
         })
         .finally(() => {
           syncInProgressRef.current = false;
+          setDownloadToggle((prev) => !prev);
         });
     }
 
@@ -176,7 +179,7 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
   }, [isLoading, auth, syncToggle, setNewsletters, setInitialSyncDone]);
 
   useEffect(() => {
-    if (downloadingRef.current) {
+    if (syncInProgressRef.current || downloadingRef.current) {
       return;
     }
     if (!auth) {
@@ -219,14 +222,7 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
           break;
         } catch (e) {
           console.error("Failed to download", e);
-          if (Platform.OS === "android") {
-            ToastAndroid.show(
-              `Failed to download ${item.title}`,
-              ToastAndroid.SHORT,
-            );
-          } else {
-            Alert.alert("Download failed", `Failed to download ${item.title}`);
-          }
+          Alert.alert("Download failed", `Failed to download ${item.title}`);
           await new Promise((r) => setTimeout(r, delay));
           delay *= 2;
         }
@@ -245,7 +241,7 @@ export function NewslettersProvider({ children }: PropsWithChildren) {
     };
 
     downloadNext(0);
-  }, [auth, updateNewsletter]);
+  }, [auth, updateNewsletter, downloadToggle]);
 
   return (
     <NewslettersContext.Provider
