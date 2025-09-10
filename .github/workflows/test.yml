@@ -37,7 +37,7 @@ jobs:
         node-version: '22.14.0'
 
     - name: npm ci
-      run: cd ui && npm ci
+      run: cd web && npm ci
 
     - name: copy config
       id: config

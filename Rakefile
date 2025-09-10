@@ -82,48 +82,60 @@ namespace :server do
   end
 end
 
-namespace :ui do
-  desc 'Install node dependencies for the ui'
+namespace :web do
+  desc 'Install node dependencies for the web app'
   task :install do
-    Dir.chdir('ui') do
+    Dir.chdir('web') do
       command.run('npm install')
     end
   end
 
-  desc 'Run the react native development server'
-  task :run do
-    Dir.chdir('ui') do
-      exec('npm run start')
+  desc 'Build the web app for distribution'
+  task build: %i[web:install] do
+    command.run('cd web && npm run build')
+  end
+
+  desc 'Run the web app in development mode'
+  task :vite do
+    Dir.chdir('web') do
+      exec('node_modules/.bin/vite')
+    end
+  end
+
+  desc 'Run the web tests'
+  task :vitest do
+    Dir.chdir('web') do
+      exec('npx vitest')
     end
   end
 
   desc 'Lint the ui code'
   task :lint do
-    Dir.chdir('ui') do
+    Dir.chdir('web') do
       command.run('npm run lint')
     end
   end
 
   desc 'Format code in the ui code'
   task :format do
-    Dir.chdir('ui') do
+    Dir.chdir('web') do
       exec('npm run format')
     end
   end
 
   desc 'Check formatting in the ui code'
   task :format_check do
-    Dir.chdir('ui') do
+    Dir.chdir('web') do
       command.run('npm run format:check')
     end
   end
 end
 
 desc 'Install ruby & node dependencies'
-task install: %i[server:install ui:install]
+task install: %i[server:install web:install]
 
 desc 'Run all checks'
-task checks: %i[server:lint ui:lint ui:format_check]
+task checks: %i[server:lint web:lint web:format_check]
 
 namespace :user do
   desc 'Create a user interactively'
