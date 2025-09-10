@@ -12,15 +12,16 @@ ANY_USERS_EXIST_QUERY = 'SELECT EXISTS(SELECT 1 FROM users);'
 VALID_USERNAME_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1);'
 VALID_USERNAME_AND_PASSWORD_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND password_sha256 = $2);'
 
-GET_NEWSLETTERS_QUERY_START = 'SELECT id, title, author, read, deleted, created_at, updated_at FROM newsletters'
+GET_NEWSLETTERS_QUERY_START = 'SELECT id, title, author, source_mime_type, read, deleted, created_at, updated_at FROM newsletters'
 GET_NEWSLETTERS_QUERY_END = 'ORDER BY updated_at DESC, id DESC LIMIT 100;'
 GET_NEWSLETTERS_QUERY = "#{GET_NEWSLETTERS_QUERY_START} #{GET_NEWSLETTERS_QUERY_END}".freeze
 GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) > ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
 GET_NEWSLETTERS_BEFORE_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) < ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
 
-CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author) VALUES ($1, $2) RETURNING id;'
-CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, created_at) VALUES ($1, $2, $3) RETURNING id;'
+CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, source_mime_type) VALUES ($1, $2, $3) RETURNING id;'
+CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, source_mime_type, created_at) VALUES ($1, $2, $3, $4) RETURNING id;'
 NEWSLETTER_EXISTS_QUERY = 'SELECT EXISTS(SELECT 1 FROM newsletters WHERE id = $1 AND deleted = FALSE);'
+NEWSLETTER_SOURCE_MIME_TYPE_QUERY = 'SELECT source_mime_type FROM newsletters WHERE id = $1 AND deleted = FALSE;'
 
 MARK_NEWSLETTER_READ_QUERY = <<~SQL
   UPDATE newsletters
@@ -43,6 +44,12 @@ MARK_NEWSLETTER_UNREAD_QUERY = <<~SQL
   WHERE id = $1 AND deleted = FALSE;
 SQL
 DELETE_NEWSLETTER_QUERY = 'UPDATE newsletters SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted = FALSE;'
+TOUCH_NEWSLETTER_QUERY = 'UPDATE newsletters SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted = FALSE;'
+
+EPUB_MIME_TYPE = 'application/epub+zip'
+PDF_MIME_TYPE = 'application/pdf'
+HTML_MIME_TYPE = 'text/html'
+MIME_TYPES = { PDF_MIME_TYPE => 'pdf', HTML_MIME_TYPE => 'html' }.freeze
 
 CONFIG = Config.load
 DB_POOL = ConnectionPool.new(size: 5, timeout: 5) do
@@ -97,6 +104,14 @@ helpers do
 
   def authed?
     !get_validated_username.nil?
+  end
+
+  def source_path(id, mime_type)
+    File.join(CONFIG.newsletters_dir, "#{id}.#{MIME_TYPES[mime_type]}")
+  end
+
+  def epub_path(id)
+    File.join(CONFIG.newsletters_dir, "#{id}.epub")
   end
 end
 
@@ -176,7 +191,10 @@ end
 
 post '/newsletters' do
   halt 401, 'Unauthorized' unless authed?
-  halt 400, 'Missing file' if !params[:file] || !(tempfile = params[:file][:tempfile])
+  halt 400, 'Missing source file' if !params[:source_file] || !(source_tempfile = params[:source_file][:tempfile])
+  halt 400, 'Invalid source mime type' unless MIME_TYPES.key?(params[:source_file][:type])
+  halt 400, 'Missing epub file' if !params[:epub_file] || !(epub_tempfile = params[:epub_file][:tempfile])
+  halt 400, 'Invalid epub mime type' unless params[:epub_file][:type] == EPUB_MIME_TYPE
   halt 400, 'Missing metadata' if !params[:metadata] || params[:metadata].empty?
 
   begin
@@ -189,18 +207,36 @@ post '/newsletters' do
   author = metadata['author']
   halt 400, 'Missing title or author in metadata' if title.nil? || title.empty? || author.nil? || author.empty?
 
+  source_mime_type = params[:source_file][:type]
   result = if metadata['created_at']
-             query(CREATE_NEWSLETTER_AT_TIME_QUERY, [title, author, metadata['created_at']])
+             query(CREATE_NEWSLETTER_AT_TIME_QUERY, [title, author, source_mime_type, metadata['created_at']])
            else
-             query(CREATE_NEWSLETTER_QUERY, [title, author])
+             query(CREATE_NEWSLETTER_QUERY, [title, author, source_mime_type])
            end
 
   if (id = result[0]['id'])
-    new_path = File.join(CONFIG.newsletters_dir, "#{id}.epub")
-    FileUtils.move(tempfile.path, new_path)
+    FileUtils.move(source_tempfile.path, source_path(id, source_mime_type))
+    FileUtils.move(epub_tempfile.path, epub_path(id))
     json({ id: id.to_i })
   else
     halt 500, 'Failed to create newsletter'
+  end
+end
+
+get '/newsletters/:id/source' do
+  halt 401, 'Unauthorized' unless authed?
+  halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
+  mime_type_row = query(NEWSLETTER_SOURCE_MIME_TYPE_QUERY, [params[:id]]).first
+  halt 404, 'Newsletter not found' if mime_type_row.nil?
+
+  mime_type = mime_type_row['source_mime_type']
+  halt 500, 'Invalid source mime type' unless MIME_TYPES.key?(mime_type)
+
+  file_path = source_path(params[:id].to_i, mime_type)
+  if File.exist?(file_path)
+    send_file file_path, filename: params[:filename], type: mime_type
+  else
+    halt 500, 'File not found'
   end
 end
 
@@ -210,10 +246,23 @@ get '/newsletters/:id/epub' do
   exists = query(NEWSLETTER_EXISTS_QUERY, [params[:id]])[0]['exists'] == 't'
   halt 404, 'Newsletter not found' unless exists
 
-  file_path = File.join(CONFIG.newsletters_dir, "#{params[:id]}.epub")
+  file_path = epub_path(params[:id].to_i)
   if File.exist?(file_path)
-    send_file file_path, filename: params[:filename], type: 'application/epub+zip'
+    send_file file_path, filename: params[:filename], type: EPUB_MIME_TYPE
   else
     halt 500, 'File not found'
   end
+end
+
+put '/newsletters/:id/epub' do
+  halt 401, 'Unauthorized' unless authed?
+  halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
+  halt 400, 'Missing epub file' if !params[:epub_file] || !(epub_tempfile = params[:epub_file][:tempfile])
+  halt 400, 'Invalid epub mime type' unless params[:epub_file][:type] == EPUB_MIME_TYPE
+
+  result = update_query(TOUCH_NEWSLETTER_QUERY, [params[:id].to_i])
+  halt 404, 'Newsletter not found' if result.zero?
+
+  FileUtils.move(epub_tempfile.path, epub_path(params[:id].to_i))
+  'epub updated'
 end

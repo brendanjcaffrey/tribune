@@ -10,6 +10,7 @@ CREATE TABLE newsletters (
     id SERIAL PRIMARY KEY,
     title TEXT NOT NULL,
     author TEXT NOT NULL,
+    source_mime_type TEXT NOT NULL,
     read BOOLEAN DEFAULT FALSE,
     deleted BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

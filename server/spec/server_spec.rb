@@ -16,7 +16,7 @@ BASE_TIME = Time.new(2025, 1, 1, 0, 0, 0.456789).utc
 HALF_MICROSECOND = Rational(1, 2_000_000)
 HALF_SECOND = Rational(1, 2)
 CREATE_TEST_USER_QUERY = 'INSERT INTO users (username, password_sha256) VALUES ($1, $2);'
-CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, read, deleted, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7);'
+CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, source_mime_type, read, deleted, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);'
 UPDATE_TEST_NEWSLETTER_UPDATED_AT = 'UPDATE newsletters SET updated_at = $1 WHERE id = $2;'
 
 RSpec.describe 'Tribune Server' do
@@ -55,13 +55,13 @@ RSpec.describe 'Tribune Server' do
   end
 
   # newsletters
-  def create_newsletter(id:, title: nil, author: nil, read: false, deleted: false, created_at: nil, updated_at: nil)
+  def create_newsletter(id:, title: nil, author: nil, source_mime_type: HTML_MIME_TYPE, read: false, deleted: false, created_at: nil, updated_at: nil)
     title ||= "t#{id}"
     author ||= "a#{id}"
     created_at ||= BASE_TIME + id
     updated_at ||= BASE_TIME + id
     DB_POOL.with do |conn|
-      conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, read, deleted, created_at.iso8601(6), updated_at.iso8601(6)])
+      conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, source_mime_type, read, deleted, created_at.iso8601(6), updated_at.iso8601(6)])
     end
   end
 
@@ -511,7 +511,7 @@ RSpec.describe 'Tribune Server' do
       expect(item['read']).to be(true)
     end
 
-    it 'returns a 404 and not change the updated_at timestamp if deleted' do
+    it 'returns a 404 and does not change the updated_at timestamp if deleted' do
       create_newsletter(id: 2, updated_at: BASE_TIME, read: false, deleted: true)
 
       get '/newsletters', {}, get_auth_header
@@ -703,14 +703,34 @@ RSpec.describe 'Tribune Server' do
   describe 'POST /newsletters' do
     include_context 'uses temp dir'
 
-    let(:test_file_path) do
-      Tempfile.new('test_newsletter.epub').tap do |f|
-        f.write('test test test')
+    let(:html_file_path) do
+      File.join(temp_dir, 'test_newsletter.html').tap do |path|
+        File.write(path, 'html html html')
       end
     end
 
-    let(:file) do
-      Rack::Test::UploadedFile.new(test_file_path.path, 'application/epub+zip')
+    let(:html_file) do
+      Rack::Test::UploadedFile.new(html_file_path, HTML_MIME_TYPE)
+    end
+
+    let(:pdf_file_path) do
+      File.join(temp_dir, 'test_newsletter.pdf').tap do |path|
+        File.write(path, 'pdf pdf pdf')
+      end
+    end
+
+    let(:pdf_file) do
+      Rack::Test::UploadedFile.new(pdf_file_path, PDF_MIME_TYPE)
+    end
+
+    let(:epub_file_path) do
+      File.join(temp_dir, 'test_newsletter.epub').tap do |path|
+        File.write(path, 'epub epub epub')
+      end
+    end
+
+    let(:epub_file) do
+      Rack::Test::UploadedFile.new(epub_file_path, EPUB_MIME_TYPE)
     end
 
     let(:metadata) do
@@ -737,16 +757,44 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(401)
     end
 
-    it 'returns an error if there is no file' do
+    it 'returns an error if there is no source file' do
       post '/newsletters', {
-        metadata: metadata.to_json
+        metadata: metadata.to_json,
+        epub_file: epub_file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if the source file is the wrong type' do
+      post '/newsletters', {
+        metadata: metadata.to_json,
+        source_file: epub_file,
+        epub_file: html_file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if there is no epub file' do
+      post '/newsletters', {
+        metadata: metadata.to_json,
+        source_file: html_file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if the epub file is the wrong type' do
+      post '/newsletters', {
+        metadata: metadata.to_json,
+        source_file: html_file,
+        epub_file: pdf_file
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
 
     it 'returns an error if there is no metadata' do
       post '/newsletters', {
-        file: file
+        source_file: html_file,
+        epub_file: epub_file
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
@@ -754,7 +802,8 @@ RSpec.describe 'Tribune Server' do
     it 'returns an error if metadata is not valid json' do
       post '/newsletters', {
         metadata: '{{{{',
-        file: file
+        source_file: html_file,
+        epub_file: epub_file
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
@@ -763,14 +812,16 @@ RSpec.describe 'Tribune Server' do
       metadata['title'] = nil
       post '/newsletters', {
         metadata: metadata.to_json,
-        file: file
+        source_file: html_file,
+        epub_file: epub_file
       }, get_auth_header
       expect(last_response.status).to eq(400)
 
       metadata['title'] = ''
       post '/newsletters', {
         metadata: metadata.to_json,
-        file: file
+        source_file: html_file,
+        epub_file: epub_file
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
@@ -779,14 +830,16 @@ RSpec.describe 'Tribune Server' do
       metadata['author'] = nil
       post '/newsletters', {
         metadata: metadata.to_json,
-        file: file
+        source_file: html_file,
+        epub_file: epub_file
       }, get_auth_header
       expect(last_response.status).to eq(400)
 
       metadata['author'] = ''
       post '/newsletters', {
         metadata: metadata.to_json,
-        file: file
+        source_file: html_file,
+        epub_file: epub_file
       }, get_auth_header
       expect(last_response.status).to eq(400)
     end
@@ -794,11 +847,18 @@ RSpec.describe 'Tribune Server' do
     it 'creates a database entry and move the file into place' do
       post '/newsletters', {
         metadata: metadata.to_json,
-        file: file
+        source_file: html_file,
+        epub_file: epub_file
       }, get_auth_header
       expect(last_response).to be_ok
+
       id = JSON.parse(last_response.body)['id']
-      expect(File).to exist(File.join(temp_dir, "#{id}.epub"))
+      copied_path = File.join(temp_dir, "#{id}.html")
+      expect(File).to exist(copied_path)
+      expect(File.read(copied_path)).to eq('html html html')
+      copied_path = File.join(temp_dir, "#{id}.epub")
+      expect(File).to exist(copied_path)
+      expect(File.read(copied_path)).to eq('epub epub epub')
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
@@ -807,6 +867,7 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(item['title']).to eq(metadata['title'])
       expect(item['author']).to eq(metadata['author'])
+      expect(item['source_mime_type']).to eq(HTML_MIME_TYPE)
       expect(item['read']).to be(false)
       expect(item['deleted']).to be(false)
     end
@@ -815,11 +876,18 @@ RSpec.describe 'Tribune Server' do
       metadata['created_at'] = BASE_TIME.iso8601(6)
       post '/newsletters', {
         metadata: metadata.to_json,
-        file: file
+        source_file: pdf_file,
+        epub_file: epub_file
       }, get_auth_header
       expect(last_response).to be_ok
+
       id = JSON.parse(last_response.body)['id']
-      expect(File).to exist(File.join(temp_dir, "#{id}.epub"))
+      copied_path = File.join(temp_dir, "#{id}.pdf")
+      expect(File).to exist(copied_path)
+      expect(File.read(copied_path)).to eq('pdf pdf pdf')
+      copied_path = File.join(temp_dir, "#{id}.epub")
+      expect(File).to exist(copied_path)
+      expect(File.read(copied_path)).to eq('epub epub epub')
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
@@ -828,8 +896,62 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(item['title']).to eq(metadata['title'])
       expect(item['author']).to eq(metadata['author'])
+      expect(item['source_mime_type']).to eq(PDF_MIME_TYPE)
       expect(item['read']).to be(false)
       expect(item['deleted']).to be(false)
+    end
+  end
+
+  describe 'GET /newsletters/:id/source' do
+    include_context 'uses temp dir'
+
+    before do
+      create_user
+      create_newsletter(id: 1, updated_at: BASE_TIME, read: true)
+      CONFIG.newsletters_dir = temp_dir
+    end
+
+    it 'returns an error if no auth header' do
+      get '/newsletters/1/source'
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if expired jwt' do
+      get '/newsletters/1/source', {}, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if invalid jwt' do
+      get '/newsletters/1/source', {}, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if non-numeric id' do
+      get '/newsletters/hi/source', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if too small id' do
+      get '/newsletters/0/source', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if non-existant id' do
+      get '/newsletters/2/source', {}, get_auth_header
+      expect(last_response.status).to eq(404)
+    end
+
+    it 'returns an error if the file does not exist' do
+      get '/newsletters/1/source', {}, get_auth_header
+      expect(last_response.status).to eq(500)
+    end
+
+    it 'returns the file contents' do
+      File.write(File.join(temp_dir, '1.html'), 'test test test')
+
+      get '/newsletters/1/source', {}, get_auth_header
+      expect(last_response).to be_ok
+      expect(last_response.body).to eq('test test test')
     end
   end
 
@@ -883,6 +1005,89 @@ RSpec.describe 'Tribune Server' do
       get '/newsletters/1/epub', {}, get_auth_header
       expect(last_response).to be_ok
       expect(last_response.body).to eq('test test test')
+    end
+  end
+
+  describe 'PUT /newsletters/:id/epub' do
+    include_context 'uses temp dir'
+
+    let(:epub_file_path) do
+      File.join(temp_dir, 'test_newsletter.epub').tap do |path|
+        File.write(path, 'epub epub epub')
+      end
+    end
+
+    let(:epub_file) do
+      Rack::Test::UploadedFile.new(epub_file_path, EPUB_MIME_TYPE)
+    end
+
+    let(:html_file_path) do
+      File.join(temp_dir, 'test_newsletter.html').tap do |path|
+        File.write(path, 'html html html')
+      end
+    end
+
+    let(:html_file) do
+      Rack::Test::UploadedFile.new(html_file_path, HTML_MIME_TYPE)
+    end
+
+    before do
+      create_user
+      create_newsletter(id: 1, updated_at: BASE_TIME, read: true)
+      CONFIG.newsletters_dir = temp_dir
+    end
+
+    it 'returns an error if no auth header' do
+      put '/newsletters/1/epub'
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if expired jwt' do
+      put '/newsletters/1/epub', {}, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if invalid jwt' do
+      put '/newsletters/1/epub', {}, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if missing epub file' do
+      put '/newsletters/1/epub', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if epub file has wrong mime' do
+      put '/newsletters/1/epub', { epub_file: html_file }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if non-numeric id' do
+      put '/newsletters/hi/epub', { epub_file: epub_file }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if too small id' do
+      put '/newsletters/0/epub', { epub_file: epub_file }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if non-existant id' do
+      put '/newsletters/2/epub', { epub_file: epub_file }, get_auth_header
+      expect(last_response.status).to eq(404)
+    end
+
+    it 'updates the file contents and updated_at timestamp' do
+      put '/newsletters/1/epub', { epub_file: epub_file }, get_auth_header
+
+      copied_path = File.join(temp_dir, '1.epub')
+      expect(File).to exist(copied_path)
+      expect(File.read(copied_path)).to eq('epub epub epub')
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
     end
   end
 end
