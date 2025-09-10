@@ -16,7 +16,7 @@ BASE_TIME = Time.new(2025, 1, 1, 0, 0, 0.456789).utc
 HALF_MICROSECOND = Rational(1, 2_000_000)
 HALF_SECOND = Rational(1, 2)
 CREATE_TEST_USER_QUERY = 'INSERT INTO users (username, password_sha256) VALUES ($1, $2);'
-CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, source_mime_type, read, deleted, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);'
+CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, source_mime_type, read, deleted, created_at, updated_at, epub_updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);'
 UPDATE_TEST_NEWSLETTER_UPDATED_AT = 'UPDATE newsletters SET updated_at = $1 WHERE id = $2;'
 
 RSpec.describe 'Tribune Server' do
@@ -55,13 +55,14 @@ RSpec.describe 'Tribune Server' do
   end
 
   # newsletters
-  def create_newsletter(id:, title: nil, author: nil, source_mime_type: HTML_MIME_TYPE, read: false, deleted: false, created_at: nil, updated_at: nil)
+  def create_newsletter(id:, title: nil, author: nil, source_mime_type: HTML_MIME_TYPE, read: false, deleted: false, created_at: nil, updated_at: nil, epub_updated_at: nil)
     title ||= "t#{id}"
     author ||= "a#{id}"
     created_at ||= BASE_TIME + id
     updated_at ||= BASE_TIME + id
+    epub_updated_at ||= BASE_TIME + id
     DB_POOL.with do |conn|
-      conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, source_mime_type, read, deleted, created_at.iso8601(6), updated_at.iso8601(6)])
+      conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, source_mime_type, read, deleted, created_at.iso8601(6), updated_at.iso8601(6), epub_updated_at.iso8601(6)])
     end
   end
 
@@ -203,6 +204,7 @@ RSpec.describe 'Tribune Server' do
       expect(item['deleted']).to be(false)
       expect(Time.parse(item['created_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
+      expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
     end
 
     it 'returns only the newest 100 items' do
@@ -1033,7 +1035,7 @@ RSpec.describe 'Tribune Server' do
 
     before do
       create_user
-      create_newsletter(id: 1, updated_at: BASE_TIME, read: true)
+      create_newsletter(id: 1, updated_at: BASE_TIME, epub_updated_at: BASE_TIME, read: true)
       CONFIG.newsletters_dir = temp_dir
     end
 
@@ -1077,8 +1079,9 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(404)
     end
 
-    it 'updates the file contents and updated_at timestamp' do
+    it 'updates the file contents and updated_at timestamps' do
       put '/newsletters/1/epub', { epub_file: epub_file }, get_auth_header
+      expect(last_response).to be_ok
 
       copied_path = File.join(temp_dir, '1.epub')
       expect(File).to exist(copied_path)
@@ -1087,7 +1090,14 @@ RSpec.describe 'Tribune Server' do
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+    end
+
+    it 'returns an error if the newsletter is deleted' do
+      create_newsletter(id: 2, updated_at: BASE_TIME, epub_updated_at: BASE_TIME, deleted: true)
+      put '/newsletters/2/epub', { epub_file: epub_file }, get_auth_header
+      expect(last_response.status).to eq(404)
     end
   end
 end

@@ -12,7 +12,7 @@ ANY_USERS_EXIST_QUERY = 'SELECT EXISTS(SELECT 1 FROM users);'
 VALID_USERNAME_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1);'
 VALID_USERNAME_AND_PASSWORD_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND password_sha256 = $2);'
 
-GET_NEWSLETTERS_QUERY_START = 'SELECT id, title, author, source_mime_type, read, deleted, created_at, updated_at FROM newsletters'
+GET_NEWSLETTERS_QUERY_START = 'SELECT id, title, author, source_mime_type, read, deleted, created_at, updated_at, epub_updated_at FROM newsletters'
 GET_NEWSLETTERS_QUERY_END = 'ORDER BY updated_at DESC, id DESC LIMIT 100;'
 GET_NEWSLETTERS_QUERY = "#{GET_NEWSLETTERS_QUERY_START} #{GET_NEWSLETTERS_QUERY_END}".freeze
 GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) > ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
@@ -44,7 +44,7 @@ MARK_NEWSLETTER_UNREAD_QUERY = <<~SQL
   WHERE id = $1 AND deleted = FALSE;
 SQL
 DELETE_NEWSLETTER_QUERY = 'UPDATE newsletters SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted = FALSE;'
-TOUCH_NEWSLETTER_QUERY = 'UPDATE newsletters SET updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted = FALSE;'
+TOUCH_EPUB_NEWSLETTER_QUERY = 'UPDATE newsletters SET updated_at = CURRENT_TIMESTAMP, epub_updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted = FALSE;'
 
 EPUB_MIME_TYPE = 'application/epub+zip'
 PDF_MIME_TYPE = 'application/pdf'
@@ -260,7 +260,7 @@ put '/newsletters/:id/epub' do
   halt 400, 'Missing epub file' if !params[:epub_file] || !(epub_tempfile = params[:epub_file][:tempfile])
   halt 400, 'Invalid epub mime type' unless params[:epub_file][:type] == EPUB_MIME_TYPE
 
-  result = update_query(TOUCH_NEWSLETTER_QUERY, [params[:id].to_i])
+  result = update_query(TOUCH_EPUB_NEWSLETTER_QUERY, [params[:id].to_i])
   halt 404, 'Newsletter not found' if result.zero?
 
   FileUtils.move(epub_tempfile.path, epub_path(params[:id].to_i))

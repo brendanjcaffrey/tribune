@@ -1,2 +1,4 @@
 /newsletters/*.epub
+/newsletters/*.html
+/newsletters/*.pdf
 /config.yaml
