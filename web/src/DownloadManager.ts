@@ -44,8 +44,8 @@ export class DownloadManager {
             id: msg.id,
             fileType: msg.fileType,
             status: "done",
-            receivedBytes: undefined,
-            totalBytes: undefined,
+            receivedBytes: data.byteLength,
+            totalBytes: data.byteLength,
           }),
         );
         postMessage(

@@ -124,6 +124,18 @@ class Library {
     }
   }
 
+  public async getNewsletter(id: number): Promise<Newsletter | undefined> {
+    if (!this.validState) {
+      return undefined;
+    }
+    if (!this.db) {
+      this.setError("get newsletters", "database is not initialized");
+      return undefined;
+    }
+
+    return await this.db.get("newsletters", id);
+  }
+
   public async getAllNewsletters(): Promise<Newsletter[]> {
     if (!this.validState) {
       return [];

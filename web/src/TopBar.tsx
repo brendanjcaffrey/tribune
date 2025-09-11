@@ -10,8 +10,11 @@ import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
 
-import { useAtom } from "jotai";
-import { searchAtom } from "./State";
+import { useAtom, useAtomValue } from "jotai";
+import { anyDownloadErrorsAtom, searchAtom } from "./State";
+import { useState } from "react";
+import { Badge, Tooltip } from "@mui/material";
+import DownloadsPanel from "./DownloadsPanel";
 
 const Search = styled("div")(({ theme }) => ({
   position: "relative",
@@ -55,6 +58,12 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
 
 export default function TopBar() {
   const [search, setSearch] = useAtom(searchAtom);
+  const anyDownloadErrors = useAtomValue(anyDownloadErrorsAtom);
+  const [showDownloads, setShowDownloads] = useState(false);
+
+  const toggleShowDownloads = () => {
+    setShowDownloads((prev) => !prev);
+  };
 
   return (
     <Box sx={{ flexGrow: 1 }}>
@@ -84,15 +93,31 @@ export default function TopBar() {
             <IconButton size="large" color="inherit">
               <SyncRoundedIcon />
             </IconButton>
-            <IconButton size="large" color="inherit">
-              <DownloadRoundedIcon />
-            </IconButton>
+            <Tooltip title="Download Status">
+              <IconButton
+                size="large"
+                color="inherit"
+                onClick={toggleShowDownloads}
+              >
+                <Badge
+                  color="error"
+                  variant="dot"
+                  invisible={!anyDownloadErrors}
+                >
+                  <DownloadRoundedIcon />
+                </Badge>
+              </IconButton>
+            </Tooltip>
             <IconButton size="large" color="inherit">
               <SettingsRoundedIcon />
             </IconButton>
           </Box>
         </Toolbar>
       </AppBar>
+      <DownloadsPanel
+        showDownloads={showDownloads}
+        toggleShowDownloads={toggleShowDownloads}
+      />
     </Box>
   );
 }
