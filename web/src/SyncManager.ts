@@ -61,7 +61,7 @@ export class SyncManager {
   private async fetchInitial() {
     const { data } = await axios.get<APINewsletters>("/newsletters", {
       headers: { Authorization: `Bearer ${this.authToken}` },
-      params: {},
+      params: {}, // this is here for unit tests
     });
     for (const newsletter of this.transformResponse(data)) {
       await library().putNewsletter(newsletter);
@@ -133,7 +133,9 @@ export class SyncManager {
         createdAt: n.created_at,
         updatedAt: n.updated_at,
         epubUpdatedAt: n.epub_updated_at,
-        epubDownloadedAt: original ? original.epubVersion : null,
+        epubVersion: original ? original.epubVersion : null,
+        epubLastAccessedAt: original ? original.epubLastAccessedAt : null,
+        sourceLastAccessedAt: original ? original.sourceLastAccessedAt : null,
       };
     });
   }

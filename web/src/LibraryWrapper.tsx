@@ -45,7 +45,9 @@ function LibraryWrapper({ children }: LibraryWrapperProps) {
   } else if (!databaseInitialized) {
     return (
       <DelayedElement>
-        <CenteredHalfAlert>Initializing database...</CenteredHalfAlert>
+        <CenteredHalfAlert severity="info">
+          Initializing database...
+        </CenteredHalfAlert>
       </DelayedElement>
     );
   } else {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SyncWorker } from "./SyncWorker";
 import { enqueueSnackbar } from "notistack";
-import library, { type Newsletter } from "./Library";
+import library from "./Library";
 import { AgGridReact } from "ag-grid-react";
 import {
   ModuleRegistry,
@@ -9,15 +9,17 @@ import {
   type GridOptions,
   themeMaterial,
 } from "ag-grid-community";
-import { useAtomValue } from "jotai";
-import { searchAtom } from "./State";
+import { useAtomValue, useSetAtom } from "jotai";
+import {
+  newsletterDoubleClickedCallbackAtom,
+  searchAtom,
+  store,
+} from "./State";
+import { SortableNewsletter } from "./SortableNewsletter";
+import { DownloadWorker } from "./DownloadWorker";
+import { buildMainMessage } from "./WorkerTypes";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-
-type SortableNewsletter = Omit<Newsletter, "createdAt"> & {
-  createdAt: Date;
-  sortIndex: number;
-};
 
 const gridOptions: GridOptions = {
   autoSizeStrategy: {
@@ -40,12 +42,36 @@ const gridOptions: GridOptions = {
   defaultColDef: {
     filter: true,
   },
+  onRowDoubleClicked: (event) => {
+    store
+      .get(newsletterDoubleClickedCallbackAtom)
+      .fn(event.data as SortableNewsletter);
+  },
 };
 
 function NewsletterList() {
   const gridRef = useRef<AgGridReact>(null);
+  const pendingDownload = useRef<number | null>(null);
   const [newsletters, setNewsletters] = useState<SortableNewsletter[]>([]);
   const search = useAtomValue(searchAtom);
+  const setNewsletterDoubleClickedCallback = useSetAtom(
+    newsletterDoubleClickedCallbackAtom,
+  );
+
+  useEffect(() => {
+    setNewsletterDoubleClickedCallback({
+      fn: (n: SortableNewsletter) => {
+        pendingDownload.current = n.id;
+        DownloadWorker.postMessage(
+          buildMainMessage("download file", {
+            id: n.id,
+            fileType: "epub",
+            mime: "application/epub+zip",
+          }),
+        );
+      },
+    });
+  }, [setNewsletterDoubleClickedCallback]);
 
   const updateNewsletters = useCallback(async () => {
     const newsletters = await library().getAllNewsletters();
@@ -73,6 +99,26 @@ function NewsletterList() {
       SyncWorker.removeMessageListener(listener);
     };
   }, [updateNewsletters]);
+
+  useEffect(() => {
+    const listener = DownloadWorker.addMessageListener((message) => {
+      if (message.type == "error") {
+        enqueueSnackbar(`download worker error: ${message.error}`, {
+          variant: "error",
+        });
+      } else if (message.type == "file fetched") {
+        if (
+          message.fileType === "epub" &&
+          message.id === pendingDownload.current
+        ) {
+          enqueueSnackbar("Download finished", { variant: "success" });
+        }
+      }
+    });
+    return () => {
+      DownloadWorker.removeMessageListener(listener);
+    };
+  }, []);
 
   useEffect(() => {
     if (gridRef.current && gridRef.current.api) {

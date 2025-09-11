@@ -1,4 +1,5 @@
 export type FileType = "source" | "epub";
+export type MimeType = "application/epub+zip" | "application/pdf" | "text/html";
 export type DownloadStatus = "in progress" | "done" | "error" | "canceled";
 
 export interface ErrorMessage {
@@ -19,6 +20,13 @@ export interface NewslettersUpdated {
   type: "newsletters updated";
 }
 
+export interface DownloadFileMessage {
+  type: "download file";
+  fileType: FileType;
+  mime: MimeType;
+  id: number;
+}
+
 export interface FileFetchedMessage {
   type: "file fetched";
   fileType: FileType;
@@ -30,14 +38,15 @@ export interface FileDownloadStatusMessage {
   id: number;
   fileType: FileType;
   status: DownloadStatus;
-  receivedBytes: number;
-  totalBytes: number;
+  receivedBytes: number | undefined;
+  totalBytes: number | undefined;
 }
 
 export type MainToWorkerMessage =
   | ErrorMessage
   | AuthTokenMessage
-  | StartSyncMessage;
+  | StartSyncMessage
+  | DownloadFileMessage;
 
 export type WorkerToMainMessage =
   | ErrorMessage
