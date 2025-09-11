@@ -15,7 +15,11 @@ export interface Newsletter {
   updatedAt: string;
   epubUpdatedAt: string;
   // this is null if never downloaded and will match epubUpdatedAt once downloaded
-  epubDownloadedAt: string | null;
+  epubVersion: string | null;
+  // these are set to the time it was first downloaded (on download) and updated whenever the file is opened
+  // this is used to decide when to delete old files
+  epubLastAccessedAt: string | null;
+  sourceLastAccessedAt: string | null;
 }
 
 interface LibraryDB extends DBSchema {

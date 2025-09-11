@@ -133,7 +133,7 @@ export class SyncManager {
         createdAt: n.created_at,
         updatedAt: n.updated_at,
         epubUpdatedAt: n.epub_updated_at,
-        epubDownloadedAt: original ? original.epubDownloadedAt : null,
+        epubDownloadedAt: original ? original.epubVersion : null,
       };
     });
   }

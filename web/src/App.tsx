@@ -5,6 +5,7 @@ import AuthWrapper from "./AuthWrapper";
 import "./index.css";
 import LibraryWrapper from "./LibraryWrapper";
 import NewsletterList from "./NewsletterList";
+import TopBar from "./TopBar";
 
 const theme = createTheme({
   colorSchemes: {
@@ -17,6 +18,7 @@ function App() {
     <ThemeProvider theme={theme}>
       <BackgroundWrapper>
         <SnackbarProvider maxSnack={3} />
+        <TopBar />
         <AuthWrapper>
           <LibraryWrapper>
             <NewsletterList />
