@@ -9,6 +9,8 @@ import NewsletterList from "./NewsletterList";
 import TopBar from "./TopBar";
 import { files } from "./Files";
 import { store } from "./State";
+import { useState } from "react";
+import EpubReader from "./EpubReader";
 
 const theme = createTheme({
   colorSchemes: {
@@ -18,6 +20,7 @@ const theme = createTheme({
 
 function App() {
   files(); // start initializing now
+  const [epubUrl, setEpubUrl] = useState<ArrayBuffer | null>(null);
 
   return (
     <JotaiProvider store={store}>
@@ -27,7 +30,8 @@ function App() {
           <TopBar />
           <AuthWrapper>
             <LibraryWrapper>
-              <NewsletterList />
+              {!epubUrl && <NewsletterList setEpubUrl={setEpubUrl} />}
+              {epubUrl && <EpubReader file={epubUrl} />}
             </LibraryWrapper>
           </AuthWrapper>
         </BackgroundWrapper>

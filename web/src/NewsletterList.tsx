@@ -18,6 +18,7 @@ import {
 import { SortableNewsletter } from "./SortableNewsletter";
 import { DownloadWorker } from "./DownloadWorker";
 import { buildMainMessage } from "./WorkerTypes";
+import { files } from "./Files";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -49,7 +50,7 @@ const gridOptions: GridOptions = {
   },
 };
 
-function NewsletterList() {
+function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
   const gridRef = useRef<AgGridReact>(null);
   const pendingDownload = useRef<number | null>(null);
   const [newsletters, setNewsletters] = useState<SortableNewsletter[]>([]);
@@ -111,14 +112,22 @@ function NewsletterList() {
           message.fileType === "epub" &&
           message.id === pendingDownload.current
         ) {
-          enqueueSnackbar("Download finished", { variant: "success" });
+          files()
+            .tryReadFile("epub", message.id)
+            .then((file) => {
+              if (file !== null) {
+                file.arrayBuffer().then((buf) => {
+                  params.setEpubUrl(buf);
+                });
+              }
+            });
         }
       }
     });
     return () => {
       DownloadWorker.removeMessageListener(listener);
     };
-  }, []);
+  }, [params]);
 
   useEffect(() => {
     if (gridRef.current && gridRef.current.api) {

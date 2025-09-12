@@ -82,7 +82,7 @@ class FileTypeManager {
 
   async tryDeleteFile(id: number): Promise<boolean> {
     try {
-      await this.handle!.removeEntry(id);
+      await this.handle!.removeEntry(id.toString());
       return true;
     } catch {
       return false;
