@@ -39,6 +39,9 @@ jobs:
     - name: npm ci
       run: cd web && npm ci
 
+    - name: build web
+      run: bundle exec rake web:build
+
     - name: copy config
       id: config
       run: cp config.yaml.ci config.yaml

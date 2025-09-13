@@ -119,7 +119,9 @@ const N1 = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-02 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
-  epubDownloadedAt: null,
+  epubVersion: null,
+  epubLastAccessedAt: null,
+  sourceLastAccessedAt: null,
 };
 const N2 = {
   id: 2,
@@ -131,7 +133,9 @@ const N2 = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-20 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
-  epubDownloadedAt: null,
+  epubVersion: null,
+  epubLastAccessedAt: null,
+  sourceLastAccessedAt: null,
 };
 const N3 = {
   id: 3,
@@ -143,7 +147,9 @@ const N3 = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-02 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
-  epubDownloadedAt: null,
+  epubVersion: null,
+  epubLastAccessedAt: null,
+  sourceLastAccessedAt: null,
 };
 const A4 = {
   id: 4,
@@ -166,7 +172,9 @@ const N4 = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-25 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
-  epubDownloadedAt: null,
+  epubVersion: null,
+  epubLastAccessedAt: null,
+  sourceLastAccessedAt: null,
 };
 
 const N5_init = {
@@ -179,7 +187,9 @@ const N5_init = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-25 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
-  epubDownloadedAt: "2025-01-03 06:00:01.456789+00",
+  epubVersion: "2025-01-03 06:00:01.456789+00",
+  epubLastAccessedAt: null,
+  sourceLastAccessedAt: null,
 };
 const A5 = {
   id: 5,
@@ -202,7 +212,9 @@ const N5_updated = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-26 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
-  epubDownloadedAt: "2025-01-03 06:00:01.456789+00",
+  epubVersion: "2025-01-03 06:00:01.456789+00",
+  epubLastAccessedAt: null,
+  sourceLastAccessedAt: null,
 };
 
 describe("SyncManager", () => {
@@ -270,7 +282,7 @@ describe("SyncManager", () => {
     expectNewsletterUpdatedMessage();
   });
 
-  it("should overwrite updated newsletters but keep the epubDownloadedAt field", async () => {
+  it("should overwrite updated newsletters but keep the epubVersion field", async () => {
     mockHasAnyNewslettersResolve(true);
     mockGetAllNewslettersResolve([N5_init]);
     mockGetAllNewslettersResolve([N5_updated]);
