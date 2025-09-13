@@ -4,7 +4,7 @@ export const AUTH_TOKEN_KEY = "authToken";
 
 function useAuthToken() {
   const [token, setToken] = useState<string | null>(() =>
-    localStorage.getItem(AUTH_TOKEN_KEY)
+    localStorage.getItem(AUTH_TOKEN_KEY),
   );
 
   useEffect(() => {
