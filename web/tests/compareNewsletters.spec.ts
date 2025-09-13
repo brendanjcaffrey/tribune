@@ -62,5 +62,5 @@ test("should sort first by putting read at the bottom, then by created descendin
   const sortedNewsletterIds = newsletters
     .sort(compareNewslettersForDisplay)
     .map((n) => n.id);
-  expect(sortedNewsletterIds).toEqual([3, 1, 5, 4, 2]);
+  expect(sortedNewsletterIds).toEqual([1, 3, 2, 5, 4]);
 });

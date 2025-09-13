@@ -123,7 +123,7 @@ helpers do
   end
 end
 
-set :environment, CONFIG.server_environment == 'production' ? :production : :development
+set :environment, ENV['RACK_ENV'] == 'test' ? 'test' : CONFIG.server_environment
 set :port, CONFIG.server_port if CONFIG.server_port
 set :bind, CONFIG.server_bind if CONFIG.server_bind
 
