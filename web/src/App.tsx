@@ -20,7 +20,7 @@ const theme = createTheme({
 
 function App() {
   files(); // start initializing now
-  const [epubUrl, setEpubUrl] = useState<ArrayBuffer | null>(null);
+  const [epubContents, setEpubContents] = useState<ArrayBuffer | null>(null);
 
   return (
     <JotaiProvider store={store}>
@@ -30,8 +30,13 @@ function App() {
           <TopBar />
           <AuthWrapper>
             <LibraryWrapper>
-              {!epubUrl && <NewsletterList setEpubUrl={setEpubUrl} />}
-              {epubUrl && <EpubReader file={epubUrl} />}
+              {!epubContents && <NewsletterList setEpubUrl={setEpubContents} />}
+              {epubContents && (
+                <EpubReader
+                  file={epubContents}
+                  closeFile={() => setEpubContents(null)}
+                />
+              )}
             </LibraryWrapper>
           </AuthWrapper>
         </BackgroundWrapper>

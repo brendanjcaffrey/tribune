@@ -5,11 +5,11 @@ import { Theme, useTheme } from "@mui/material";
 
 type Props = {
   file: ArrayBuffer;
+  closeFile: () => void;
 };
 
 const TOP_BAR_HEIGHT = 64;
 const VERTICAL_PADDING = 16;
-const CONTROLS_HEIGHT = 40;
 
 function setTheme(rendition: Rendition, theme: Theme) {
   // for whatever reason, epubjs doesn't seem to actually change anything if you select a
@@ -50,14 +50,10 @@ function setTheme(rendition: Rendition, theme: Theme) {
 }
 
 function totalHeight(windowHeight: number) {
-  return windowHeight - TOP_BAR_HEIGHT - VERTICAL_PADDING;
+  return windowHeight - TOP_BAR_HEIGHT;
 }
 
-function readerHeight(windowHeight: number) {
-  return totalHeight(windowHeight) - CONTROLS_HEIGHT;
-}
-
-const EpubReader: React.FC<Props> = ({ file }) => {
+const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
   const theme = useTheme();
   const viewerRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition | null>(null);
@@ -66,7 +62,7 @@ const EpubReader: React.FC<Props> = ({ file }) => {
 
   useEffect(() => {
     if (renditionRef.current) {
-      renditionRef.current.resize(windowWidth, readerHeight(windowHeight));
+      renditionRef.current.resize(windowWidth, totalHeight(windowHeight));
     }
   }, [windowHeight, windowWidth]);
 
@@ -97,8 +93,34 @@ const EpubReader: React.FC<Props> = ({ file }) => {
     }
   }, [theme, renditionRef]);
 
-  const goNext = () => renditionRef.current?.next();
-  const goPrev = () => renditionRef.current?.prev();
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (!renditionRef.current) {
+        return;
+      }
+      switch (e.key) {
+        case "ArrowLeft":
+        case "h":
+        case "j":
+          renditionRef.current.prev();
+          break;
+        case "ArrowRight":
+        case "k":
+        case "l":
+          renditionRef.current.next();
+          break;
+        case "Escape":
+          closeFile();
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [closeFile]);
 
   return (
     <div
@@ -111,22 +133,10 @@ const EpubReader: React.FC<Props> = ({ file }) => {
       <div
         ref={viewerRef}
         style={{
-          height: `${readerHeight(windowHeight)}px`,
+          height: `${totalHeight(windowHeight)}px`,
           width: `${windowWidth}px`,
         }}
       />
-      <div
-        style={{
-          paddingTop: `${VERTICAL_PADDING}px`,
-        }}
-      >
-        <button onClick={goPrev} className="px-3 py-1 bg-gray-200 rounded">
-          ◀ Prev
-        </button>
-        <button onClick={goNext} className="px-3 py-1 bg-gray-200 rounded">
-          Next ▶
-        </button>
-      </div>
     </div>
   );
 };
