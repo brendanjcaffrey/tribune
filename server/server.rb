@@ -206,9 +206,11 @@ post '/newsletters' do
   halt 400, 'Missing epub file' if !params[:epub_file] || !(epub_tempfile = params[:epub_file][:tempfile])
   halt 400, 'Invalid epub mime type' unless params[:epub_file][:type] == EPUB_MIME_TYPE
   halt 400, 'Missing metadata' if !params[:metadata] || params[:metadata].empty?
+  halt 400, 'Invalid metadata mime type' unless params[:metadata][:type] == 'application/json'
 
+  json = File.read(params[:metadata][:tempfile])
   begin
-    metadata = JSON.parse(params[:metadata])
+    metadata = JSON.parse(json)
   rescue JSON::ParserError => e
     halt 400, "Invalid JSON: #{e.message}"
   end

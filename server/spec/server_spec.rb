@@ -740,6 +740,14 @@ RSpec.describe 'Tribune Server' do
       { 'title' => 'Test Title', 'author' => 'Test Author' }
     end
 
+    let(:metadata_file) do
+      Rack::Test::UploadedFile.new(
+        StringIO.new(JSON.generate(metadata)),
+        'application/json',
+        original_filename: 'metadata.json'
+      )
+    end
+
     before do
       create_user
       CONFIG.newsletters_dir = temp_dir
@@ -762,7 +770,7 @@ RSpec.describe 'Tribune Server' do
 
     it 'returns an error if there is no source file' do
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         epub_file: epub_file
       }, get_auth_header
       expect(last_response.status).to eq(400)
@@ -770,7 +778,7 @@ RSpec.describe 'Tribune Server' do
 
     it 'returns an error if the source file is the wrong type' do
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         source_file: epub_file,
         epub_file: html_file
       }, get_auth_header
@@ -779,7 +787,7 @@ RSpec.describe 'Tribune Server' do
 
     it 'returns an error if there is no epub file' do
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         source_file: html_file
       }, get_auth_header
       expect(last_response.status).to eq(400)
@@ -787,7 +795,7 @@ RSpec.describe 'Tribune Server' do
 
     it 'returns an error if the epub file is the wrong type' do
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         source_file: html_file,
         epub_file: pdf_file
       }, get_auth_header
@@ -804,7 +812,11 @@ RSpec.describe 'Tribune Server' do
 
     it 'returns an error if metadata is not valid json' do
       post '/newsletters', {
-        metadata: '{{{{',
+        metadata: Rack::Test::UploadedFile.new(
+          StringIO.new('{{{{{'),
+          'application/json',
+          original_filename: 'metadata.json'
+        ),
         source_file: html_file,
         epub_file: epub_file
       }, get_auth_header
@@ -814,7 +826,7 @@ RSpec.describe 'Tribune Server' do
     it 'returns an error if metadata.title is not valid' do
       metadata['title'] = nil
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         source_file: html_file,
         epub_file: epub_file
       }, get_auth_header
@@ -822,7 +834,7 @@ RSpec.describe 'Tribune Server' do
 
       metadata['title'] = ''
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         source_file: html_file,
         epub_file: epub_file
       }, get_auth_header
@@ -832,7 +844,7 @@ RSpec.describe 'Tribune Server' do
     it 'returns an error if metadata.author is not valid' do
       metadata['author'] = nil
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         source_file: html_file,
         epub_file: epub_file
       }, get_auth_header
@@ -840,7 +852,7 @@ RSpec.describe 'Tribune Server' do
 
       metadata['author'] = ''
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         source_file: html_file,
         epub_file: epub_file
       }, get_auth_header
@@ -849,7 +861,7 @@ RSpec.describe 'Tribune Server' do
 
     it 'creates a database entry and move the file into place' do
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         source_file: html_file,
         epub_file: epub_file
       }, get_auth_header
@@ -878,7 +890,7 @@ RSpec.describe 'Tribune Server' do
     it 'creates a database entry with a creation time if specified' do
       metadata['created_at'] = BASE_TIME.iso8601(6)
       post '/newsletters', {
-        metadata: metadata.to_json,
+        metadata: metadata_file,
         source_file: pdf_file,
         epub_file: epub_file
       }, get_auth_header
