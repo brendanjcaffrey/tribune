@@ -28,6 +28,7 @@ RSpec.describe 'Tribune Server' do
 
   before do
     DB_POOL.with { |conn| conn.exec('BEGIN') }
+    CONFIG.server_accel = false
   end
 
   after do
@@ -43,11 +44,11 @@ RSpec.describe 'Tribune Server' do
 
   # auth
   def get_auth_header(username = 'testuser')
-    { 'HTTP_AUTHORIZATION' => "Bearer #{build_jwt(username, CONFIG.secret, 5)}" }
+    { 'HTTP_AUTHORIZATION' => "Bearer #{build_jwt(username, CONFIG.server_secret, 5)}" }
   end
 
   def get_expired_auth_header(username = 'testuser')
-    { 'HTTP_AUTHORIZATION' => "Bearer #{build_jwt(username, CONFIG.secret, -5)}" }
+    { 'HTTP_AUTHORIZATION' => "Bearer #{build_jwt(username, CONFIG.server_secret, -5)}" }
   end
 
   def get_invalid_auth_header
@@ -119,7 +120,7 @@ RSpec.describe 'Tribune Server' do
       post '/auth', { username: 'testuser', password: 'testpassword' }
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
-      values = decode_jwt(body['jwt'], CONFIG.secret)
+      values = decode_jwt(body['jwt'], CONFIG.server_secret)
       expect(values[0]['username']).to eq('testuser')
       expect(values[1]['alg']).to eq(JWT_ALGO)
       expect(values[1]['exp']).to be > Time.now.to_i
@@ -152,7 +153,7 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
 
       body = JSON.parse(last_response.body)
-      values = decode_jwt(body['jwt'], CONFIG.secret)
+      values = decode_jwt(body['jwt'], CONFIG.server_secret)
       expect(values[0]['username']).to eq('testuser')
       expect(values[1]['alg']).to eq(JWT_ALGO)
       expect(values[1]['exp']).to be > Time.now.to_i
@@ -954,6 +955,15 @@ RSpec.describe 'Tribune Server' do
       get '/newsletters/1/source', {}, get_auth_header
       expect(last_response).to be_ok
       expect(last_response.body).to eq('test test test')
+    end
+
+    it 'returns the a redirect if server_accel is on' do
+      CONFIG.server_accel = true
+      File.write(File.join(temp_dir, '1.html'), 'test test test')
+
+      get '/newsletters/1/source', {}, get_auth_header
+      expect(last_response.headers['Content-Type']).to start_with('text/html')
+      expect(last_response.headers['X-Accel-Redirect']).to eq('/accel/newsletters/1.html')
     end
   end
 

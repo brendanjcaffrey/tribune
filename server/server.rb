@@ -87,7 +87,7 @@ helpers do
 
     token = auth_header.gsub('Bearer ', '')
     begin
-      payload, header = decode_jwt(token, CONFIG.secret)
+      payload, header = decode_jwt(token, CONFIG.server_secret)
     rescue StandardError
       return nil
     end
@@ -107,15 +107,25 @@ helpers do
   end
 
   def source_path(id, mime_type)
-    File.join(CONFIG.newsletters_dir, "#{id}.#{MIME_TYPES[mime_type]}")
+    File.join(CONFIG.newsletters_dir, source_filename(id, mime_type))
+  end
+
+  def source_filename(id, mime_type)
+    "#{id}.#{MIME_TYPES[mime_type]}"
   end
 
   def epub_path(id)
-    File.join(CONFIG.newsletters_dir, "#{id}.epub")
+    File.join(CONFIG.newsletters_dir, epub_filename(id))
+  end
+
+  def epub_filename(id)
+    "#{id}.epub"
   end
 end
 
-set :port, CONFIG.server_port
+set :environment, CONFIG.server_environment == 'production' ? :production : :development
+set :port, CONFIG.server_port if CONFIG.server_port
+set :bind, CONFIG.server_bind if CONFIG.server_bind
 
 get '/users' do
   result = query(ANY_USERS_EXIST_QUERY)
@@ -130,14 +140,14 @@ post '/auth' do
   result = query(VALID_USERNAME_AND_PASSWORD_QUERY, [username, password_sha256])
   halt 401, 'Unauthorized' if result[0]['exists'] != 't'
 
-  json({ jwt: build_jwt(username, CONFIG.secret) })
+  json({ jwt: build_jwt(username, CONFIG.server_secret) })
 end
 
 put '/auth' do
   username = get_validated_username
   halt 401, 'Unauthorized' if username.nil?
 
-  json({ jwt: build_jwt(username, CONFIG.secret) })
+  json({ jwt: build_jwt(username, CONFIG.server_secret) })
 end
 
 get '/newsletters' do
@@ -233,10 +243,13 @@ get '/newsletters/:id/source' do
   halt 500, 'Invalid source mime type' unless MIME_TYPES.key?(mime_type)
 
   file_path = source_path(params[:id].to_i, mime_type)
-  if File.exist?(file_path)
-    send_file file_path, filename: params[:filename], type: mime_type
+  halt 500, 'File not found' unless File.exist?(file_path)
+
+  if CONFIG.server_accel
+    headers['X-Accel-Redirect'] = Rack::Utils.escape_path("/accel/newsletters/#{source_filename(params[:id], mime_type)}")
+    headers['Content-Type'] = mime_type
   else
-    halt 500, 'File not found'
+    send_file file_path, filename: params[:filename], type: EPUB_MIME_TYPE
   end
 end
 
@@ -247,10 +260,13 @@ get '/newsletters/:id/epub' do
   halt 404, 'Newsletter not found' unless exists
 
   file_path = epub_path(params[:id].to_i)
-  if File.exist?(file_path)
-    send_file file_path, filename: params[:filename], type: EPUB_MIME_TYPE
+  halt 500, 'File not found' unless File.exist?(file_path)
+
+  if CONFIG.server_accel
+    headers['X-Accel-Redirect'] = Rack::Utils.escape_path("/accel/newsletters/#{epub_filename(params[:id])}")
+    headers['Content-Type'] = EPUB_MIME_TYPE
   else
-    halt 500, 'File not found'
+    send_file file_path, filename: params[:filename], type: EPUB_MIME_TYPE
   end
 end
 

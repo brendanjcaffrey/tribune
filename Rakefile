@@ -9,7 +9,11 @@ require_relative 'server/config'
 require_relative 'server/jwt'
 
 def db_args(config)
-  "-h #{config.database_host.shellescape} -p #{config.database_port.to_i} -U #{config.database_username.shellescape}"
+  if config.database_port
+    "-h #{config.database_host.shellescape} -p #{config.database_port.to_i} -U #{config.database_username.shellescape}"
+  else # want to connect over UDS
+    "-h #{config.database_host.shellescape} -U #{config.database_username.shellescape}"
+  end
 end
 
 command = TTY::Command.new
@@ -22,6 +26,14 @@ namespace :db do
     command.run("createdb #{db_args(config)} #{config.database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })
     command.run("cat schema.sql | psql -d #{config.database_name.shellescape} #{db_args(config)}",
+                env: { 'PGPASSWORD' => config.database_password })
+  end
+
+  desc 'Apply the schema to the database'
+  task :init do
+    config = Config.load
+    command = TTY::Command.new
+    command.run("cat schema.sql | psql #{db_args(config)} -d #{config.database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })
   end
 
@@ -44,6 +56,14 @@ namespace :testdb do
     command = TTY::Command.new
     command.run("createdb #{db_args(config)} #{config.test_database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })
+    command.run("cat schema.sql | psql #{db_args(config)} -d #{config.test_database_name.shellescape}",
+                env: { 'PGPASSWORD' => config.database_password })
+  end
+
+  desc 'Apply the schema to the test database'
+  task :init do
+    config = Config.load
+    command = TTY::Command.new
     command.run("cat schema.sql | psql #{db_args(config)} -d #{config.test_database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })
   end
@@ -190,6 +210,6 @@ namespace :user do
     print 'Enter username: '
     username = $stdin.gets.strip
 
-    puts build_jwt(username, config.secret)
+    puts build_jwt(username, config.server_secret)
   end
 end
