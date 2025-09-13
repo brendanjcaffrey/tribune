@@ -1,9 +1,13 @@
 import type { MainToWorkerMessage, WorkerToMainMessage } from "./WorkerTypes";
 
 export type TypedWorkerMessageListener = (ev: MessageEvent) => void;
-export class TypedWorker extends Worker {
+export class TypedWorker {
+  constructor(private worker: Worker) {
+    this.worker = worker;
+  }
+
   postMessage(message: MainToWorkerMessage): void {
-    super.postMessage(message);
+    this.worker.postMessage(message);
   }
 
   addMessageListener(
@@ -19,11 +23,11 @@ export class TypedWorker extends Worker {
         ev as MessageEvent<WorkerToMainMessage>,
       );
     };
-    this.addEventListener("message", wrapper);
+    this.worker.addEventListener("message", wrapper);
     return wrapper;
   }
 
   removeMessageListener(listener: TypedWorkerMessageListener): void {
-    this.removeEventListener("message", listener);
+    this.worker.removeEventListener("message", listener);
   }
 }
