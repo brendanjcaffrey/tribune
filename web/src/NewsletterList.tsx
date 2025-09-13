@@ -19,6 +19,7 @@ import { SortableNewsletter } from "./SortableNewsletter";
 import { DownloadWorker } from "./DownloadWorker";
 import { buildMainMessage } from "./WorkerTypes";
 import { files } from "./Files";
+import { useTheme } from "@mui/material";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -58,6 +59,16 @@ function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
   const setNewsletterDoubleClickedCallback = useSetAtom(
     newsletterDoubleClickedCallbackAtom,
   );
+
+  const muiTheme = useTheme();
+  const agTheme = themeMaterial.withParams({
+    backgroundColor: muiTheme.palette.background.default,
+    foregroundColor: muiTheme.palette.text.primary,
+    headerTextColor: muiTheme.palette.text.primary,
+    headerBackgroundColor: muiTheme.palette.background.default,
+    oddRowBackgroundColor: muiTheme.palette.action.selected,
+    headerColumnResizeHandleColor: muiTheme.palette.info.main,
+  });
 
   useEffect(() => {
     setNewsletterDoubleClickedCallback({
@@ -139,7 +150,7 @@ function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
     <div style={{ height: "98%", width: "100%" }}>
       <AgGridReact
         ref={gridRef}
-        theme={themeMaterial}
+        theme={agTheme}
         gridOptions={gridOptions}
         rowData={newsletters}
       />
