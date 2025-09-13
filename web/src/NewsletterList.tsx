@@ -20,6 +20,7 @@ import { DownloadWorker } from "./DownloadWorker";
 import { buildMainMessage } from "./WorkerTypes";
 import { files } from "./Files";
 import { useTheme } from "@mui/material";
+import { compareNewslettersForDisplay } from "./compareNewsletters";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -90,6 +91,7 @@ function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
     setNewsletters(
       newsletters
         .filter((n) => !n.deleted)
+        .sort(compareNewslettersForDisplay)
         .map((n, i) => {
           return { ...n, createdAt: new Date(n.createdAt), sortIndex: i };
         }),
