@@ -93,7 +93,8 @@ namespace :server do
 
   desc 'Run the ruby server'
   task :run do
-    ruby 'server/server.rb'
+    require_relative 'server/server'
+    Server.run!
   end
 
   desc 'Run the server tests'

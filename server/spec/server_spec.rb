@@ -23,7 +23,7 @@ RSpec.describe 'Tribune Server' do
   include Rack::Test::Methods
 
   def app
-    Sinatra::Application
+    Server
   end
 
   before do
