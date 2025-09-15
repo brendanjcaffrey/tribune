@@ -1,10 +1,12 @@
-import { type ReactNode, useState, useEffect } from "react";
+import { type ReactNode, useEffect } from "react";
 import useAuthToken from "./useAuthToken";
 import AuthForm from "./AuthForm";
 import AuthVerifier from "./AuthVerifier";
 import { SyncWorker } from "./SyncWorker";
 import { DownloadWorker } from "./DownloadWorker";
 import { buildMainMessage } from "./WorkerTypes";
+import { authVerifiedAtom, clearAuthFnAtom } from "./State";
+import { useAtom, useSetAtom } from "jotai";
 
 interface AuthWrapperProps {
   children: ReactNode;
@@ -12,12 +14,26 @@ interface AuthWrapperProps {
 
 function AuthWrapper({ children }: AuthWrapperProps) {
   const [authToken, setAuthToken] = useAuthToken();
-  const [authVerified, setAuthVerified] = useState(false);
+  const [authVerified, setAuthVerified] = useAtom(authVerifiedAtom);
+  const setClearAuthFn = useSetAtom(clearAuthFnAtom);
 
   useEffect(() => {
-    SyncWorker.postMessage(buildMainMessage("auth token", { authToken }));
-    DownloadWorker.postMessage(buildMainMessage("auth token", { authToken }));
+    if (authToken) {
+      SyncWorker.postMessage(buildMainMessage("set auth token", { authToken }));
+      DownloadWorker.postMessage(
+        buildMainMessage("set auth token", { authToken }),
+      );
+    }
   }, [authToken]);
+
+  useEffect(() => {
+    setClearAuthFn({
+      fn: () => {
+        setAuthToken("");
+        setAuthVerified(false);
+      },
+    });
+  }, [authToken, setAuthToken, setAuthVerified, setClearAuthFn]);
 
   if (!authToken) {
     return <AuthForm setAuthToken={setAuthToken} />;

@@ -11,9 +11,13 @@ export interface StartSyncMessage {
   type: "start sync";
 }
 
-export interface AuthTokenMessage {
-  type: "auth token";
-  authToken: string | null;
+export interface SetAuthTokenMessage {
+  type: "set auth token";
+  authToken: string;
+}
+
+export interface ClearAuthTokenMessage {
+  type: "clear auth token";
 }
 
 export interface NewslettersUpdated {
@@ -44,7 +48,8 @@ export interface FileDownloadStatusMessage {
 
 export type MainToWorkerMessage =
   | ErrorMessage
-  | AuthTokenMessage
+  | SetAuthTokenMessage
+  | ClearAuthTokenMessage
   | StartSyncMessage
   | DownloadFileMessage;
 

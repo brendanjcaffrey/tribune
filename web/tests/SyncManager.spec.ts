@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SyncManager } from "../src/SyncManager";
 import library, { Newsletter } from "../src/Library";
-import axios from "axios";
+import axios, { GenericAbortSignal } from "axios";
 import { ErrorMessage, NewslettersUpdated } from "../src/WorkerTypes";
 
 vi.mock("axios", () => ({
@@ -40,6 +40,16 @@ function mockGetAllNewslettersResolve(newsletters: Newsletter[]) {
 function mockAxiosGetResolve<T>(data: T) {
   vi.mocked(axios.get).mockImplementationOnce(() => {
     return Promise.resolve({ data });
+  });
+}
+
+function mockAxiosGetResolveAfterDelay<T>(data: T, delayMs: number) {
+  vi.mocked(axios.get).mockImplementationOnce(() => {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(data);
+      }, delayMs);
+    });
   });
 }
 
@@ -239,7 +249,7 @@ describe("SyncManager", () => {
       result: [A1],
     });
 
-    setInitializedListenerCallback();
+    await setInitializedListenerCallback();
     await syncManager.setAuthToken("test-token");
 
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
@@ -258,7 +268,7 @@ describe("SyncManager", () => {
     });
     mockAxiosGetResolve({ meta: {}, result: [] });
 
-    setInitializedListenerCallback();
+    await setInitializedListenerCallback();
     await syncManager.setAuthToken("test-token");
 
     expectAxiosGetCalls([
@@ -293,7 +303,7 @@ describe("SyncManager", () => {
     });
     mockAxiosGetResolve({ meta: {}, result: [] });
 
-    setInitializedListenerCallback();
+    await setInitializedListenerCallback();
     await syncManager.setAuthToken("test-token");
 
     expectAxiosGetCalls([
@@ -321,9 +331,40 @@ describe("SyncManager", () => {
     mockHasAnyNewslettersResolve(false);
     mockAxiosGetError();
 
-    setInitializedListenerCallback();
+    await setInitializedListenerCallback();
     await syncManager.setAuthToken("test-token");
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
     expectErrorPostMessage();
+  });
+
+  it("should cancel pending requests if the auth token is cleared", async () => {
+    mockHasAnyNewslettersResolve(false);
+    mockAxiosGetResolveAfterDelay(
+      {
+        meta: {},
+        result: [A1],
+      },
+      100,
+    );
+
+    await setInitializedListenerCallback();
+    const promise = syncManager.setAuthToken("test-token");
+    await vi.waitFor(() => {
+      if (vi.mocked(axios.get).mock.calls.length === 0) {
+        throw new Error("no axios.get call yet");
+      }
+    });
+
+    const signal: GenericAbortSignal = vi.mocked(axios.get).mock.calls[0][1]!
+      .signal!;
+    expect(signal.aborted).toBe(false);
+
+    syncManager.clearAuthToken();
+    await vi.advanceTimersToNextTimerAsync();
+    await promise;
+
+    expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
+    expect(library().putNewsletter).toHaveBeenCalledTimes(0);
+    expect(postMessage).toHaveBeenCalledTimes(0);
   });
 });

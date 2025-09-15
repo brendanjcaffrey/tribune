@@ -11,10 +11,11 @@ import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
 
 import { useAtom, useAtomValue } from "jotai";
-import { anyDownloadErrorsAtom, searchAtom } from "./State";
-import { useState } from "react";
+import { anyDownloadErrorsAtom, authVerifiedAtom, searchAtom } from "./State";
+import { useEffect, useState } from "react";
 import { Badge, Tooltip } from "@mui/material";
 import DownloadsPanel from "./DownloadsPanel";
+import SettingsPanel from "./SettingsPanel";
 
 const Search = styled("div")(({ theme }) => ({
   position: "relative",
@@ -60,10 +61,23 @@ export default function TopBar() {
   const [search, setSearch] = useAtom(searchAtom);
   const anyDownloadErrors = useAtomValue(anyDownloadErrorsAtom);
   const [showDownloads, setShowDownloads] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const authVerified = useAtomValue(authVerifiedAtom);
 
   const toggleShowDownloads = () => {
     setShowDownloads((prev) => !prev);
   };
+
+  const toggleShowSettings = () => {
+    setShowSettings((prev) => !prev);
+  };
+
+  useEffect(() => {
+    if (!authVerified) {
+      setShowDownloads(false);
+      setShowSettings(false);
+    }
+  }, [authVerified]);
 
   return (
     <Box sx={{ flexGrow: 1 }}>
@@ -78,45 +92,57 @@ export default function TopBar() {
             Tribune
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
-          <Search>
-            <SearchIconWrapper>
-              <SearchRoundedIcon />
-            </SearchIconWrapper>
-            <StyledInputBase
-              placeholder="Search…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              inputProps={{ "aria-label": "search" }}
-            />
-          </Search>
-          <Box sx={{ display: { xs: "none", md: "flex" } }}>
-            <IconButton size="large" color="inherit">
-              <SyncRoundedIcon />
-            </IconButton>
-            <Tooltip title="Download Status">
-              <IconButton
-                size="large"
-                color="inherit"
-                onClick={toggleShowDownloads}
-              >
-                <Badge
-                  color="error"
-                  variant="dot"
-                  invisible={!anyDownloadErrors}
+          {authVerified && (
+            <>
+              <Search>
+                <SearchIconWrapper>
+                  <SearchRoundedIcon />
+                </SearchIconWrapper>
+                <StyledInputBase
+                  placeholder="Search…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  inputProps={{ "aria-label": "search" }}
+                />
+              </Search>
+              <Box sx={{ display: { xs: "none", md: "flex" } }}>
+                <IconButton size="large" color="inherit">
+                  <SyncRoundedIcon />
+                </IconButton>
+                <Tooltip title="Download Status">
+                  <IconButton
+                    size="large"
+                    color="inherit"
+                    onClick={toggleShowDownloads}
+                  >
+                    <Badge
+                      color="error"
+                      variant="dot"
+                      invisible={!anyDownloadErrors}
+                    >
+                      <DownloadRoundedIcon />
+                    </Badge>
+                  </IconButton>
+                </Tooltip>
+                <IconButton
+                  size="large"
+                  color="inherit"
+                  onClick={toggleShowSettings}
                 >
-                  <DownloadRoundedIcon />
-                </Badge>
-              </IconButton>
-            </Tooltip>
-            <IconButton size="large" color="inherit">
-              <SettingsRoundedIcon />
-            </IconButton>
-          </Box>
+                  <SettingsRoundedIcon />
+                </IconButton>
+              </Box>
+            </>
+          )}
         </Toolbar>
       </AppBar>
       <DownloadsPanel
         showDownloads={showDownloads}
         toggleShowDownloads={toggleShowDownloads}
+      />
+      <SettingsPanel
+        showSettings={showSettings}
+        toggleShowSettings={toggleShowSettings}
       />
     </Box>
   );

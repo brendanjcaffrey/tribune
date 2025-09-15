@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Mutex } from "async-mutex";
 import { buildWorkerMessage, type MainToWorkerMessage } from "./WorkerTypes";
 import library, { type Newsletter } from "./Library";
 import { compareNewslettersForApi } from "./compareNewsletters";
@@ -7,29 +8,37 @@ import { type APINewsletters } from "./APINewsletters";
 const REFRESH_MILLIS = 5 * 60 * 1000;
 
 export class SyncManager {
-  private syncInProgress: boolean = false;
   private authToken: string | null = null;
   private libraryInitialized: boolean = false;
   private timerId: number | null = null;
+  private mutex = new Mutex();
+  private abortController: AbortController | null = null;
 
   public constructor() {
-    library().setInitializedListener(() => {
+    library().setInitializedListener(async () => {
       this.libraryInitialized = true;
-      this.syncLibrary();
+      await this.syncLibrary();
     });
   }
 
-  public async setAuthToken(authToken: string | null) {
+  public async setAuthToken(authToken: string) {
     this.authToken = authToken;
     await this.syncLibrary();
   }
 
-  private async syncLibrary() {
-    if (
-      this.syncInProgress ||
-      this.authToken === null ||
-      !this.libraryInitialized
-    ) {
+  public clearAuthToken() {
+    this.authToken = null;
+    if (this.abortController) {
+      this.abortController.abort();
+    }
+  }
+
+  public syncLibrary(): Promise<void> {
+    return this.mutex.runExclusive(async () => this.syncLibraryExclusive());
+  }
+
+  private async syncLibraryExclusive() {
+    if (this.authToken === null || !this.libraryInitialized) {
       return;
     }
 
@@ -39,27 +48,32 @@ export class SyncManager {
     }
 
     try {
-      this.syncInProgress = true;
+      this.abortController = new AbortController();
       if (await library().hasAnyNewsletters()) {
         await this.fetchUpdates();
       } else {
         await this.fetchInitial();
       }
     } catch (error) {
-      console.error(error);
-      if (error instanceof Error) {
-        postMessage(buildWorkerMessage("error", { error: error.message }));
-      } else {
-        postMessage(buildWorkerMessage("error", { error: "unknown error" }));
+      if (!this.abortController?.signal.aborted) {
+        console.error(error);
+        if (error instanceof Error) {
+          postMessage(buildWorkerMessage("error", { error: error.message }));
+        } else {
+          postMessage(buildWorkerMessage("error", { error: "unknown error" }));
+        }
       }
     } finally {
-      this.syncInProgress = false;
-      this.timerId = setTimeout(() => this.syncLibrary(), REFRESH_MILLIS);
+      this.abortController = null;
+      if (this.authToken !== null) {
+        this.timerId = setTimeout(() => this.syncLibrary(), REFRESH_MILLIS);
+      }
     }
   }
 
   private async fetchInitial() {
     const { data } = await axios.get<APINewsletters>("/newsletters", {
+      signal: this.abortController!.signal,
       headers: { Authorization: `Bearer ${this.authToken}` },
       params: {}, // this is here for unit tests
     });
@@ -79,6 +93,7 @@ export class SyncManager {
 
     const newestNewsletter = allNewsletters.sort(compareNewslettersForApi)[0];
     const { data } = await axios.get<APINewsletters>("/newsletters", {
+      signal: this.abortController!.signal,
       headers: { Authorization: `Bearer ${this.authToken}` },
       params: {
         after_timestamp: newestNewsletter.updatedAt,
@@ -146,7 +161,9 @@ const syncManager = new SyncManager();
 onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
   const msg = ev.data;
 
-  if (msg.type === "auth token") {
+  if (msg.type === "set auth token") {
     syncManager.setAuthToken(msg.authToken);
+  } else if (msg.type === "clear auth token") {
+    syncManager.clearAuthToken();
   }
 };

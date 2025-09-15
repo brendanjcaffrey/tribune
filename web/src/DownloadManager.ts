@@ -17,6 +17,10 @@ export class DownloadManager {
     this.authToken = authToken;
   }
 
+  public clearAuthToken() {
+    this.authToken = null;
+  }
+
   public async startDownload(msg: DownloadFileMessage) {
     if (!this.authToken) {
       return;
@@ -76,8 +80,10 @@ const downloadManager = new DownloadManager();
 onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
   const msg = ev.data;
 
-  if (msg.type === "auth token") {
+  if (msg.type === "set auth token") {
     downloadManager.setAuthToken(msg.authToken);
+  } else if (msg.type === "clear auth token") {
+    downloadManager.clearAuthToken();
   } else if (msg.type == "download file") {
     downloadManager.startDownload(msg);
   }

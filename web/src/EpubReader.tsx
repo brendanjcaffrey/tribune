@@ -49,10 +49,6 @@ function setTheme(rendition: Rendition, theme: Theme) {
   rendition.themes.select(randomString);
 }
 
-function totalHeight(windowHeight: number) {
-  return windowHeight - TOP_BAR_HEIGHT;
-}
-
 const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
   const theme = useTheme();
   const viewerRef = useRef<HTMLDivElement>(null);
@@ -125,15 +121,16 @@ const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
   return (
     <div
       style={{
-        height: `${totalHeight(windowHeight)}px`,
+        height: `${windowHeight - TOP_BAR_HEIGHT}px`,
         width: "100%",
         paddingTop: `${VERTICAL_PADDING}px`,
+        paddingBottom: `${VERTICAL_PADDING}px`,
       }}
     >
       <div
         ref={viewerRef}
         style={{
-          height: `${totalHeight(windowHeight)}px`,
+          height: `${windowHeight - TOP_BAR_HEIGHT - VERTICAL_PADDING * 2}px`,
           width: `${windowWidth}px`,
         }}
       />

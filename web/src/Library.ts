@@ -148,6 +148,22 @@ class Library {
     return await this.db.getAll("newsletters");
   }
 
+  public clear() {
+    if (!this.validState) {
+      return;
+    }
+    if (!this.db) {
+      this.setError("clearing store", "database is not initialized");
+      return;
+    }
+
+    try {
+      this.db.clear("newsletters");
+    } catch (error) {
+      this.setError("clearing store", error);
+    }
+  }
+
   private setError(action: string, error: Error | string | null | unknown) {
     this.validState = false;
 

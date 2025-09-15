@@ -3,6 +3,7 @@ import axios, { isAxiosError } from "axios";
 import DelayedElement from "./DelayedElement";
 import CenteredHalfAlert from "./CenteredHalfAlert";
 import { isObject } from "lodash";
+import LogOutButton from "./LogOutButton";
 
 interface AuthVerifierProps {
   authToken: string;
@@ -48,7 +49,14 @@ function AuthVerifier({
   });
 
   if (error) {
-    return <CenteredHalfAlert severity="error">{error}</CenteredHalfAlert>;
+    return (
+      <CenteredHalfAlert
+        severity="error"
+        action={<LogOutButton size="small" />}
+      >
+        {error}
+      </CenteredHalfAlert>
+    );
   } else {
     return (
       <DelayedElement>

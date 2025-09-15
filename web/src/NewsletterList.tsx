@@ -21,6 +21,7 @@ import { buildMainMessage } from "./WorkerTypes";
 import { files } from "./Files";
 import { useTheme } from "@mui/material";
 import { compareNewslettersForDisplay } from "./compareNewsletters";
+import { useWindowSize } from "@react-hook/window-size";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -60,6 +61,7 @@ function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
   const setNewsletterDoubleClickedCallback = useSetAtom(
     newsletterDoubleClickedCallbackAtom,
   );
+  const [windowWidth, windowHeight] = useWindowSize();
 
   const muiTheme = useTheme();
   const agTheme = themeMaterial.withParams({
@@ -149,7 +151,12 @@ function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
   }, [search]);
 
   return (
-    <div style={{ height: "98%", width: "100%" }}>
+    <div
+      style={{
+        height: `${windowHeight - 64}px`,
+        width: `${windowWidth}px`,
+      }}
+    >
       <AgGridReact
         ref={gridRef}
         theme={agTheme}
