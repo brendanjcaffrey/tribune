@@ -22,6 +22,7 @@ import { files } from "./Files";
 import { useTheme } from "@mui/material";
 import { compareNewslettersForDisplay } from "./compareNewsletters";
 import { useWindowSize } from "@react-hook/window-size";
+import { GetBodyHeight } from "./Height";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -153,7 +154,7 @@ function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
   return (
     <div
       style={{
-        height: `${windowHeight - 64}px`,
+        height: `${GetBodyHeight(windowHeight)}px`,
         width: `${windowWidth}px`,
       }}
     >

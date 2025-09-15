@@ -2,13 +2,13 @@ import React, { useEffect, useRef } from "react";
 import { useWindowSize } from "@react-hook/window-size";
 import ePub, { Book, Rendition } from "epubjs";
 import { Theme, useTheme } from "@mui/material";
+import { GetBodyHeight } from "./Height";
 
 type Props = {
   file: ArrayBuffer;
   closeFile: () => void;
 };
 
-const TOP_BAR_HEIGHT = 64;
 const VERTICAL_PADDING = 16;
 
 function setTheme(rendition: Rendition, theme: Theme) {
@@ -58,12 +58,17 @@ const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
 
   useEffect(() => {
     if (renditionRef.current) {
-      renditionRef.current.resize(windowWidth, totalHeight(windowHeight));
+      renditionRef.current.resize(
+        windowWidth,
+        GetBodyHeight(windowHeight) - VERTICAL_PADDING * 2,
+      );
     }
   }, [windowHeight, windowWidth]);
 
   useEffect(() => {
-    if (!viewerRef.current) return;
+    if (!viewerRef.current) {
+      return;
+    }
 
     const book = ePub(file);
     bookRef.current = book;
@@ -121,7 +126,7 @@ const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
   return (
     <div
       style={{
-        height: `${windowHeight - TOP_BAR_HEIGHT}px`,
+        height: `${GetBodyHeight(windowHeight)}px`,
         width: "100%",
         paddingTop: `${VERTICAL_PADDING}px`,
         paddingBottom: `${VERTICAL_PADDING}px`,
@@ -130,7 +135,7 @@ const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
       <div
         ref={viewerRef}
         style={{
-          height: `${windowHeight - TOP_BAR_HEIGHT - VERTICAL_PADDING * 2}px`,
+          height: `${GetBodyHeight(windowHeight) - VERTICAL_PADDING * 2}px`,
           width: `${windowWidth}px`,
         }}
       />
