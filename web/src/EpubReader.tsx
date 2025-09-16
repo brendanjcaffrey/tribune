@@ -49,6 +49,34 @@ function setTheme(rendition: Rendition, theme: Theme) {
   rendition.themes.select(randomString);
 }
 
+function buildKeyHandler(rendition: Rendition, closeFile: () => void) {
+  return (e: KeyboardEvent) => {
+    const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+    if (
+      tag === "input" ||
+      tag === "textarea" ||
+      (e.target as HTMLElement)?.isContentEditable
+    ) {
+      return;
+    }
+
+    switch (e.key) {
+      case "ArrowRight":
+        e.preventDefault();
+        rendition.next();
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        rendition.prev();
+        break;
+      case "Escape":
+        e.preventDefault();
+        closeFile();
+        break;
+    }
+  };
+}
+
 const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
   const theme = useTheme();
   const viewerRef = useRef<HTMLDivElement>(null);
@@ -76,52 +104,33 @@ const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
     const rendition = book.renderTo(viewerRef.current, {
       width: "100%",
       height: "100%",
-    });
+      allowPopups: true,
+      // NB: the typings are wrong here; allowPopups exists, so cast to any to fix the build
+    } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
     setTheme(rendition, theme);
     rendition.display();
     renditionRef.current = rendition;
+
+    const handleKey = buildKeyHandler(rendition, closeFile);
+    rendition.on("keydown", handleKey);
+    window.addEventListener("keydown", handleKey);
+
+    viewerRef.current.setAttribute("tabindex", "0");
+    viewerRef.current.focus();
 
     return () => {
       rendition.destroy();
       book.destroy();
       renditionRef.current = null;
+      window.removeEventListener("keydown", handleKey);
     };
-  }, [file]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [file, closeFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (renditionRef.current) {
       setTheme(renditionRef.current, theme);
     }
   }, [theme, renditionRef]);
-
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (!renditionRef.current) {
-        return;
-      }
-      switch (e.key) {
-        case "ArrowLeft":
-        case "h":
-        case "j":
-          renditionRef.current.prev();
-          break;
-        case "ArrowRight":
-        case "k":
-        case "l":
-          renditionRef.current.next();
-          break;
-        case "Escape":
-          closeFile();
-          break;
-        default:
-          return;
-      }
-      e.preventDefault();
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeFile]);
 
   return (
     <div
