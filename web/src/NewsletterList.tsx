@@ -8,11 +8,13 @@ import {
   AllCommunityModule,
   type GridOptions,
   themeMaterial,
+  type CellContextMenuEvent,
 } from "ag-grid-community";
 import { useAtomValue, useSetAtom } from "jotai";
 import {
   newsletterDoubleClickedCallbackAtom,
   searchAtom,
+  showNewsletterContextMenuCallbackAtom,
   store,
 } from "./State";
 import { SortableNewsletter } from "./SortableNewsletter";
@@ -22,6 +24,10 @@ import { useTheme } from "@mui/material";
 import { compareNewslettersForDisplay } from "./compareNewsletters";
 import { useWindowSize } from "@react-hook/window-size";
 import { GetBodyHeight } from "./Height";
+import {
+  NewsletterContextMenu,
+  NewsletterContextMenuData,
+} from "./NewsletterContextMenu";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -45,6 +51,19 @@ const gridOptions: GridOptions = {
   ],
   defaultColDef: {
     filter: true,
+    onCellContextMenu: (event: CellContextMenuEvent) => {
+      // calling event.preventDefault() here doesn't work, have to do it in a click listener on the table wrapper element
+      if (event.event === null) {
+        return;
+      }
+      const mouseEvent = event.event as MouseEvent;
+      const data: NewsletterContextMenuData = {
+        newsletter: event.data as SortableNewsletter,
+        mouseX: mouseEvent.clientX + 2,
+        mouseY: mouseEvent.clientY - 6,
+      };
+      store.get(showNewsletterContextMenuCallbackAtom).fn(data);
+    },
   },
   onRowDoubleClicked: (event) => {
     store
@@ -61,11 +80,17 @@ function NewsletterList({ setEpubUrl }: NewsletterListProps) {
   const gridRef = useRef<AgGridReact>(null);
   const pendingDownload = useRef<number | null>(null);
   const [newsletters, setNewsletters] = useState<SortableNewsletter[]>([]);
+  const [windowWidth, windowHeight] = useWindowSize();
+  const [contextMenuData, setContextMenuData] =
+    useState<NewsletterContextMenuData | null>(null);
+
   const search = useAtomValue(searchAtom);
   const setNewsletterDoubleClickedCallback = useSetAtom(
     newsletterDoubleClickedCallbackAtom,
   );
-  const [windowWidth, windowHeight] = useWindowSize();
+  const setShowNewsletterContextMenuCallback = useSetAtom(
+    showNewsletterContextMenuCallbackAtom,
+  );
 
   const muiTheme = useTheme();
   const agTheme = themeMaterial.withParams({
@@ -91,6 +116,14 @@ function NewsletterList({ setEpubUrl }: NewsletterListProps) {
       },
     });
   }, [setNewsletterDoubleClickedCallback]);
+
+  useEffect(() => {
+    setShowNewsletterContextMenuCallback({
+      fn: (d: NewsletterContextMenuData) => {
+        setContextMenuData(d);
+      },
+    });
+  }, [setShowNewsletterContextMenuCallback, setContextMenuData]);
 
   const updateNewsletters = useCallback(async () => {
     const newsletters = await library().getAllNewsletters();
@@ -142,19 +175,29 @@ function NewsletterList({ setEpubUrl }: NewsletterListProps) {
   }, [search]);
 
   return (
-    <div
-      style={{
-        height: `${GetBodyHeight(windowHeight)}px`,
-        width: `${windowWidth}px`,
-      }}
-    >
-      <AgGridReact
-        ref={gridRef}
-        theme={agTheme}
-        gridOptions={gridOptions}
-        rowData={newsletters}
+    <>
+      <div
+        style={{
+          height: `${GetBodyHeight(windowHeight)}px`,
+          width: `${windowWidth}px`,
+        }}
+        onContextMenu={(e) => {
+          // this doesn't work in the ag grid handlers, so we have to do it here
+          e.preventDefault();
+        }}
+      >
+        <AgGridReact
+          ref={gridRef}
+          theme={agTheme}
+          gridOptions={gridOptions}
+          rowData={newsletters}
+        />
+      </div>
+      <NewsletterContextMenu
+        data={contextMenuData}
+        handleClose={() => setContextMenuData(null)}
       />
-    </div>
+    </>
   );
 }
 
