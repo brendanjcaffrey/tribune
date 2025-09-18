@@ -1,6 +1,6 @@
 import axios from "axios";
 import { Mutex } from "async-mutex";
-import { buildWorkerMessage, type MainToWorkerMessage } from "./WorkerTypes";
+import { buildWorkerMessage } from "./WorkerTypes";
 import library, { type Newsletter } from "./Library";
 import { compareNewslettersForApi } from "./compareNewsletters";
 import { type APINewsletters } from "./APINewsletters";
@@ -155,15 +155,3 @@ export class SyncManager {
     });
   }
 }
-
-const syncManager = new SyncManager();
-
-onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
-  const msg = ev.data;
-
-  if (msg.type === "set auth token") {
-    syncManager.setAuthToken(msg.authToken);
-  } else if (msg.type === "clear auth token") {
-    syncManager.clearAuthToken();
-  }
-};

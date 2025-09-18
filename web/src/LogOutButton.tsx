@@ -4,7 +4,6 @@ import { Logout } from "@mui/icons-material";
 import { clearAuthFnAtom } from "./State";
 import library from "./Library";
 import downloadsStore from "./Library";
-import { DownloadWorker } from "./DownloadWorker";
 import { files } from "./Files";
 import { SyncWorker } from "./SyncWorker";
 import { buildMainMessage } from "./WorkerTypes";
@@ -22,7 +21,6 @@ function LogOutButton({ size, sx }: LogOutButtonProps) {
     library().clear();
     await files().clearAll();
     SyncWorker.postMessage(buildMainMessage("clear auth token", {}));
-    DownloadWorker.postMessage(buildMainMessage("clear auth token", {}));
     downloadsStore().clear();
   }
 

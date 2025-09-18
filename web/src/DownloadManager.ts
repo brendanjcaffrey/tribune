@@ -1,10 +1,6 @@
 import axios from "axios";
 import { files } from "./Files";
-import {
-  buildWorkerMessage,
-  type DownloadFileMessage,
-  type MainToWorkerMessage,
-} from "./WorkerTypes";
+import { buildWorkerMessage, type DownloadFileMessage } from "./WorkerTypes";
 
 export class DownloadManager {
   private authToken: string | null = null;
@@ -74,17 +70,3 @@ export class DownloadManager {
     }
   }
 }
-
-const downloadManager = new DownloadManager();
-
-onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
-  const msg = ev.data;
-
-  if (msg.type === "set auth token") {
-    downloadManager.setAuthToken(msg.authToken);
-  } else if (msg.type === "clear auth token") {
-    downloadManager.clearAuthToken();
-  } else if (msg.type == "download file") {
-    downloadManager.startDownload(msg);
-  }
-};

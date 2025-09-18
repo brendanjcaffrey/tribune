@@ -1,7 +1,7 @@
 import { TypedWorker } from "./TypedWorker";
 
 export const SyncWorkerUntyped = new Worker(
-  new URL("./SyncManager.ts", import.meta.url),
+  new URL("./SyncDispatcher.ts", import.meta.url),
   {
     type: "module",
   },

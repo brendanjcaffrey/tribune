@@ -11,9 +11,9 @@ import {
   Tooltip,
 } from "@mui/material";
 import downloadsStore, { Download } from "./DownloadsStore";
-import { DownloadWorker } from "./DownloadWorker";
 import { formatBytes, formatTimestamp } from "./Util";
 import { FileDownloadStatusMessage } from "./WorkerTypes";
+import { SyncWorker } from "./SyncWorker";
 
 function DownloadStatusToDisplay(download: Download): JSX.Element {
   switch (download.status) {
@@ -66,13 +66,13 @@ function DownloadsPanel({
   );
 
   useEffect(() => {
-    const listener = DownloadWorker.addMessageListener((message) => {
+    const listener = SyncWorker.addMessageListener((message) => {
       if (message.type === "file download status") {
         handleFileDownloadStatusMessage(message);
       }
     });
     return () => {
-      DownloadWorker.removeMessageListener(listener);
+      SyncWorker.removeMessageListener(listener);
     };
   }, [handleFileDownloadStatusMessage]);
 

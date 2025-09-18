@@ -16,7 +16,6 @@ import {
   store,
 } from "./State";
 import { SortableNewsletter } from "./SortableNewsletter";
-import { DownloadWorker } from "./DownloadWorker";
 import { buildMainMessage } from "./WorkerTypes";
 import { files } from "./Files";
 import { useTheme } from "@mui/material";
@@ -54,7 +53,11 @@ const gridOptions: GridOptions = {
   },
 };
 
-function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
+interface NewsletterListProps {
+  setEpubUrl: (url: ArrayBuffer) => void;
+}
+
+function NewsletterList({ setEpubUrl }: NewsletterListProps) {
   const gridRef = useRef<AgGridReact>(null);
   const pendingDownload = useRef<number | null>(null);
   const [newsletters, setNewsletters] = useState<SortableNewsletter[]>([]);
@@ -78,7 +81,7 @@ function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
     setNewsletterDoubleClickedCallback({
       fn: (n: SortableNewsletter) => {
         pendingDownload.current = n.id;
-        DownloadWorker.postMessage(
+        SyncWorker.postMessage(
           buildMainMessage("download file", {
             id: n.id,
             fileType: "epub",
@@ -109,20 +112,6 @@ function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
         });
       } else if (message.type == "newsletters updated") {
         updateNewsletters();
-      }
-    });
-    updateNewsletters();
-    return () => {
-      SyncWorker.removeMessageListener(listener);
-    };
-  }, [updateNewsletters]);
-
-  useEffect(() => {
-    const listener = DownloadWorker.addMessageListener((message) => {
-      if (message.type == "error") {
-        enqueueSnackbar(`download worker error: ${message.error}`, {
-          variant: "error",
-        });
       } else if (message.type == "file fetched") {
         if (
           message.fileType === "epub" &&
@@ -133,17 +122,18 @@ function NewsletterList(params: { setEpubUrl: (url: ArrayBuffer) => void }) {
             .then((file) => {
               if (file !== null) {
                 file.arrayBuffer().then((buf) => {
-                  params.setEpubUrl(buf);
+                  setEpubUrl(buf);
                 });
               }
             });
         }
       }
     });
+    updateNewsletters();
     return () => {
-      DownloadWorker.removeMessageListener(listener);
+      SyncWorker.removeMessageListener(listener);
     };
-  }, [params]);
+  }, [updateNewsletters, setEpubUrl]);
 
   useEffect(() => {
     if (gridRef.current && gridRef.current.api) {
