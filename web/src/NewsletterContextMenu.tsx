@@ -7,6 +7,7 @@ import {
   Delete,
 } from "@mui/icons-material";
 import { SortableNewsletter } from "./SortableNewsletter";
+import { useEffect, useState } from "react";
 
 export interface NewsletterContextMenuData {
   newsletter: SortableNewsletter;
@@ -23,6 +24,13 @@ export function NewsletterContextMenu({
   data,
   handleClose,
 }: NewsletterContextMenuProps) {
+  const [isRead, setIsRead] = useState(data?.newsletter.read ?? false);
+  useEffect(() => {
+    if (data) {
+      setIsRead(data.newsletter.read);
+    }
+  }, [data]);
+
   return (
     <>
       <Menu
@@ -38,7 +46,7 @@ export function NewsletterContextMenu({
           list: { dense: true },
         }}
       >
-        {data && data.newsletter.read && (
+        {isRead && (
           <MenuItem>
             <ListItemIcon>
               <MarkEmailUnread fontSize="small" />
@@ -46,7 +54,7 @@ export function NewsletterContextMenu({
             <ListItemText>Mark as Unread</ListItemText>
           </MenuItem>
         )}
-        {data && !data.newsletter.read && (
+        {!isRead && (
           <MenuItem>
             <ListItemIcon>
               <MarkEmailRead fontSize="small" />
