@@ -16,7 +16,7 @@ BASE_TIME = Time.new(2025, 1, 1, 0, 0, 0.456789).utc
 HALF_MICROSECOND = Rational(1, 2_000_000)
 HALF_SECOND = Rational(1, 2)
 CREATE_TEST_USER_QUERY = 'INSERT INTO users (username, password_sha256) VALUES ($1, $2);'
-CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, source_mime_type, read, deleted, created_at, updated_at, epub_updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);'
+CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, source_mime_type, read, deleted, progress, created_at, updated_at, epub_updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);'
 UPDATE_TEST_NEWSLETTER_UPDATED_AT = 'UPDATE newsletters SET updated_at = $1 WHERE id = $2;'
 
 RSpec.describe 'Tribune Server' do
@@ -56,14 +56,15 @@ RSpec.describe 'Tribune Server' do
   end
 
   # newsletters
-  def create_newsletter(id:, title: nil, author: nil, source_mime_type: HTML_MIME_TYPE, read: false, deleted: false, created_at: nil, updated_at: nil, epub_updated_at: nil)
+  def create_newsletter(id:, title: nil, author: nil, source_mime_type: HTML_MIME_TYPE, read: false, deleted: false, progress: '', created_at: nil, updated_at: nil, epub_updated_at: nil)
     title ||= "t#{id}"
     author ||= "a#{id}"
     created_at ||= BASE_TIME + id
     updated_at ||= BASE_TIME + id
     epub_updated_at ||= BASE_TIME + id
     DB_POOL.with do |conn|
-      conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, source_mime_type, read, deleted, created_at.iso8601(6), updated_at.iso8601(6), epub_updated_at.iso8601(6)])
+      conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, source_mime_type, read, deleted, progress,
+                                               created_at.iso8601(6), updated_at.iso8601(6), epub_updated_at.iso8601(6)])
     end
   end
 
@@ -203,6 +204,7 @@ RSpec.describe 'Tribune Server' do
       expect(item['author']).to eq('a1')
       expect(item['read']).to be(false)
       expect(item['deleted']).to be(false)
+      expect(item['progress']).to eq('')
       expect(Time.parse(item['created_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
       expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
@@ -524,7 +526,7 @@ RSpec.describe 'Tribune Server' do
       expect(item['read']).to be(false)
       expect(item['deleted']).to be(true)
 
-      put '/newsletters/2/unread', {}, get_auth_header
+      put '/newsletters/2/read', {}, get_auth_header
       expect(last_response.status).to eq(404)
 
       get '/newsletters', {}, get_auth_header
@@ -572,7 +574,7 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(404)
     end
 
-    it 'sets read to true if id exists' do
+    it 'sets read to false if id exists' do
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
@@ -699,6 +701,105 @@ RSpec.describe 'Tribune Server' do
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
+      expect(item['deleted']).to be(true)
+    end
+  end
+
+  describe 'PUT /newsletters/:id/progress' do
+    before do
+      create_user
+      create_newsletter(id: 1, updated_at: BASE_TIME, read: true)
+    end
+
+    it 'returns an error if no auth header' do
+      put '/newsletters/1/progress', { progress: '' }
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if expired jwt' do
+      put '/newsletters/1/progress', { progress: '' }, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if invalid jwt' do
+      put '/newsletters/1/progress', { progress: '' }, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if non-numeric id' do
+      put '/newsletters/hi/progress', { progress: '' }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if too small id' do
+      put '/newsletters/0/progress', { progress: '' }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if non-existant id' do
+      put '/newsletters/2/progress', { progress: '' }, get_auth_header
+      expect(last_response.status).to eq(404)
+    end
+
+    it 'returns an error if progress param not set' do
+      put '/newsletters/1/progress', {}, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'updates progress value if id exists' do
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['progress']).to eq('')
+
+      put '/newsletters/1/progress', { progress: 'hi' }, get_auth_header
+      expect(last_response.status).to eq(200)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now.utc)
+      expect(item['progress']).to eq('hi')
+    end
+
+    it 'does not change the changed_at timestamp if new value is the same' do
+      create_newsletter(id: 2, updated_at: BASE_TIME, read: false)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to be(false)
+
+      put '/newsletters/2/progress', { progress: '' }, get_auth_header
+      expect(last_response).to be_ok
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to be(false)
+    end
+
+    it 'returns a 404 and not change the updated_at timestamp if deleted' do
+      create_newsletter(id: 2, updated_at: BASE_TIME, read: true, deleted: true)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to be(true)
+      expect(item['deleted']).to be(true)
+
+      put '/newsletters/2/progress', { progress: '' }, get_auth_header
+      expect(last_response.status).to eq(404)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME)
+      expect(item['read']).to be(true)
       expect(item['deleted']).to be(true)
     end
   end

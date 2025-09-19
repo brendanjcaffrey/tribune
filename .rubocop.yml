@@ -43,3 +43,5 @@ RSpec/ExampleLength:
   Enabled: false
 RSpec/MultipleMemoizedHelpers:
   Enabled: false
+RSpec/Focus:
+  Enabled: false

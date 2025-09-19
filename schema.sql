@@ -13,10 +13,10 @@ CREATE TABLE newsletters (
     source_mime_type TEXT NOT NULL,
     read BOOLEAN DEFAULT FALSE,
     deleted BOOLEAN DEFAULT FALSE,
+    progress TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     epub_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_newsletters_updated_at_id ON newsletters(updated_at, id);
-

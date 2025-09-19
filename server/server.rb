@@ -12,7 +12,7 @@ ANY_USERS_EXIST_QUERY = 'SELECT EXISTS(SELECT 1 FROM users);'
 VALID_USERNAME_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1);'
 VALID_USERNAME_AND_PASSWORD_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND password_sha256 = $2);'
 
-GET_NEWSLETTERS_QUERY_START = 'SELECT id, title, author, source_mime_type, read, deleted, created_at, updated_at, epub_updated_at FROM newsletters'
+GET_NEWSLETTERS_QUERY_START = 'SELECT id, title, author, source_mime_type, read, deleted, progress, created_at, updated_at, epub_updated_at FROM newsletters'
 GET_NEWSLETTERS_QUERY_END = 'ORDER BY updated_at DESC, id DESC LIMIT 100;'
 GET_NEWSLETTERS_QUERY = "#{GET_NEWSLETTERS_QUERY_START} #{GET_NEWSLETTERS_QUERY_END}".freeze
 GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) > ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
@@ -44,6 +44,18 @@ MARK_NEWSLETTER_UNREAD_QUERY = <<~SQL
   WHERE id = $1 AND deleted = FALSE;
 SQL
 DELETE_NEWSLETTER_QUERY = 'UPDATE newsletters SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted = FALSE;'
+UPDATE_NEWSLETTER_PROGRESS_QUERY = <<~SQL
+  UPDATE newsletters n
+  SET
+      progress   = $2,
+      updated_at = CASE
+                     WHEN n.progress IS DISTINCT FROM $2
+                       THEN CURRENT_TIMESTAMP
+                     ELSE updated_at
+                   END
+  WHERE id = $1
+    AND deleted = FALSE;
+SQL
 TOUCH_EPUB_NEWSLETTER_QUERY = 'UPDATE newsletters SET updated_at = CURRENT_TIMESTAMP, epub_updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted = FALSE;'
 
 EPUB_MIME_TYPE = 'application/epub+zip'
@@ -198,6 +210,15 @@ class Server < Sinatra::Base
     result = update_query(DELETE_NEWSLETTER_QUERY, [params[:id].to_i])
     halt 404, 'Newsletter not found' if result.zero?
     'Marked as deleted'
+  end
+
+  put '/newsletters/:id/progress' do
+    halt 401, 'Unauthorized' unless authed?
+    halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
+    halt 400, 'Progress not set' if params[:progress].nil?
+    result = update_query(UPDATE_NEWSLETTER_PROGRESS_QUERY, [params[:id].to_i, params[:progress]])
+    halt 404, 'Newsletter not found' if result.zero?
+    'Updated progress'
   end
 
   post '/newsletters' do
