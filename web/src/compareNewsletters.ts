@@ -15,7 +15,7 @@ export function compareNewslettersForDisplay(
   if (a.read != b.read) {
     return a.read ? 1 : -1;
   } else if (a.createdAt != b.createdAt) {
-    return a.createdAt > b.createdAt ? 1 : -1;
+    return a.createdAt > b.createdAt ? -1 : 1;
   } else {
     return b.id - a.id;
   }

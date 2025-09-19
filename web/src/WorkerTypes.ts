@@ -46,12 +46,24 @@ export interface FileDownloadStatusMessage {
   totalBytes: number | undefined;
 }
 
+export interface MarkNewsletterAsReadMessage {
+  type: "mark newsletter as read";
+  id: number;
+}
+
+export interface MarkNewsletterAsUnreadMessage {
+  type: "mark newsletter as unread";
+  id: number;
+}
+
 export type MainToWorkerMessage =
   | ErrorMessage
   | SetAuthTokenMessage
   | ClearAuthTokenMessage
   | StartSyncMessage
-  | DownloadFileMessage;
+  | DownloadFileMessage
+  | MarkNewsletterAsReadMessage
+  | MarkNewsletterAsUnreadMessage;
 
 export type WorkerToMainMessage =
   | ErrorMessage

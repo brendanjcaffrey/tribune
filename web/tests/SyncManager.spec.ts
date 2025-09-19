@@ -229,14 +229,9 @@ const N5_updated = {
 
 describe("SyncManager", () => {
   let syncManager: SyncManager;
-  let setInitializedListenerCallback: () => Promise<void>;
 
   beforeEach(() => {
     syncManager = new SyncManager();
-    const numCalls = vi.mocked(library().setInitializedListener).mock.calls
-      .length;
-    setInitializedListenerCallback = vi.mocked(library().setInitializedListener)
-      .mock.calls[numCalls - 1][0] as () => Promise<void>;
 
     vi.useFakeTimers();
     vi.resetAllMocks();
@@ -249,7 +244,7 @@ describe("SyncManager", () => {
       result: [A1],
     });
 
-    await setInitializedListenerCallback();
+    await syncManager.setLibraryInitialized();
     await syncManager.setAuthToken("test-token");
 
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
@@ -268,7 +263,7 @@ describe("SyncManager", () => {
     });
     mockAxiosGetResolve({ meta: {}, result: [] });
 
-    await setInitializedListenerCallback();
+    await syncManager.setLibraryInitialized();
     await syncManager.setAuthToken("test-token");
 
     expectAxiosGetCalls([
@@ -303,7 +298,7 @@ describe("SyncManager", () => {
     });
     mockAxiosGetResolve({ meta: {}, result: [] });
 
-    await setInitializedListenerCallback();
+    await syncManager.setLibraryInitialized();
     await syncManager.setAuthToken("test-token");
 
     expectAxiosGetCalls([
@@ -331,7 +326,7 @@ describe("SyncManager", () => {
     mockHasAnyNewslettersResolve(false);
     mockAxiosGetError();
 
-    await setInitializedListenerCallback();
+    await syncManager.setLibraryInitialized();
     await syncManager.setAuthToken("test-token");
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
     expectErrorPostMessage();
@@ -347,7 +342,7 @@ describe("SyncManager", () => {
       100,
     );
 
-    await setInitializedListenerCallback();
+    await syncManager.setLibraryInitialized();
     const promise = syncManager.setAuthToken("test-token");
     await vi.waitFor(() => {
       if (vi.mocked(axios.get).mock.calls.length === 0) {

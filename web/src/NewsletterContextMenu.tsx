@@ -8,6 +8,8 @@ import {
 } from "@mui/icons-material";
 import { SortableNewsletter } from "./SortableNewsletter";
 import { useEffect, useState } from "react";
+import { WorkerInstance } from "./WorkerInstance";
+import { buildMainMessage } from "./WorkerTypes";
 
 export interface NewsletterContextMenuData {
   newsletter: SortableNewsletter;
@@ -31,6 +33,30 @@ export function NewsletterContextMenu({
     }
   }, [data]);
 
+  const markAsRead = () => {
+    if (!data) {
+      return;
+    }
+    WorkerInstance.postMessage(
+      buildMainMessage("mark newsletter as read", {
+        id: data.newsletter.id,
+      }),
+    );
+    handleClose();
+  };
+
+  const markAsUnread = () => {
+    if (!data) {
+      return;
+    }
+    WorkerInstance.postMessage(
+      buildMainMessage("mark newsletter as unread", {
+        id: data.newsletter.id,
+      }),
+    );
+    handleClose();
+  };
+
   return (
     <>
       <Menu
@@ -47,7 +73,7 @@ export function NewsletterContextMenu({
         }}
       >
         {isRead && (
-          <MenuItem>
+          <MenuItem onClick={markAsUnread}>
             <ListItemIcon>
               <MarkEmailUnread fontSize="small" />
             </ListItemIcon>
@@ -55,7 +81,7 @@ export function NewsletterContextMenu({
           </MenuItem>
         )}
         {!isRead && (
-          <MenuItem>
+          <MenuItem onClick={markAsRead}>
             <ListItemIcon>
               <MarkEmailRead fontSize="small" />
             </ListItemIcon>

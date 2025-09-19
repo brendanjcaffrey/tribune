@@ -9,6 +9,7 @@ import {
   type GridOptions,
   themeMaterial,
   type CellContextMenuEvent,
+  CellClassParams,
 } from "ag-grid-community";
 import { useAtomValue, useSetAtom } from "jotai";
 import {
@@ -31,6 +32,16 @@ import {
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
+function fadeRead(params: CellClassParams) {
+  if (params.data && !params.data.read) {
+    return null;
+  } else if (params.data && params.data.read) {
+    return { color: "gray" };
+  } else {
+    return null;
+  }
+}
+
 const gridOptions: GridOptions = {
   autoSizeStrategy: {
     type: "fitCellContents",
@@ -42,12 +53,15 @@ const gridOptions: GridOptions = {
       field: "sortIndex",
       headerName: "Sort",
       filter: false,
-      sort: "desc",
+      sort: "asc",
       hide: true,
     },
-    { field: "title" },
-    { field: "author" },
-    { field: "createdAt", cellDataType: "dateTime" },
+    {
+      field: "title",
+      cellStyle: fadeRead,
+    },
+    { field: "author", cellStyle: fadeRead },
+    { field: "createdAt", cellDataType: "dateTime", cellStyle: fadeRead },
   ],
   defaultColDef: {
     filter: true,

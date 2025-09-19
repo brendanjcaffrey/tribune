@@ -10,15 +10,13 @@ const REFRESH_MILLIS = 5 * 60 * 1000;
 export class SyncManager {
   private authToken: string | null = null;
   private libraryInitialized: boolean = false;
-  private timerId: number | null = null;
+  private timerId: NodeJS.Timeout | null = null;
   private mutex = new Mutex();
   private abortController: AbortController | null = null;
 
-  public constructor() {
-    library().setInitializedListener(async () => {
-      this.libraryInitialized = true;
-      await this.syncLibrary();
-    });
+  public async setLibraryInitialized() {
+    this.libraryInitialized = true;
+    await this.syncLibrary();
   }
 
   public async setAuthToken(authToken: string) {
