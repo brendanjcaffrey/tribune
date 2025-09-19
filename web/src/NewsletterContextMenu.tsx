@@ -57,6 +57,18 @@ export function NewsletterContextMenu({
     handleClose();
   };
 
+  const markDeleted = () => {
+    if (!data) {
+      return;
+    }
+    WorkerInstance.postMessage(
+      buildMainMessage("mark newsletter as deleted", {
+        id: data.newsletter.id,
+      }),
+    );
+    handleClose();
+  };
+
   return (
     <>
       <Menu
@@ -100,7 +112,7 @@ export function NewsletterContextMenu({
           </ListItemIcon>
           <ListItemText>Open Source</ListItemText>
         </MenuItem>
-        <MenuItem>
+        <MenuItem onClick={markDeleted}>
           <ListItemIcon>
             <Delete fontSize="small" color="error" />
           </ListItemIcon>

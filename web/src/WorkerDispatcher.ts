@@ -30,5 +30,7 @@ onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
     updateManager.markNewsletterAsRead(msg.id);
   } else if (msg.type === "mark newsletter as unread") {
     updateManager.markNewsletterAsUnread(msg.id);
+  } else if (msg.type === "mark newsletter as deleted") {
+    updateManager.markNewsletterAsDeleted(msg.id);
   }
 };

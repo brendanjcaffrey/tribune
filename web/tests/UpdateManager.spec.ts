@@ -80,8 +80,20 @@ function expectAxiosPutUnreadRequest(id: number) {
   );
 }
 
-function clearAxiosPutMock() {
+function expectAxiosDeleteRequest(id: number) {
+  expect(axios.delete).toHaveBeenCalledWith(
+    `/newsletters/${id}`,
+    expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: "Bearer mock-token",
+      }),
+    }),
+  );
+}
+
+function clearAxiosMocks() {
   vi.mocked(axios.put).mockClear();
+  vi.mocked(axios.delete).mockClear();
 }
 
 async function waitForUpdatesToFinish(manager: UpdateManager) {
@@ -95,7 +107,8 @@ async function waitForUpdatesToFinish(manager: UpdateManager) {
 function buildNewsletter(
   id: number,
   timestamp: string,
-  read: boolean = false,
+  read: boolean,
+  deleted: boolean,
 ): Newsletter {
   return {
     id,
@@ -103,7 +116,7 @@ function buildNewsletter(
     author: id.toString(),
     sourceMimeType: "index/html",
     read,
-    deleted: false,
+    deleted,
     createdAt: timestamp,
     updatedAt: timestamp,
     epubUpdatedAt: timestamp,
@@ -116,14 +129,31 @@ function buildNewsletter(
 describe("UpdateManager", () => {
   const HTTP_200 = { status: 200, statusText: "OK" };
   const HTTP_404 = { status: 404, statusText: "NOT FOUND" };
-  const HTTP_500 = { status: 505, statusText: "INTERNAL SERVER ERROR" };
 
   // these get modified by tests, so need to be functions
   const NEWSLETTER_123_UNREAD = () =>
-    buildNewsletter(123, "2025-01-01 06:00:01.456789+00", /*read=*/ false);
+    buildNewsletter(
+      123,
+      "2025-01-01 06:00:01.456789+00",
+      /*read=*/ false,
+      /*deleted=*/ false,
+    );
 
   const NEWSLETTER_123_READ = () =>
-    buildNewsletter(123, "2025-01-01 06:00:01.456789+00", /*read=*/ true);
+    buildNewsletter(
+      123,
+      "2025-01-01 06:00:01.456789+00",
+      /*read=*/ true,
+      /*deleted=*/ false,
+    );
+
+  const NEWSLETTER_123_DELETED = () =>
+    buildNewsletter(
+      123,
+      "2025-01-01 06:00:01.456789+00",
+      /*read=*/ false,
+      /*deleted=*/ true,
+    );
 
   const READ_UPDATE: Update = {
     type: "read",
@@ -132,6 +162,11 @@ describe("UpdateManager", () => {
 
   const UNREAD_UPDATE: Update = {
     type: "unread",
+    newsletterId: 123,
+  };
+
+  const DELETE_UPDATE: Update = {
+    type: "delete",
     newsletterId: 123,
   };
 
@@ -242,16 +277,16 @@ describe("UpdateManager", () => {
       expect(manager.getPendingUpdates()).toEqual([READ_UPDATE]);
       expect(await get(DB_KEY)).toEqual([READ_UPDATE]);
       expectAxiosPutReadRequest(123);
-      clearAxiosPutMock();
+      clearAxiosMocks();
 
       // fails on second attempt
-      vi.mocked(axios.put).mockRejectedValueOnce(HTTP_500);
+      vi.mocked(axios.put).mockRejectedValueOnce(new Error("Server error"));
       vi.runOnlyPendingTimers();
       await waitForUpdatesToFinish(manager);
       expect(manager.getPendingUpdates()).toEqual([READ_UPDATE]);
       expect(await get(DB_KEY)).toEqual([READ_UPDATE]);
       expectAxiosPutReadRequest(123);
-      clearAxiosPutMock();
+      clearAxiosMocks();
 
       // succeeds on third attempt
       vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
@@ -364,16 +399,16 @@ describe("UpdateManager", () => {
       expect(manager.getPendingUpdates()).toEqual([UNREAD_UPDATE]);
       expect(await get(DB_KEY)).toEqual([UNREAD_UPDATE]);
       expectAxiosPutUnreadRequest(123);
-      clearAxiosPutMock();
+      clearAxiosMocks();
 
       // fails on second attempt
-      vi.mocked(axios.put).mockRejectedValueOnce(HTTP_500);
+      vi.mocked(axios.put).mockRejectedValueOnce(new Error("Server error"));
       vi.runOnlyPendingTimers();
       await waitForUpdatesToFinish(manager);
       expect(manager.getPendingUpdates()).toEqual([UNREAD_UPDATE]);
       expect(await get(DB_KEY)).toEqual([UNREAD_UPDATE]);
       expectAxiosPutUnreadRequest(123);
-      clearAxiosPutMock();
+      clearAxiosMocks();
 
       // succeeds on third attempt
       vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
@@ -405,15 +440,142 @@ describe("UpdateManager", () => {
     });
   });
 
+  describe("delete", () => {
+    it("should initialize with pending delete updates from db if they exist", async () => {
+      set(DB_KEY, [DELETE_UPDATE]);
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      expect(manager.getPendingUpdates()).toEqual([DELETE_UPDATE]);
+    });
+
+    it("should post an error if the library isn't initialized when trying to make an uread update", async () => {
+      const manager = new UpdateManager();
+      await manager.markNewsletterAsDeleted(123);
+      expectErrorPostMessage("can't delete");
+    });
+
+    it("should attempt any pending delete updates when the auth token & library initialized is set", async () => {
+      set(DB_KEY, [DELETE_UPDATE]);
+      vi.mocked(axios.delete).mockResolvedValueOnce(HTTP_200);
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setAuthToken("mock-token");
+      await manager.setLibraryInitialized();
+      expectAxiosDeleteRequest(123);
+    });
+
+    it("should add a delete update to pending updates & persist if not authenticated", async () => {
+      vi.mocked(library().getNewsletter).mockResolvedValueOnce(
+        NEWSLETTER_123_UNREAD(),
+      );
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setLibraryInitialized();
+      await manager.markNewsletterAsDeleted(123);
+
+      expect(manager.getPendingUpdates()).toEqual([DELETE_UPDATE]);
+      expect(await get(DB_KEY)).toEqual([DELETE_UPDATE]);
+      expectLibraryPutNewsletterCall(NEWSLETTER_123_DELETED());
+      expectNewslettersUpdatedPostMessage();
+    });
+
+    it("should immediately attempt a delete update if authenticated", async () => {
+      vi.mocked(library().getNewsletter).mockResolvedValueOnce(
+        NEWSLETTER_123_UNREAD(),
+      );
+      vi.mocked(axios.delete).mockResolvedValueOnce(HTTP_200);
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setAuthToken("mock-token");
+      await manager.setLibraryInitialized();
+      vi.mocked(axios.delete).mockResolvedValueOnce(HTTP_200);
+
+      await manager.markNewsletterAsDeleted(123);
+
+      expectLibraryPutNewsletterCall(NEWSLETTER_123_DELETED());
+      expectNewslettersUpdatedPostMessage();
+      expectAxiosDeleteRequest(123);
+
+      expect(manager.getPendingUpdates()).toEqual([]);
+      expect(await get(DB_KEY)).toBeUndefined();
+    });
+
+    it("should retry sending pending delete updates on a timer", async () => {
+      vi.mocked(library().getNewsletter).mockResolvedValueOnce(
+        NEWSLETTER_123_UNREAD(),
+      );
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setAuthToken("mock-token");
+      await manager.setLibraryInitialized();
+
+      // fails on first attempt
+      vi.mocked(axios.delete).mockRejectedValueOnce(new Error("Network error"));
+      await manager.markNewsletterAsDeleted(123);
+      expectLibraryPutNewsletterCall(NEWSLETTER_123_DELETED());
+      expectNewslettersUpdatedPostMessage();
+      expect(manager.getPendingUpdates()).toEqual([DELETE_UPDATE]);
+      expect(await get(DB_KEY)).toEqual([DELETE_UPDATE]);
+      expectAxiosDeleteRequest(123);
+      clearAxiosMocks();
+
+      // fails on second attempt
+      vi.mocked(axios.delete).mockRejectedValueOnce(new Error("Server error"));
+      vi.runOnlyPendingTimers();
+      await waitForUpdatesToFinish(manager);
+      expect(manager.getPendingUpdates()).toEqual([DELETE_UPDATE]);
+      expect(await get(DB_KEY)).toEqual([DELETE_UPDATE]);
+      expectAxiosDeleteRequest(123);
+      clearAxiosMocks();
+
+      // succeeds on third attempt
+      vi.mocked(axios.delete).mockResolvedValueOnce(HTTP_200);
+      vi.runOnlyPendingTimers();
+      await waitForUpdatesToFinish(manager);
+
+      expectAxiosDeleteRequest(123);
+      expect(manager.getPendingUpdates()).toEqual([]);
+      expect(await get(DB_KEY)).toEqual([]);
+    });
+
+    it("should drop delete updates on a 404", async () => {
+      vi.mocked(library().getNewsletter).mockResolvedValueOnce(
+        NEWSLETTER_123_UNREAD(),
+      );
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setAuthToken("mock-token");
+      await manager.setLibraryInitialized();
+
+      // fails on first attempt
+      vi.mocked(axios.delete).mockResolvedValueOnce(HTTP_404);
+      await manager.markNewsletterAsDeleted(123);
+      expectLibraryPutNewsletterCall(NEWSLETTER_123_DELETED());
+      expectNewslettersUpdatedPostMessage();
+      expect(manager.getPendingUpdates()).toEqual([]);
+      expect(await get(DB_KEY)).toBeUndefined();
+    });
+  });
+
   it("should support intermittent failing requests and adding while attempting updates", async () => {
     vi.mocked(library().getNewsletter).mockResolvedValueOnce(
-      buildNewsletter(321, "2025-01-01 06:00:01.456789+00", /*read=*/ true),
+      buildNewsletter(
+        321,
+        "2025-01-01 06:00:01.456789+00",
+        /*read=*/ true,
+        /*deleted=*/ false,
+      ),
     );
 
     const updates: Update[] = [
       { type: "read", newsletterId: 123 },
       { type: "unread", newsletterId: 456 },
-      { type: "read", newsletterId: 789 },
+      { type: "delete", newsletterId: 789 },
     ];
     await set(DB_KEY, updates);
     updates.push({ type: "unread", newsletterId: 321 });
@@ -424,7 +586,7 @@ describe("UpdateManager", () => {
     // first attempt: only 456 succeeds
     vi.mocked(axios.put).mockRejectedValueOnce(new Error("Network error"));
     vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
-    vi.mocked(axios.put).mockRejectedValueOnce(new Error("Network error"));
+    vi.mocked(axios.delete).mockRejectedValueOnce(new Error("Network error"));
     vi.mocked(axios.put).mockRejectedValueOnce(new Error("Network error"));
     manager.setAuthToken("mock-token");
     manager.setLibraryInitialized();
@@ -432,15 +594,20 @@ describe("UpdateManager", () => {
     await waitForUpdatesToFinish(manager);
 
     expectLibraryPutNewsletterCall(
-      buildNewsletter(321, "2025-01-01 06:00:01.456789+00", /*read=*/ false),
+      buildNewsletter(
+        321,
+        "2025-01-01 06:00:01.456789+00",
+        /*read=*/ false,
+        /*deleted=*/ false,
+      ),
     );
     expectNewslettersUpdatedPostMessage();
 
     expectAxiosPutReadRequest(123);
     expectAxiosPutUnreadRequest(456);
-    expectAxiosPutReadRequest(789);
+    expectAxiosDeleteRequest(789);
     expectAxiosPutUnreadRequest(321);
-    clearAxiosPutMock();
+    clearAxiosMocks();
 
     expect(await get(DB_KEY)).toEqual([updates[0], updates[2], updates[3]]);
     expect(manager.getPendingUpdates()).toEqual([
@@ -451,34 +618,34 @@ describe("UpdateManager", () => {
 
     // second attempt: only 321 succeeds
     vi.mocked(axios.put).mockRejectedValueOnce(new Error("Network error"));
-    vi.mocked(axios.put).mockRejectedValueOnce(new Error("Network error"));
+    vi.mocked(axios.delete).mockRejectedValueOnce(new Error("Network error"));
     vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
     manager.setAuthToken("mock-token");
     await waitForUpdatesToFinish(manager);
     expectAxiosPutReadRequest(123);
-    expectAxiosPutReadRequest(789);
+    expectAxiosDeleteRequest(789);
     expectAxiosPutUnreadRequest(321);
-    clearAxiosPutMock();
+    clearAxiosMocks();
     expect(await get(DB_KEY)).toEqual([updates[0], updates[2]]);
     expect(manager.getPendingUpdates()).toEqual([updates[0], updates[2]]);
 
     // third attempt: only 123 succeeds
     vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
-    vi.mocked(axios.put).mockRejectedValueOnce(new Error("Network error"));
+    vi.mocked(axios.delete).mockRejectedValueOnce(new Error("Network error"));
     manager.setAuthToken("mock-token");
     await waitForUpdatesToFinish(manager);
     expectAxiosPutReadRequest(123);
-    expectAxiosPutReadRequest(789);
-    clearAxiosPutMock();
+    expectAxiosDeleteRequest(789);
+    clearAxiosMocks();
     expect(await get(DB_KEY)).toEqual([updates[2]]);
     expect(manager.getPendingUpdates()).toEqual([updates[2]]);
 
     // fourth attempt: 789 succeeds
-    vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
+    vi.mocked(axios.delete).mockResolvedValueOnce(HTTP_200);
     manager.setAuthToken("mock-token");
     await waitForUpdatesToFinish(manager);
-    expectAxiosPutReadRequest(789);
-    clearAxiosPutMock();
+    expectAxiosDeleteRequest(789);
+    clearAxiosMocks();
     expect(await get(DB_KEY)).toEqual([]);
     expect(manager.getPendingUpdates()).toEqual([]);
   });

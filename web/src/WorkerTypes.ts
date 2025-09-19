@@ -56,6 +56,11 @@ export interface MarkNewsletterAsUnreadMessage {
   id: number;
 }
 
+export interface MarkNewsletterAsDeletedMessage {
+  type: "mark newsletter as deleted";
+  id: number;
+}
+
 export type MainToWorkerMessage =
   | ErrorMessage
   | SetAuthTokenMessage
@@ -63,7 +68,8 @@ export type MainToWorkerMessage =
   | StartSyncMessage
   | DownloadFileMessage
   | MarkNewsletterAsReadMessage
-  | MarkNewsletterAsUnreadMessage;
+  | MarkNewsletterAsUnreadMessage
+  | MarkNewsletterAsDeletedMessage;
 
 export type WorkerToMainMessage =
   | ErrorMessage

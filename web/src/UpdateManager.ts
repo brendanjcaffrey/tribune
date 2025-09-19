@@ -16,7 +16,12 @@ type MarkUnreadUpdate = {
   newsletterId: number;
 };
 
-export type Update = MarkReadUpdate | MarkUnreadUpdate;
+type DeleteUpdate = {
+  type: "delete";
+  newsletterId: number;
+};
+
+export type Update = MarkReadUpdate | MarkUnreadUpdate | DeleteUpdate;
 
 export class UpdateManager {
   private libraryInitialized: boolean = false;
@@ -106,6 +111,28 @@ export class UpdateManager {
     await this.handleUpdate({ type: "unread", newsletterId });
   }
 
+  public async markNewsletterAsDeleted(newsletterId: number) {
+    if (!this.libraryInitialized) {
+      postMessage(
+        buildWorkerMessage("error", {
+          error: "can't delete newsletter, library not initialized",
+        }),
+      );
+      return;
+    }
+
+    const newsletter = await library().getNewsletter(newsletterId);
+    if (!newsletter) {
+      return;
+    }
+
+    newsletter.deleted = true;
+    await library().putNewsletter(newsletter);
+    postMessage(buildWorkerMessage("newsletters updated", {}));
+
+    await this.handleUpdate({ type: "delete", newsletterId });
+  }
+
   private async handleUpdate(update: Update) {
     if (
       this.libraryInitialized &&
@@ -130,12 +157,26 @@ export class UpdateManager {
   }
 
   private async attemptUpdate(update: Update) {
-    const requestPath = `/newsletters/${update.newsletterId}/${update.type}`;
-    const { status, statusText } = await axios.put(requestPath, undefined, {
-      headers: {
-        Authorization: `Bearer ${this.authToken}`,
-      },
-    });
+    let status, statusText;
+    const validateStatus = (status: number) => status == 200 || status == 404;
+    if (update.type == "delete") {
+      const requestPath = `/newsletters/${update.newsletterId}`;
+      ({ status, statusText } = await axios.delete(requestPath, {
+        headers: {
+          Authorization: `Bearer ${this.authToken}`,
+        },
+        validateStatus,
+      }));
+    } else {
+      const requestPath = `/newsletters/${update.newsletterId}/${update.type}`;
+      ({ status, statusText } = await axios.put(requestPath, undefined, {
+        headers: {
+          Authorization: `Bearer ${this.authToken}`,
+        },
+        validateStatus,
+      }));
+    }
+
     if (status == 404) {
       console.error(
         `got 404 for update (${update.type}/${update.newsletterId}), dropping it: ${update.type}`,
