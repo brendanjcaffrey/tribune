@@ -13,7 +13,7 @@ import {
 import downloadsStore, { Download } from "./DownloadsStore";
 import { formatBytes, formatTimestamp } from "./Util";
 import { FileDownloadStatusMessage } from "./WorkerTypes";
-import { SyncWorker } from "./SyncWorker";
+import { WorkerInstance } from "./WorkerInstance";
 
 function DownloadStatusToDisplay(download: Download): JSX.Element {
   switch (download.status) {
@@ -66,13 +66,13 @@ function DownloadsPanel({
   );
 
   useEffect(() => {
-    const listener = SyncWorker.addMessageListener((message) => {
+    const listener = WorkerInstance.addMessageListener((message) => {
       if (message.type === "file download status") {
         handleFileDownloadStatusMessage(message);
       }
     });
     return () => {
-      SyncWorker.removeMessageListener(listener);
+      WorkerInstance.removeMessageListener(listener);
     };
   }, [handleFileDownloadStatusMessage]);
 

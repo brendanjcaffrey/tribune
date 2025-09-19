@@ -5,7 +5,7 @@ import { clearAuthFnAtom } from "./State";
 import library from "./Library";
 import downloadsStore from "./Library";
 import { files } from "./Files";
-import { SyncWorker } from "./SyncWorker";
+import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 
 interface LogOutButtonProps {
@@ -20,7 +20,7 @@ function LogOutButton({ size, sx }: LogOutButtonProps) {
     clearAuthFn.fn();
     library().clear();
     await files().clearAll();
-    SyncWorker.postMessage(buildMainMessage("clear auth token", {}));
+    WorkerInstance.postMessage(buildMainMessage("clear auth token", {}));
     downloadsStore().clear();
   }
 

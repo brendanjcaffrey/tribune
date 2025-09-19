@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SyncWorker } from "./SyncWorker";
+import { WorkerInstance } from "./WorkerInstance";
 import { enqueueSnackbar } from "notistack";
 import library from "./Library";
 import { AgGridReact } from "ag-grid-react";
@@ -106,7 +106,7 @@ function NewsletterList({ setEpubUrl }: NewsletterListProps) {
     setNewsletterDoubleClickedCallback({
       fn: (n: SortableNewsletter) => {
         pendingDownload.current = n.id;
-        SyncWorker.postMessage(
+        WorkerInstance.postMessage(
           buildMainMessage("download file", {
             id: n.id,
             fileType: "epub",
@@ -138,7 +138,7 @@ function NewsletterList({ setEpubUrl }: NewsletterListProps) {
   }, [setNewsletters]);
 
   useEffect(() => {
-    const listener = SyncWorker.addMessageListener((message) => {
+    const listener = WorkerInstance.addMessageListener((message) => {
       if (message.type == "error") {
         enqueueSnackbar(`sync worker error: ${message.error}`, {
           variant: "error",
@@ -164,7 +164,7 @@ function NewsletterList({ setEpubUrl }: NewsletterListProps) {
     });
     updateNewsletters();
     return () => {
-      SyncWorker.removeMessageListener(listener);
+      WorkerInstance.removeMessageListener(listener);
     };
   }, [updateNewsletters, setEpubUrl]);
 

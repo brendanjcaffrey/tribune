@@ -2,7 +2,7 @@ import { type ReactNode, useEffect } from "react";
 import useAuthToken from "./useAuthToken";
 import AuthForm from "./AuthForm";
 import AuthVerifier from "./AuthVerifier";
-import { SyncWorker } from "./SyncWorker";
+import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 import { authVerifiedAtom, clearAuthFnAtom } from "./State";
 import { useAtom, useSetAtom } from "jotai";
@@ -18,7 +18,9 @@ function AuthWrapper({ children }: AuthWrapperProps) {
 
   useEffect(() => {
     if (authToken) {
-      SyncWorker.postMessage(buildMainMessage("set auth token", { authToken }));
+      WorkerInstance.postMessage(
+        buildMainMessage("set auth token", { authToken }),
+      );
     }
   }, [authToken]);
 
