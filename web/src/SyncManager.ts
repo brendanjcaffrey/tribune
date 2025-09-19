@@ -143,6 +143,7 @@ export class SyncManager {
         sourceMimeType: n.source_mime_type,
         read: n.read,
         deleted: n.deleted,
+        progress: n.progress,
         createdAt: n.created_at,
         updatedAt: n.updated_at,
         epubUpdatedAt: n.epub_updated_at,

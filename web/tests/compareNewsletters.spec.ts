@@ -17,6 +17,7 @@ function buildNewsletter(
     sourceMimeType: "index/html",
     read,
     deleted: false,
+    progress: "",
     createdAt: timestamp,
     updatedAt: timestamp,
     epubUpdatedAt: timestamp,

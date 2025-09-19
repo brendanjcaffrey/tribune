@@ -11,6 +11,7 @@ export interface Newsletter {
   sourceMimeType: string;
   read: boolean;
   deleted: boolean;
+  progress: string;
   createdAt: string;
   updatedAt: string;
   epubUpdatedAt: string;

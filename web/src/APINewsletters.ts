@@ -17,6 +17,7 @@ export interface Result {
   source_mime_type: string;
   read: boolean;
   deleted: boolean;
+  progress: string;
   created_at: string;
   updated_at: string;
   epub_updated_at: string;
