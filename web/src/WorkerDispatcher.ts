@@ -16,21 +16,34 @@ library().setInitializedListener(async () => {
 onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
   const msg = ev.data;
 
-  if (msg.type === "set auth token") {
-    syncManager.setAuthToken(msg.authToken);
-    downloadManager.setAuthToken(msg.authToken);
-    updateManager.setAuthToken(msg.authToken);
-  } else if (msg.type === "clear auth token") {
-    syncManager.clearAuthToken();
-    downloadManager.clearAuthToken();
-    updateManager.clearAuthToken();
-  } else if (msg.type === "download file") {
-    downloadManager.startDownload(msg);
-  } else if (msg.type === "mark newsletter as read") {
-    updateManager.markNewsletterAsRead(msg.id);
-  } else if (msg.type === "mark newsletter as unread") {
-    updateManager.markNewsletterAsUnread(msg.id);
-  } else if (msg.type === "mark newsletter as deleted") {
-    updateManager.markNewsletterAsDeleted(msg.id);
+  switch (msg.type) {
+    case "set auth token":
+      syncManager.setAuthToken(msg.authToken);
+      downloadManager.setAuthToken(msg.authToken);
+      updateManager.setAuthToken(msg.authToken);
+      break;
+    case "clear auth token":
+      syncManager.clearAuthToken();
+      downloadManager.clearAuthToken();
+      updateManager.clearAuthToken();
+      break;
+    case "download file":
+      downloadManager.startDownload(msg);
+      break;
+    case "mark newsletter as read":
+      updateManager.markNewsletterAsRead(msg.id);
+      break;
+    case "mark newsletter as unread":
+      updateManager.markNewsletterAsUnread(msg.id);
+      break;
+    case "mark newsletter as deleted":
+      updateManager.markNewsletterAsDeleted(msg.id);
+      break;
+    case "update newsletter progress":
+      updateManager.updateNewsletterProgress(msg.id, msg.progress);
+      break;
+    default:
+      console.error("Unknown message type:", msg);
+      break;
   }
 };

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WorkerInstance } from "./WorkerInstance";
 import { enqueueSnackbar } from "notistack";
-import library from "./Library";
+import library, { Newsletter } from "./Library";
 import { AgGridReact } from "ag-grid-react";
 import {
   ModuleRegistry,
@@ -87,10 +87,10 @@ const gridOptions: GridOptions = {
 };
 
 interface NewsletterListProps {
-  setEpubUrl: (url: ArrayBuffer) => void;
+  setNewsletterData: (newsletter: Newsletter, contents: ArrayBuffer) => void;
 }
 
-function NewsletterList({ setEpubUrl }: NewsletterListProps) {
+function NewsletterList({ setNewsletterData }: NewsletterListProps) {
   const gridRef = useRef<AgGridReact>(null);
   const pendingDownload = useRef<number | null>(null);
   const [newsletters, setNewsletters] = useState<SortableNewsletter[]>([]);
@@ -152,7 +152,7 @@ function NewsletterList({ setEpubUrl }: NewsletterListProps) {
   }, [setNewsletters]);
 
   useEffect(() => {
-    const listener = WorkerInstance.addMessageListener((message) => {
+    const listener = WorkerInstance.addMessageListener(async (message) => {
       if (message.type == "error") {
         enqueueSnackbar(`sync worker error: ${message.error}`, {
           variant: "error",
@@ -164,15 +164,12 @@ function NewsletterList({ setEpubUrl }: NewsletterListProps) {
           message.fileType === "epub" &&
           message.id === pendingDownload.current
         ) {
-          files()
-            .tryReadFile("epub", message.id)
-            .then((file) => {
-              if (file !== null) {
-                file.arrayBuffer().then((buf) => {
-                  setEpubUrl(buf);
-                });
-              }
-            });
+          const file = await files().tryReadFile("epub", message.id);
+          const newsletter = await library().getNewsletter(message.id);
+          if (file !== null && newsletter !== undefined) {
+            const contents = await file.arrayBuffer();
+            setNewsletterData(newsletter, contents);
+          }
         }
       }
     });
@@ -180,7 +177,7 @@ function NewsletterList({ setEpubUrl }: NewsletterListProps) {
     return () => {
       WorkerInstance.removeMessageListener(listener);
     };
-  }, [updateNewsletters, setEpubUrl]);
+  }, [updateNewsletters, setNewsletterData]);
 
   useEffect(() => {
     if (gridRef.current && gridRef.current.api) {

@@ -1,12 +1,16 @@
 import React, { useEffect, useRef } from "react";
 import { useWindowSize } from "@react-hook/window-size";
-import ePub, { Book, Rendition } from "epubjs";
+import ePub, { Book, Location, Rendition } from "epubjs";
 import { Theme, useTheme } from "@mui/material";
 import { GetBodyHeight } from "./Height";
+import { WorkerInstance } from "./WorkerInstance";
+import { buildMainMessage } from "./WorkerTypes";
+import { Newsletter } from "./Library";
 
-type Props = {
+type EpubReaderProps = {
+  newsletter: Newsletter;
   file: ArrayBuffer;
-  closeFile: () => void;
+  closeNewsletter: () => void;
 };
 
 const VERTICAL_PADDING = 16;
@@ -77,7 +81,11 @@ function buildKeyHandler(rendition: Rendition, closeFile: () => void) {
   };
 }
 
-const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
+const EpubReader: React.FC<EpubReaderProps> = ({
+  newsletter,
+  file,
+  closeNewsletter: closeFile,
+}) => {
   const theme = useTheme();
   const viewerRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition | null>(null);
@@ -108,12 +116,32 @@ const EpubReader: React.FC<Props> = ({ file, closeFile }) => {
       // NB: the typings are wrong here; allowPopups exists, so cast to any to fix the build
     } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
     setTheme(rendition, theme);
-    rendition.display();
+    if (newsletter.progress.length > 0) {
+      rendition.display(newsletter.progress);
+    } else {
+      rendition.display();
+    }
     renditionRef.current = rendition;
 
     const handleKey = buildKeyHandler(rendition, closeFile);
     rendition.on("keydown", handleKey);
     window.addEventListener("keydown", handleKey);
+
+    rendition.on("relocated", (location: Location) => {
+      WorkerInstance.postMessage(
+        buildMainMessage("update newsletter progress", {
+          id: newsletter.id,
+          progress: location.start.cfi,
+        }),
+      );
+      if (location.atEnd) {
+        WorkerInstance.postMessage(
+          buildMainMessage("mark newsletter as read", {
+            id: newsletter.id,
+          }),
+        );
+      }
+    });
 
     viewerRef.current.setAttribute("tabindex", "0");
     viewerRef.current.focus();

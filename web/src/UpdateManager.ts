@@ -1,4 +1,5 @@
 import axios from "axios";
+import qs from "qs";
 import { get, set } from "idb-keyval";
 import { buildWorkerMessage } from "./WorkerTypes";
 import library from "./Library";
@@ -21,7 +22,17 @@ type DeleteUpdate = {
   newsletterId: number;
 };
 
-export type Update = MarkReadUpdate | MarkUnreadUpdate | DeleteUpdate;
+type ProgressUpdate = {
+  type: "progress";
+  newsletterId: number;
+  progress: string;
+};
+
+export type Update =
+  | MarkReadUpdate
+  | MarkUnreadUpdate
+  | DeleteUpdate
+  | ProgressUpdate;
 
 export class UpdateManager {
   private libraryInitialized: boolean = false;
@@ -78,7 +89,7 @@ export class UpdateManager {
     }
 
     const newsletter = await library().getNewsletter(newsletterId);
-    if (!newsletter) {
+    if (!newsletter || newsletter.read) {
       return;
     }
 
@@ -100,7 +111,7 @@ export class UpdateManager {
     }
 
     const newsletter = await library().getNewsletter(newsletterId);
-    if (!newsletter) {
+    if (!newsletter || !newsletter.read) {
       return;
     }
 
@@ -122,7 +133,7 @@ export class UpdateManager {
     }
 
     const newsletter = await library().getNewsletter(newsletterId);
-    if (!newsletter) {
+    if (!newsletter || newsletter.deleted) {
       return;
     }
 
@@ -131,6 +142,31 @@ export class UpdateManager {
     postMessage(buildWorkerMessage("newsletters updated", {}));
 
     await this.handleUpdate({ type: "delete", newsletterId });
+  }
+
+  public async updateNewsletterProgress(
+    newsletterId: number,
+    progress: string,
+  ) {
+    if (!this.libraryInitialized) {
+      postMessage(
+        buildWorkerMessage("error", {
+          error: "can't update progress, library not initialized",
+        }),
+      );
+      return;
+    }
+
+    const newsletter = await library().getNewsletter(newsletterId);
+    if (!newsletter || newsletter.progress === progress) {
+      return;
+    }
+
+    newsletter.progress = progress;
+    await library().putNewsletter(newsletter);
+    postMessage(buildWorkerMessage("newsletters updated", {}));
+
+    await this.handleUpdate({ type: "progress", newsletterId, progress });
   }
 
   private async handleUpdate(update: Update) {
@@ -162,6 +198,15 @@ export class UpdateManager {
     if (update.type == "delete") {
       const requestPath = `/newsletters/${update.newsletterId}`;
       ({ status, statusText } = await axios.delete(requestPath, {
+        headers: {
+          Authorization: `Bearer ${this.authToken}`,
+        },
+        validateStatus,
+      }));
+    } else if (update.type == "progress") {
+      const requestPath = `/newsletters/${update.newsletterId}/${update.type}`;
+      const data = qs.stringify({ progress: update.progress });
+      ({ status, statusText } = await axios.put(requestPath, data, {
         headers: {
           Authorization: `Bearer ${this.authToken}`,
         },

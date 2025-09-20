@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import axios from "axios";
+import qs from "qs";
 import library, { Newsletter } from "../src/Library";
 import { UpdateManager, Update, DB_KEY } from "../src/UpdateManager";
 
@@ -91,6 +92,18 @@ function expectAxiosDeleteRequest(id: number) {
   );
 }
 
+function expectAxiosPutProgressRequest(id: number, progress: string) {
+  expect(axios.put).toHaveBeenCalledWith(
+    `/newsletters/${id}/progress`,
+    qs.stringify({ progress }),
+    expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: "Bearer mock-token",
+      }),
+    }),
+  );
+}
+
 function clearAxiosMocks() {
   vi.mocked(axios.put).mockClear();
   vi.mocked(axios.delete).mockClear();
@@ -109,6 +122,7 @@ function buildNewsletter(
   timestamp: string,
   read: boolean,
   deleted: boolean,
+  progress: string,
 ): Newsletter {
   return {
     id,
@@ -117,7 +131,7 @@ function buildNewsletter(
     sourceMimeType: "index/html",
     read,
     deleted,
-    progress: "",
+    progress,
     createdAt: timestamp,
     updatedAt: timestamp,
     epubUpdatedAt: timestamp,
@@ -138,6 +152,7 @@ describe("UpdateManager", () => {
       "2025-01-01 06:00:01.456789+00",
       /*read=*/ false,
       /*deleted=*/ false,
+      /*progress=*/ "",
     );
 
   const NEWSLETTER_123_READ = () =>
@@ -146,6 +161,7 @@ describe("UpdateManager", () => {
       "2025-01-01 06:00:01.456789+00",
       /*read=*/ true,
       /*deleted=*/ false,
+      /*progress=*/ "",
     );
 
   const NEWSLETTER_123_DELETED = () =>
@@ -154,6 +170,16 @@ describe("UpdateManager", () => {
       "2025-01-01 06:00:01.456789+00",
       /*read=*/ false,
       /*deleted=*/ true,
+      /*progress=*/ "",
+    );
+
+  const NEWSLETTER_123_PROGRESS = () =>
+    buildNewsletter(
+      123,
+      "2025-01-01 06:00:01.456789+00",
+      /*read=*/ false,
+      /*deleted=*/ false,
+      /*progress=*/ "hi",
     );
 
   const READ_UPDATE: Update = {
@@ -169,6 +195,12 @@ describe("UpdateManager", () => {
   const DELETE_UPDATE: Update = {
     type: "delete",
     newsletterId: 123,
+  };
+
+  const PROGRESS_UPDATE: Update = {
+    type: "progress",
+    newsletterId: 123,
+    progress: "hi",
   };
 
   beforeEach(() => {
@@ -248,7 +280,6 @@ describe("UpdateManager", () => {
       await vi.waitUntil(() => manager.getPendingUpdatesFetched());
       await manager.setAuthToken("mock-token");
       await manager.setLibraryInitialized();
-      vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
 
       await manager.markNewsletterAsRead(123);
 
@@ -370,7 +401,6 @@ describe("UpdateManager", () => {
       await vi.waitUntil(() => manager.getPendingUpdatesFetched());
       await manager.setAuthToken("mock-token");
       await manager.setLibraryInitialized();
-      vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
 
       await manager.markNewsletterAsUnread(123);
 
@@ -486,7 +516,6 @@ describe("UpdateManager", () => {
       vi.mocked(library().getNewsletter).mockResolvedValueOnce(
         NEWSLETTER_123_UNREAD(),
       );
-      vi.mocked(axios.delete).mockResolvedValueOnce(HTTP_200);
 
       const manager = new UpdateManager();
       await vi.waitUntil(() => manager.getPendingUpdatesFetched());
@@ -563,13 +592,135 @@ describe("UpdateManager", () => {
     });
   });
 
+  describe("progress", () => {
+    it("should initialize with pending progress updates from db if they exist", async () => {
+      set(DB_KEY, [PROGRESS_UPDATE]);
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      expect(manager.getPendingUpdates()).toEqual([PROGRESS_UPDATE]);
+    });
+
+    it("should post an error if the library isn't initialized when trying to make an uread update", async () => {
+      const manager = new UpdateManager();
+      await manager.updateNewsletterProgress(123, "hi");
+      expectErrorPostMessage("can't update progress");
+    });
+
+    it("should attempt any pending progress updates when the auth token & library initialized is set", async () => {
+      set(DB_KEY, [PROGRESS_UPDATE]);
+      vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setAuthToken("mock-token");
+      await manager.setLibraryInitialized();
+      expectAxiosPutProgressRequest(123, "hi");
+    });
+
+    it("should add a progress update to pending updates & persist if not authenticated", async () => {
+      vi.mocked(library().getNewsletter).mockResolvedValueOnce(
+        NEWSLETTER_123_UNREAD(),
+      );
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setLibraryInitialized();
+      await manager.updateNewsletterProgress(123, "hi");
+
+      expect(manager.getPendingUpdates()).toEqual([PROGRESS_UPDATE]);
+      expect(await get(DB_KEY)).toEqual([PROGRESS_UPDATE]);
+      expectLibraryPutNewsletterCall(NEWSLETTER_123_PROGRESS());
+      expectNewslettersUpdatedPostMessage();
+    });
+
+    it("should immediately attempt a progress update if authenticated", async () => {
+      vi.mocked(library().getNewsletter).mockResolvedValueOnce(
+        NEWSLETTER_123_UNREAD(),
+      );
+      vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setAuthToken("mock-token");
+      await manager.setLibraryInitialized();
+
+      await manager.updateNewsletterProgress(123, "hi");
+
+      expectLibraryPutNewsletterCall(NEWSLETTER_123_PROGRESS());
+      expectNewslettersUpdatedPostMessage();
+      expectAxiosPutProgressRequest(123, "hi");
+
+      expect(manager.getPendingUpdates()).toEqual([]);
+      expect(await get(DB_KEY)).toBeUndefined();
+    });
+
+    it("should retry sending pending progress updates on a timer", async () => {
+      vi.mocked(library().getNewsletter).mockResolvedValueOnce(
+        NEWSLETTER_123_UNREAD(),
+      );
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setAuthToken("mock-token");
+      await manager.setLibraryInitialized();
+
+      // fails on first attempt
+      vi.mocked(axios.put).mockRejectedValueOnce(new Error("Network error"));
+      await manager.updateNewsletterProgress(123, "hi");
+      expectLibraryPutNewsletterCall(NEWSLETTER_123_PROGRESS());
+      expectNewslettersUpdatedPostMessage();
+      expect(manager.getPendingUpdates()).toEqual([PROGRESS_UPDATE]);
+      expect(await get(DB_KEY)).toEqual([PROGRESS_UPDATE]);
+      expectAxiosPutProgressRequest(123, "hi");
+      clearAxiosMocks();
+
+      // fails on second attempt
+      vi.mocked(axios.put).mockRejectedValueOnce(new Error("Server error"));
+      vi.runOnlyPendingTimers();
+      await waitForUpdatesToFinish(manager);
+      expect(manager.getPendingUpdates()).toEqual([PROGRESS_UPDATE]);
+      expect(await get(DB_KEY)).toEqual([PROGRESS_UPDATE]);
+      expectAxiosPutProgressRequest(123, "hi");
+      clearAxiosMocks();
+
+      // succeeds on third attempt
+      vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
+      vi.runOnlyPendingTimers();
+      await waitForUpdatesToFinish(manager);
+
+      expectAxiosPutProgressRequest(123, "hi");
+      expect(manager.getPendingUpdates()).toEqual([]);
+      expect(await get(DB_KEY)).toEqual([]);
+    });
+
+    it("should drop progress updates on a 404", async () => {
+      vi.mocked(library().getNewsletter).mockResolvedValueOnce(
+        NEWSLETTER_123_UNREAD(),
+      );
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setAuthToken("mock-token");
+      await manager.setLibraryInitialized();
+
+      // fails on first attempt
+      vi.mocked(axios.put).mockResolvedValueOnce(HTTP_404);
+      await manager.updateNewsletterProgress(123, "hi");
+      expectLibraryPutNewsletterCall(NEWSLETTER_123_PROGRESS());
+      expectNewslettersUpdatedPostMessage();
+      expect(manager.getPendingUpdates()).toEqual([]);
+      expect(await get(DB_KEY)).toBeUndefined();
+    });
+  });
+
   it("should support intermittent failing requests and adding while attempting updates", async () => {
     vi.mocked(library().getNewsletter).mockResolvedValueOnce(
       buildNewsletter(
         321,
         "2025-01-01 06:00:01.456789+00",
-        /*read=*/ true,
+        /*read=*/ false,
         /*deleted=*/ false,
+        /*progress=*/ "",
       ),
     );
 
@@ -579,7 +730,7 @@ describe("UpdateManager", () => {
       { type: "delete", newsletterId: 789 },
     ];
     await set(DB_KEY, updates);
-    updates.push({ type: "unread", newsletterId: 321 });
+    updates.push({ type: "progress", newsletterId: 321, progress: "hi" });
 
     const manager = new UpdateManager();
     await vi.waitUntil(() => manager.getPendingUpdatesFetched());
@@ -591,7 +742,7 @@ describe("UpdateManager", () => {
     vi.mocked(axios.put).mockRejectedValueOnce(new Error("Network error"));
     manager.setAuthToken("mock-token");
     manager.setLibraryInitialized();
-    await manager.markNewsletterAsUnread(321);
+    await manager.updateNewsletterProgress(321, "hi");
     await waitForUpdatesToFinish(manager);
 
     expectLibraryPutNewsletterCall(
@@ -600,6 +751,7 @@ describe("UpdateManager", () => {
         "2025-01-01 06:00:01.456789+00",
         /*read=*/ false,
         /*deleted=*/ false,
+        /*progress=*/ "hi",
       ),
     );
     expectNewslettersUpdatedPostMessage();
@@ -607,7 +759,7 @@ describe("UpdateManager", () => {
     expectAxiosPutReadRequest(123);
     expectAxiosPutUnreadRequest(456);
     expectAxiosDeleteRequest(789);
-    expectAxiosPutUnreadRequest(321);
+    expectAxiosPutProgressRequest(321, "hi");
     clearAxiosMocks();
 
     expect(await get(DB_KEY)).toEqual([updates[0], updates[2], updates[3]]);
@@ -625,7 +777,7 @@ describe("UpdateManager", () => {
     await waitForUpdatesToFinish(manager);
     expectAxiosPutReadRequest(123);
     expectAxiosDeleteRequest(789);
-    expectAxiosPutUnreadRequest(321);
+    expectAxiosPutProgressRequest(321, "hi");
     clearAxiosMocks();
     expect(await get(DB_KEY)).toEqual([updates[0], updates[2]]);
     expect(manager.getPendingUpdates()).toEqual([updates[0], updates[2]]);

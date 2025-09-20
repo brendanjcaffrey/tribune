@@ -11,6 +11,7 @@ import { files } from "./Files";
 import { store } from "./State";
 import { useState } from "react";
 import EpubReader from "./EpubReader";
+import { Newsletter } from "./Library";
 
 const theme = createTheme({
   colorSchemes: {
@@ -20,7 +21,19 @@ const theme = createTheme({
 
 function App() {
   files(); // start initializing now
+  const [displayedNewsletter, setDisplayedNewsletter] =
+    useState<Newsletter | null>(null);
   const [epubContents, setEpubContents] = useState<ArrayBuffer | null>(null);
+
+  const setNewsletterData = (newsletter: Newsletter, contents: ArrayBuffer) => {
+    setDisplayedNewsletter(newsletter);
+    setEpubContents(contents);
+  };
+
+  const closeNewsletter = () => {
+    setDisplayedNewsletter(null);
+    setEpubContents(null);
+  };
 
   return (
     <JotaiProvider store={store}>
@@ -30,11 +43,14 @@ function App() {
           <TopBar />
           <AuthWrapper>
             <LibraryWrapper>
-              {!epubContents && <NewsletterList setEpubUrl={setEpubContents} />}
-              {epubContents && (
+              {(!epubContents || !displayedNewsletter) && (
+                <NewsletterList setNewsletterData={setNewsletterData} />
+              )}
+              {epubContents && displayedNewsletter && (
                 <EpubReader
+                  newsletter={displayedNewsletter}
                   file={epubContents}
-                  closeFile={() => setEpubContents(null)}
+                  closeNewsletter={closeNewsletter}
                 />
               )}
             </LibraryWrapper>

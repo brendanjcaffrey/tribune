@@ -61,6 +61,12 @@ export interface MarkNewsletterAsDeletedMessage {
   id: number;
 }
 
+export interface UpdateNewsletterProgressMessage {
+  type: "update newsletter progress";
+  id: number;
+  progress: string;
+}
+
 export type MainToWorkerMessage =
   | ErrorMessage
   | SetAuthTokenMessage
@@ -69,7 +75,8 @@ export type MainToWorkerMessage =
   | DownloadFileMessage
   | MarkNewsletterAsReadMessage
   | MarkNewsletterAsUnreadMessage
-  | MarkNewsletterAsDeletedMessage;
+  | MarkNewsletterAsDeletedMessage
+  | UpdateNewsletterProgressMessage;
 
 export type WorkerToMainMessage =
   | ErrorMessage
