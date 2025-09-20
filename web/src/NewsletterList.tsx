@@ -12,13 +12,13 @@ import {
 } from "ag-grid-community";
 import { useAtomValue, useSetAtom } from "jotai";
 import {
-  newsletterDoubleClickedCallbackAtom,
+  showNewsletterFileCallbackAtom,
   searchAtom,
   showNewsletterContextMenuCallbackAtom,
   store,
 } from "./State";
 import { SortableNewsletter } from "./SortableNewsletter";
-import { buildMainMessage } from "./WorkerTypes";
+import { buildMainMessage, FileType } from "./WorkerTypes";
 import { files } from "./Files";
 import { useTheme } from "@mui/material";
 import { compareNewslettersForDisplay } from "./compareNewsletters";
@@ -28,6 +28,7 @@ import {
   NewsletterContextMenu,
   NewsletterContextMenuData,
 } from "./NewsletterContextMenu";
+import { enqueueSnackbar } from "notistack";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -80,8 +81,8 @@ const gridOptions: GridOptions = {
   },
   onRowDoubleClicked: (event) => {
     store
-      .get(newsletterDoubleClickedCallbackAtom)
-      .fn(event.data as SortableNewsletter);
+      .get(showNewsletterFileCallbackAtom)
+      .fn(event.data as SortableNewsletter, "epub");
   },
 };
 
@@ -89,17 +90,22 @@ interface NewsletterListProps {
   setNewsletterData: (newsletter: Newsletter, contents: ArrayBuffer) => void;
 }
 
+interface PendingDownload {
+  id: number;
+  fileType: FileType;
+}
+
 function NewsletterList({ setNewsletterData }: NewsletterListProps) {
   const gridRef = useRef<AgGridReact>(null);
-  const pendingDownload = useRef<number | null>(null);
+  const pendingDownload = useRef<PendingDownload | null>(null);
   const [newsletters, setNewsletters] = useState<SortableNewsletter[]>([]);
   const [windowWidth, windowHeight] = useWindowSize();
   const [contextMenuData, setContextMenuData] =
     useState<NewsletterContextMenuData | null>(null);
 
   const search = useAtomValue(searchAtom);
-  const setNewsletterDoubleClickedCallback = useSetAtom(
-    newsletterDoubleClickedCallbackAtom,
+  const setShowNewsletterFileCallback = useSetAtom(
+    showNewsletterFileCallbackAtom,
   );
   const setShowNewsletterContextMenuCallback = useSetAtom(
     showNewsletterContextMenuCallbackAtom,
@@ -116,19 +122,22 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
   });
 
   useEffect(() => {
-    setNewsletterDoubleClickedCallback({
-      fn: (n: SortableNewsletter) => {
-        pendingDownload.current = n.id;
+    setShowNewsletterFileCallback({
+      fn: (newsletter: SortableNewsletter, fileType: FileType) => {
+        pendingDownload.current = { id: newsletter.id, fileType: fileType };
         WorkerInstance.postMessage(
           buildMainMessage("download file", {
-            id: n.id,
-            fileType: "epub",
-            mime: "application/epub+zip",
+            id: newsletter.id,
+            fileType: fileType,
+            mime:
+              fileType == "epub"
+                ? "application/epub+zip"
+                : newsletter.sourceMimeType,
           }),
         );
       },
     });
-  }, [setNewsletterDoubleClickedCallback]);
+  }, [setShowNewsletterFileCallback]);
 
   useEffect(() => {
     setShowNewsletterContextMenuCallback({
@@ -156,14 +165,38 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
         updateNewsletters();
       } else if (message.type == "file fetched") {
         if (
-          message.fileType === "epub" &&
-          message.id === pendingDownload.current
+          message.fileType === pendingDownload.current?.fileType &&
+          message.id === pendingDownload.current?.id
         ) {
-          const file = await files().tryReadFile("epub", message.id);
-          const newsletter = await library().getNewsletter(message.id);
-          if (file !== null && newsletter !== undefined) {
-            const contents = await file.arrayBuffer();
-            setNewsletterData(newsletter, contents);
+          if (message.fileType === "epub") {
+            const file = await files().tryReadFile(
+              message.fileType,
+              message.id,
+            );
+            const newsletter = await library().getNewsletter(message.id);
+            if (file !== null && newsletter !== undefined) {
+              const contents = await file.arrayBuffer();
+              setNewsletterData(newsletter, contents);
+            }
+          } else {
+            const url = await files().tryGetFileURL(
+              message.fileType,
+              message.id,
+            );
+            if (url !== null) {
+              const handle = window.open(url, "_blank");
+              if (handle === null) {
+                enqueueSnackbar(
+                  "Failed to open source, check popup blocker settings",
+                  { variant: "error" },
+                );
+                URL.revokeObjectURL(url);
+              } else {
+                handle.addEventListener("unload", () => {
+                  URL.revokeObjectURL(url);
+                });
+              }
+            }
           }
         }
       }

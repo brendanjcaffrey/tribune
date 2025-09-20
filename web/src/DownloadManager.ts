@@ -23,21 +23,24 @@ export class DownloadManager {
     }
 
     try {
-      const { data } = await axios.get(`/newsletters/${msg.id}/epub`, {
-        headers: { Authorization: `Bearer ${this.authToken}` },
-        responseType: "arraybuffer",
-        onDownloadProgress: (e) => {
-          postMessage(
-            buildWorkerMessage("file download status", {
-              id: msg.id,
-              fileType: msg.fileType,
-              status: "in progress",
-              receivedBytes: e.bytes,
-              totalBytes: e.total,
-            }),
-          );
+      const { data } = await axios.get(
+        `/newsletters/${msg.id}/${msg.fileType}`,
+        {
+          headers: { Authorization: `Bearer ${this.authToken}` },
+          responseType: "arraybuffer",
+          onDownloadProgress: (e) => {
+            postMessage(
+              buildWorkerMessage("file download status", {
+                id: msg.id,
+                fileType: msg.fileType,
+                status: "in progress",
+                receivedBytes: e.bytes,
+                totalBytes: e.total,
+              }),
+            );
+          },
         },
-      });
+      );
       if (await files().tryWriteFile(msg.fileType, msg.id, data)) {
         postMessage(
           buildWorkerMessage("file download status", {

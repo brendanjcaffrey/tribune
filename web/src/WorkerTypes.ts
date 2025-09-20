@@ -1,5 +1,4 @@
 export type FileType = "source" | "epub";
-export type MimeType = "application/epub+zip" | "application/pdf" | "text/html";
 export type DownloadStatus = "in progress" | "done" | "error" | "canceled";
 
 export interface InfoMessage {
@@ -32,7 +31,7 @@ export interface NewslettersUpdated {
 export interface DownloadFileMessage {
   type: "download file";
   fileType: FileType;
-  mime: MimeType;
+  mime: string;
   id: number;
 }
 

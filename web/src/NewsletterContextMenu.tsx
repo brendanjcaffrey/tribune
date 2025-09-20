@@ -10,6 +10,8 @@ import { SortableNewsletter } from "./SortableNewsletter";
 import { useEffect, useState } from "react";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
+import { useAtomValue } from "jotai";
+import { showNewsletterFileCallbackAtom } from "./State";
 
 export interface NewsletterContextMenuData {
   newsletter: SortableNewsletter;
@@ -26,6 +28,26 @@ export function NewsletterContextMenu({
   data,
   handleClose,
 }: NewsletterContextMenuProps) {
+  const showNewsletterFileCallback = useAtomValue(
+    showNewsletterFileCallbackAtom,
+  );
+
+  const showEpub = () => {
+    if (!data) {
+      return;
+    }
+    showNewsletterFileCallback.fn(data.newsletter, "epub");
+    handleClose();
+  };
+
+  const showSource = () => {
+    if (!data) {
+      return;
+    }
+    showNewsletterFileCallback.fn(data.newsletter, "source");
+    handleClose();
+  };
+
   const [isRead, setIsRead] = useState(data?.newsletter.read ?? false);
   useEffect(() => {
     if (data) {
@@ -100,13 +122,13 @@ export function NewsletterContextMenu({
             <ListItemText>Mark as Read</ListItemText>
           </MenuItem>
         )}
-        <MenuItem>
+        <MenuItem onClick={showEpub}>
           <ListItemIcon>
             <Book fontSize="small" />
           </ListItemIcon>
           <ListItemText>Open ePub</ListItemText>
         </MenuItem>
-        <MenuItem>
+        <MenuItem onClick={showSource}>
           <ListItemIcon>
             <Source fontSize="small" />
           </ListItemIcon>
