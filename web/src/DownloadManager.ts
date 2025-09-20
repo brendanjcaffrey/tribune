@@ -1,6 +1,11 @@
 import axios from "axios";
 import { files } from "./Files";
-import { buildWorkerMessage, type DownloadFileMessage } from "./WorkerTypes";
+import {
+  buildWorkerMessage,
+  FileType,
+  type DownloadFileMessage,
+} from "./WorkerTypes";
+import library from "./Library";
 
 export class DownloadManager {
   private authToken: string | null = null;
@@ -19,6 +24,27 @@ export class DownloadManager {
 
   public async startDownload(msg: DownloadFileMessage) {
     if (!this.authToken) {
+      return;
+    }
+
+    let exists = await files().fileExists(msg.fileType, msg.id);
+    if (msg.fileType === "epub") {
+      const newsletter = await library().getNewsletter(msg.id);
+      if (newsletter && newsletter.epubVersion != newsletter.epubUpdatedAt) {
+        // epub version has changed, need to re-download
+        exists = false;
+      }
+    }
+
+    if (exists) {
+      // file already exists, no need to download again
+      postMessage(
+        buildWorkerMessage("file fetched", {
+          id: msg.id,
+          fileType: msg.fileType,
+        }),
+      );
+      await this.touchFile(msg.id, msg.fileType);
       return;
     }
 
@@ -42,6 +68,8 @@ export class DownloadManager {
         },
       );
       if (await files().tryWriteFile(msg.fileType, msg.id, data)) {
+        await this.touchFile(msg.id, msg.fileType);
+
         postMessage(
           buildWorkerMessage("file download status", {
             id: msg.id,
@@ -51,14 +79,16 @@ export class DownloadManager {
             totalBytes: data.byteLength,
           }),
         );
+
         postMessage(
           buildWorkerMessage("file fetched", {
             id: msg.id,
             fileType: msg.fileType,
           }),
         );
+      } else {
+        throw new Error("failed to write downloaded file");
       }
-      // TODO handle this failure somehow?
     } catch (error) {
       console.error(error);
       postMessage(
@@ -70,6 +100,23 @@ export class DownloadManager {
           totalBytes: undefined,
         }),
       );
+    }
+  }
+
+  async touchFile(id: number, fileType: FileType) {
+    if (fileType === "epub") {
+      library().updateNewsletter(id, (n) => {
+        return {
+          epubVersion: n.epubUpdatedAt,
+          epubLastAccessedAt: new Date().toISOString(),
+        };
+      });
+    } else {
+      library().updateNewsletter(id, () => {
+        return {
+          sourceLastAccessedAt: new Date().toISOString(),
+        };
+      });
     }
   }
 }

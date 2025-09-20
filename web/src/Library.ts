@@ -137,6 +137,32 @@ class Library {
     return await this.db.get("newsletters", id);
   }
 
+  public async updateNewsletter(
+    id: number,
+    updates: (n: Newsletter) => Partial<Newsletter> | Newsletter,
+  ): Promise<boolean> {
+    if (!this.validState) {
+      return false;
+    }
+    if (!this.db) {
+      this.setError("updating newsletter", "database is not initialized");
+      return false;
+    }
+    try {
+      const newsletter = await this.db.get("newsletters", id);
+      if (!newsletter) {
+        this.setError("updating newsletter", `newsletter ${id} not found`);
+        return false;
+      }
+      const updatedNewsletter = { ...newsletter, ...updates(newsletter) };
+      await this.db.put("newsletters", updatedNewsletter);
+      return true;
+    } catch (error) {
+      this.setError("updating newsletter", error);
+      return false;
+    }
+  }
+
   public async getAllNewsletters(): Promise<Newsletter[]> {
     if (!this.validState) {
       return [];
