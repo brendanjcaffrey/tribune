@@ -43,9 +43,6 @@ function fadeRead(params: CellClassParams) {
 }
 
 const gridOptions: GridOptions = {
-  autoSizeStrategy: {
-    type: "fitCellContents",
-  },
   suppressCellFocus: true,
   columnDefs: [
     { field: "id", hide: true },
@@ -59,9 +56,15 @@ const gridOptions: GridOptions = {
     {
       field: "title",
       cellStyle: fadeRead,
+      flex: 4,
     },
-    { field: "author", cellStyle: fadeRead },
-    { field: "createdAt", cellDataType: "dateTime", cellStyle: fadeRead },
+    { field: "author", cellStyle: fadeRead, flex: 4 },
+    {
+      field: "createdAt",
+      cellDataType: "dateTime",
+      cellStyle: fadeRead,
+      flex: 2,
+    },
   ],
   defaultColDef: {
     filter: true,
