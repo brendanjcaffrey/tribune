@@ -13,6 +13,7 @@ import { useState } from "react";
 import EpubReader from "./EpubReader";
 import { Newsletter } from "./Library";
 import Notifier from "./Notifier";
+import SettingsRecorder from "./SettingsRecorder";
 
 const theme = createTheme({
   colorSchemes: {
@@ -57,6 +58,7 @@ function App() {
               )}
             </LibraryWrapper>
           </AuthWrapper>
+          <SettingsRecorder />
         </BackgroundWrapper>
       </ThemeProvider>
     </JotaiProvider>

@@ -18,3 +18,4 @@ export const showNewsletterContextMenuCallbackAtom = atom({
 });
 
 export const clearAuthFnAtom = atom({ fn: () => {} });
+export const clearSettingsFnAtom = atom({ fn: () => {} });

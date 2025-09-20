@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 import { Button, ButtonOwnProps } from "@mui/material";
 import { Logout } from "@mui/icons-material";
-import { clearAuthFnAtom } from "./State";
+import { clearAuthFnAtom, clearSettingsFnAtom } from "./State";
 import library from "./Library";
 import downloadsStore from "./Library";
 import { files } from "./Files";
@@ -15,9 +15,11 @@ interface LogOutButtonProps {
 
 function LogOutButton({ size, sx }: LogOutButtonProps) {
   const clearAuthFn = useAtomValue(clearAuthFnAtom);
+  const clearSettingsFn = useAtomValue(clearSettingsFnAtom);
 
   async function clearAllState() {
     clearAuthFn.fn();
+    clearSettingsFn.fn();
     library().clear();
     await files().clearAll();
     WorkerInstance.postMessage(buildMainMessage("clear auth token", {}));

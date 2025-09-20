@@ -14,6 +14,8 @@ import { enqueueSnackbar } from "notistack";
 import { formatBytes } from "./Util";
 import LogOutButton from "./LogOutButton";
 import { HelpOutlineRounded } from "@mui/icons-material";
+import { useAtom } from "jotai";
+import { downloadModeAtom } from "./Settings";
 
 interface SettingsPanelProps {
   showSettings: boolean;
@@ -55,6 +57,28 @@ function SettingsPanel({
 
   const closePersistStorageHelp = () => {
     setPersistStorageHelpAnchorEl(null);
+  };
+
+  const [downloadMode, setDownloadMode] = useAtom(downloadModeAtom);
+  const [downloadModeHelpAnchorEl, setDownloadModeHelpAnchorEl] =
+    useState<HTMLButtonElement | null>(null);
+  const downloadModeHelpOpen = Boolean(downloadModeHelpAnchorEl);
+
+  const handleDownloadModeChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    if (!persisted) {
+      return;
+    }
+    setDownloadMode(event.target.checked);
+  };
+
+  const openDownloadModeHelp = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setDownloadModeHelpAnchorEl(event.currentTarget);
+  };
+
+  const closeDownloadModeHelp = () => {
+    setDownloadModeHelpAnchorEl(null);
   };
 
   const [usage, setUsage] = useState(0);
@@ -104,6 +128,23 @@ function SettingsPanel({
               <HelpOutlineRounded sx={{ float: "right" }} />
             </IconButton>
           </Grid>
+          <Grid size={10}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={downloadMode}
+                  onChange={handleDownloadModeChange}
+                  disabled={!persisted}
+                />
+              }
+              label="Download Mode"
+            />
+          </Grid>
+          <Grid size={2}>
+            <IconButton onClick={openDownloadModeHelp}>
+              <HelpOutlineRounded />
+            </IconButton>
+          </Grid>
           <Grid container spacing={0} sx={{ width: "300px" }}>
             <Grid size={12}>
               <Tooltip title={`${formatBytes(usage)} / ${formatBytes(quota)}`}>
@@ -129,6 +170,21 @@ function SettingsPanel({
             and give it a larger quota. Firefox will prompt you to allow this,
             but Chrome may not allow this until you use the app more. Once
             granted, it is not possible to revoke this permission.
+          </div>
+        </Popover>
+        <Popover
+          open={downloadModeHelpOpen}
+          anchorEl={downloadModeHelpAnchorEl}
+          onClose={closeDownloadModeHelp}
+          anchorOrigin={{
+            vertical: "bottom",
+            horizontal: "left",
+          }}
+        >
+          <div style={{ padding: "10px", maxWidth: "300px" }}>
+            Download mode will aggressively download all epub files at page load
+            so you can read them all without having an internet connection. This
+            mode is only available if storage persistence is enabled.
           </div>
         </Popover>
       </DialogContent>

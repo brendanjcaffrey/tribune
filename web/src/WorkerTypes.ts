@@ -35,6 +35,11 @@ export interface DownloadFileMessage {
   id: number;
 }
 
+export interface SetDownloadModeEnabledMessage {
+  type: "set download mode";
+  enabled: boolean;
+}
+
 export interface FileFetchedMessage {
   type: "file fetched";
   fileType: FileType;
@@ -77,6 +82,7 @@ export type MainToWorkerMessage =
   | ClearAuthTokenMessage
   | StartSyncMessage
   | DownloadFileMessage
+  | SetDownloadModeEnabledMessage
   | MarkNewsletterAsReadMessage
   | MarkNewsletterAsUnreadMessage
   | MarkNewsletterAsDeletedMessage
