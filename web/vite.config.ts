@@ -16,6 +16,7 @@ const config: ViteConfig = {
   },
   server: {
     port: 1848,
+    // allowedHosts: true, // uncomment this line if you want to allow remote access
     proxy: {
       "/users": "http://localhost:1847",
       "/auth": "http://localhost:1847",

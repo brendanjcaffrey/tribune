@@ -29,6 +29,13 @@ function LibraryWrapper({ children }: LibraryWrapperProps) {
 
   if (error) {
     return <CenteredHalfAlert severity="error">{error}</CenteredHalfAlert>;
+  } else if (!navigator.storage) {
+    return (
+      <CenteredHalfAlert severity="error">
+        This app depends on navigator.storage, which is only available in secure
+        contexts (localhost and https://).
+      </CenteredHalfAlert>
+    );
   } else if (!databaseInitialized) {
     return (
       <DelayedElement>

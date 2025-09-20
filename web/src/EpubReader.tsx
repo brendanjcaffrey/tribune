@@ -127,6 +127,28 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     rendition.on("keydown", handleKey);
     window.addEventListener("keydown", handleKey);
 
+    let startX = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      startX = e.changedTouches[0].screenX;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const endX = e.changedTouches[0].screenX;
+      const deltaX = endX - startX;
+      const threshold = 50; // px threshold to count as swipe
+
+      if (Math.abs(deltaX) > threshold) {
+        if (deltaX < 0) {
+          rendition.next();
+        } else {
+          rendition.prev();
+        }
+      }
+    };
+
+    rendition.on("touchstart", handleTouchStart);
+    rendition.on("touchend", handleTouchEnd);
+
     rendition.on("relocated", (location: Location) => {
       WorkerInstance.postMessage(
         buildMainMessage("update newsletter progress", {

@@ -79,7 +79,7 @@ const gridOptions: GridOptions = {
       store.get(showNewsletterContextMenuCallbackAtom).fn(data);
     },
   },
-  onRowDoubleClicked: (event) => {
+  onRowClicked: (event) => {
     store
       .get(showNewsletterFileCallbackAtom)
       .fn(event.data as SortableNewsletter, "epub");

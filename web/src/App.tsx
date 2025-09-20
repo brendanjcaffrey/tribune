@@ -26,6 +26,7 @@ function App() {
   const [displayedNewsletter, setDisplayedNewsletter] =
     useState<Newsletter | null>(null);
   const [epubContents, setEpubContents] = useState<ArrayBuffer | null>(null);
+  const newsletterShown = !!epubContents && !!displayedNewsletter;
 
   const setNewsletterData = (newsletter: Newsletter, contents: ArrayBuffer) => {
     setDisplayedNewsletter(newsletter);
@@ -43,13 +44,16 @@ function App() {
         <BackgroundWrapper>
           <SnackbarProvider maxSnack={3} />
           <Notifier />
-          <TopBar />
+          <TopBar
+            newsletterShown={newsletterShown}
+            closeNewsletter={closeNewsletter}
+          />
           <AuthWrapper>
             <LibraryWrapper>
-              {(!epubContents || !displayedNewsletter) && (
+              {!newsletterShown && (
                 <NewsletterList setNewsletterData={setNewsletterData} />
               )}
-              {epubContents && displayedNewsletter && (
+              {newsletterShown && (
                 <EpubReader
                   newsletter={displayedNewsletter}
                   file={epubContents}

@@ -9,6 +9,7 @@ import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 
 import { useAtom, useAtomValue } from "jotai";
 import { anyDownloadErrorsAtom, authVerifiedAtom, searchAtom } from "./State";
@@ -59,7 +60,15 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
   },
 }));
 
-export default function TopBar() {
+interface TopBarProps {
+  newsletterShown: boolean;
+  closeNewsletter: () => void;
+}
+
+export default function TopBar({
+  newsletterShown,
+  closeNewsletter,
+}: TopBarProps) {
   const [search, setSearch] = useAtom(searchAtom);
   const anyDownloadErrors = useAtomValue(anyDownloadErrorsAtom);
   const [showDownloads, setShowDownloads] = useState(false);
@@ -98,7 +107,7 @@ export default function TopBar() {
             Tribune
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
-          {authVerified && (
+          {authVerified && !newsletterShown && (
             <>
               <Search>
                 <SearchIconWrapper>
@@ -139,6 +148,17 @@ export default function TopBar() {
                 </IconButton>
               </Box>
             </>
+          )}
+          {authVerified && newsletterShown && (
+            <Box sx={{ display: { xs: "none", md: "flex" } }}>
+              <IconButton
+                size="large"
+                color="inherit"
+                onClick={closeNewsletter}
+              >
+                <CloseRoundedIcon />
+              </IconButton>
+            </Box>
           )}
         </Toolbar>
       </AppBar>

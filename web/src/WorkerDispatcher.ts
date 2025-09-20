@@ -3,6 +3,9 @@ import library from "./Library";
 import { SyncManager } from "./SyncManager";
 import { UpdateManager } from "./UpdateManager";
 import { MainToWorkerMessage } from "./WorkerTypes";
+import axios from "axios";
+
+axios.defaults.headers.common["X-Requested-With"] = "XMLHttpRequest";
 
 const syncManager = new SyncManager();
 const downloadManager = new DownloadManager();
