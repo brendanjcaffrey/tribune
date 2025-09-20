@@ -9,7 +9,6 @@ import library from "./Library";
 
 export class DownloadManager {
   private authToken: string | null = null;
-  private downloadModeEnabled: boolean = false;
 
   constructor() {
     files();
@@ -21,10 +20,6 @@ export class DownloadManager {
 
   public clearAuthToken() {
     this.authToken = null;
-  }
-
-  public setDownloadModeEnabled(enabled: boolean) {
-    this.downloadModeEnabled = enabled;
   }
 
   public async startDownload(msg: DownloadFileMessage) {

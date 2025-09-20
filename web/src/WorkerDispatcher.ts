@@ -33,9 +33,6 @@ onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
     case "download file":
       downloadManager.startDownload(msg);
       break;
-    case "set download mode":
-      downloadManager.setDownloadModeEnabled(msg.enabled);
-      break;
     case "mark newsletter as read":
       updateManager.markNewsletterAsRead(msg.id);
       break;
