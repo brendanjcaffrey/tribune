@@ -12,6 +12,7 @@ import { store } from "./State";
 import { useState } from "react";
 import EpubReader from "./EpubReader";
 import { Newsletter } from "./Library";
+import Notifier from "./Notifier";
 
 const theme = createTheme({
   colorSchemes: {
@@ -40,6 +41,7 @@ function App() {
       <ThemeProvider theme={theme}>
         <BackgroundWrapper>
           <SnackbarProvider maxSnack={3} />
+          <Notifier />
           <TopBar />
           <AuthWrapper>
             <LibraryWrapper>

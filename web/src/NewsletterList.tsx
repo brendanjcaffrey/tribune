@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WorkerInstance } from "./WorkerInstance";
-import { enqueueSnackbar } from "notistack";
 import library, { Newsletter } from "./Library";
 import { AgGridReact } from "ag-grid-react";
 import {
@@ -153,11 +152,7 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
 
   useEffect(() => {
     const listener = WorkerInstance.addMessageListener(async (message) => {
-      if (message.type == "error") {
-        enqueueSnackbar(`sync worker error: ${message.error}`, {
-          variant: "error",
-        });
-      } else if (message.type == "newsletters updated") {
+      if (message.type == "newsletters updated") {
         updateNewsletters();
       } else if (message.type == "file fetched") {
         if (

@@ -16,6 +16,8 @@ import { useEffect, useState } from "react";
 import { Badge, Tooltip } from "@mui/material";
 import DownloadsPanel from "./DownloadsPanel";
 import SettingsPanel from "./SettingsPanel";
+import { WorkerInstance } from "./WorkerInstance";
+import { buildMainMessage } from "./WorkerTypes";
 
 const Search = styled("div")(({ theme }) => ({
   position: "relative",
@@ -72,6 +74,10 @@ export default function TopBar() {
     setShowSettings((prev) => !prev);
   };
 
+  const startSync = () => {
+    WorkerInstance.postMessage(buildMainMessage("start sync", {}));
+  };
+
   useEffect(() => {
     if (!authVerified) {
       setShowDownloads(false);
@@ -106,7 +112,7 @@ export default function TopBar() {
                 />
               </Search>
               <Box sx={{ display: { xs: "none", md: "flex" } }}>
-                <IconButton size="large" color="inherit">
+                <IconButton size="large" color="inherit" onClick={startSync}>
                   <SyncRoundedIcon />
                 </IconButton>
                 <Tooltip title="Download Status">

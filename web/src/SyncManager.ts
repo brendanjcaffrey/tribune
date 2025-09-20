@@ -31,7 +31,12 @@ export class SyncManager {
     }
   }
 
-  public syncLibrary(): Promise<void> {
+  forceSyncLibrary() {
+    /* unawaited */ this.syncLibrary();
+    postMessage(buildWorkerMessage("info", { info: "Sync started" }));
+  }
+
+  syncLibrary(): Promise<void> {
     return this.mutex.runExclusive(async () => this.syncLibraryExclusive());
   }
 

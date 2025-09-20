@@ -2,13 +2,14 @@ export type FileType = "source" | "epub";
 export type MimeType = "application/epub+zip" | "application/pdf" | "text/html";
 export type DownloadStatus = "in progress" | "done" | "error" | "canceled";
 
+export interface InfoMessage {
+  type: "info";
+  info: string;
+}
+
 export interface ErrorMessage {
   type: "error";
   error: string;
-}
-
-export interface StartSyncMessage {
-  type: "start sync";
 }
 
 export interface SetAuthTokenMessage {
@@ -18,6 +19,10 @@ export interface SetAuthTokenMessage {
 
 export interface ClearAuthTokenMessage {
   type: "clear auth token";
+}
+
+export interface StartSyncMessage {
+  type: "start sync";
 }
 
 export interface NewslettersUpdated {
@@ -80,6 +85,7 @@ export type MainToWorkerMessage =
 
 export type WorkerToMainMessage =
   | ErrorMessage
+  | InfoMessage
   | NewslettersUpdated
   | FileFetchedMessage
   | FileDownloadStatusMessage;

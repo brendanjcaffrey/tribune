@@ -27,6 +27,9 @@ onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
       downloadManager.clearAuthToken();
       updateManager.clearAuthToken();
       break;
+    case "start sync":
+      syncManager.forceSyncLibrary();
+      break;
     case "download file":
       downloadManager.startDownload(msg);
       break;
