@@ -56,7 +56,15 @@ UPDATE_NEWSLETTER_PROGRESS_QUERY = <<~SQL
   WHERE id = $1
     AND deleted = FALSE;
 SQL
-TOUCH_EPUB_NEWSLETTER_QUERY = 'UPDATE newsletters SET updated_at = CURRENT_TIMESTAMP, epub_updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted = FALSE;'
+EPUB_UPDATED_NEWSLETTER_QUERY = <<-SQL
+  UPDATE newsletters
+  SET
+      updated_at = CURRENT_TIMESTAMP,
+      epub_updated_at = CURRENT_TIMESTAMP,
+      progress = ''
+  WHERE id = $1
+      AND deleted = FALSE;
+SQL
 
 EPUB_MIME_TYPE = 'application/epub+zip'
 PDF_MIME_TYPE = 'application/pdf'
@@ -300,7 +308,7 @@ class Server < Sinatra::Base
     halt 400, 'Missing epub file' if !params[:epub_file] || !(epub_tempfile = params[:epub_file][:tempfile])
     halt 400, 'Invalid epub mime type' unless params[:epub_file][:type] == EPUB_MIME_TYPE
 
-    result = update_query(TOUCH_EPUB_NEWSLETTER_QUERY, [params[:id].to_i])
+    result = update_query(EPUB_UPDATED_NEWSLETTER_QUERY, [params[:id].to_i])
     halt 404, 'Newsletter not found' if result.zero?
 
     FileUtils.move(epub_tempfile.path, epub_path(params[:id].to_i))

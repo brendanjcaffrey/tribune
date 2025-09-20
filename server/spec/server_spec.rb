@@ -1158,7 +1158,7 @@ RSpec.describe 'Tribune Server' do
 
     before do
       create_user
-      create_newsletter(id: 1, updated_at: BASE_TIME, epub_updated_at: BASE_TIME, read: true)
+      create_newsletter(id: 1, updated_at: BASE_TIME, epub_updated_at: BASE_TIME, read: true, progress: 'hi')
       CONFIG.newsletters_dir = temp_dir
     end
 
@@ -1202,7 +1202,7 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(404)
     end
 
-    it 'updates the file contents and updated_at timestamps' do
+    it 'updates the file contents, updated_at timestamps and clears the progress' do
       put '/newsletters/1/epub', { epub_file: epub_file }, get_auth_header
       expect(last_response).to be_ok
 
@@ -1215,6 +1215,7 @@ RSpec.describe 'Tribune Server' do
       item = JSON.parse(last_response.body)['result'][0]
       expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+      expect(item['progress']).to eq('')
     end
 
     it 'returns an error if the newsletter is deleted' do
