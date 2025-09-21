@@ -139,6 +139,7 @@ export class DownloadManager {
     }
 
     await this.downloadFile(msg.id, msg.fileType);
+    postMessage(buildWorkerMessage("newsletters updated", {}));
   }
 
   async downloadFile(id: number, fileType: FileType) {

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useWindowSize } from "@react-hook/window-size";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useTheme } from "@mui/material/styles";
+import Book from "@mui/icons-material/Book";
+import Source from "@mui/icons-material/Source";
 import { enqueueSnackbar } from "notistack";
 import { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
 import {
@@ -33,7 +35,7 @@ import {
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-function fadeRead(params: CellClassParams) {
+function fadedIfRead(params: CellClassParams) {
   if (params.data && !params.data.read) {
     return null;
   } else if (params.data && params.data.read) {
@@ -46,7 +48,10 @@ function fadeRead(params: CellClassParams) {
 const gridOptions: GridOptions = {
   suppressCellFocus: true,
   columnDefs: [
-    { field: "id", hide: true },
+    {
+      field: "id",
+      hide: true,
+    },
     {
       field: "sortIndex",
       headerName: "Sort",
@@ -56,15 +61,47 @@ const gridOptions: GridOptions = {
     },
     {
       field: "title",
-      cellStyle: fadeRead,
+      cellStyle: fadedIfRead,
+      flex: 4,
+      cellRenderer: (params: CustomCellRendererProps<SortableNewsletter>) => {
+        return (
+          <>
+            {params.value}
+            {params.data?.epubLastAccessedAt && (
+              <Book
+                fontSize="small"
+                sx={{
+                  verticalAlign: "middle",
+                  paddingLeft: "2px",
+                  transform: "scale(0.75)",
+                }}
+              />
+            )}
+            {params.data?.sourceLastAccessedAt && (
+              <Source
+                fontSize="small"
+                sx={{
+                  verticalAlign: "middle",
+                  paddingLeft: "2px",
+                  transform: "scale(0.75)",
+                }}
+              />
+            )}
+          </>
+        );
+      },
+    },
+    {
+      field: "author",
+      cellStyle: fadedIfRead,
       flex: 4,
     },
-    { field: "author", cellStyle: fadeRead, flex: 4 },
     {
       field: "createdAt",
       cellDataType: "dateTime",
-      cellStyle: fadeRead,
+      cellStyle: fadedIfRead,
       flex: 2,
+      headerName: "Published",
     },
   ],
   defaultColDef: {
