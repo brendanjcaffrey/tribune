@@ -143,6 +143,12 @@ const EpubReader: React.FC<EpubReaderProps> = ({
         } else {
           rendition.prev();
         }
+      } else {
+        if (startX < window.innerWidth / 2) {
+          rendition.prev();
+        } else {
+          rendition.next();
+        }
       }
     };
 
