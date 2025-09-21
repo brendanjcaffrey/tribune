@@ -18,6 +18,8 @@ If you want to test on a tablet for example, you need to put a proxy like nginx 
 
 To remotely debug an Android tablet, first enable Developer Mode and then USB Debugging in Android settings. Then enable USB Debugging in the Android Firefox settings. Finally, connect the device and go to `about:debugging` in macOS Firefox and connect to the device.
 
+If you're trying to advance to the next page in an ebook and the browser is closing/goign to the previous page, this is an Android thing. In Settings, search for "System navigation", go to "Gesture navigation" settings and disable "Back Sensitivity/Left edge".
+
 ### Creating a User
 
 Run `rake user:create` and it will prompt you for a username and password.
