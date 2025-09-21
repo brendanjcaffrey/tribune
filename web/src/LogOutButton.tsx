@@ -1,6 +1,6 @@
 import { useAtomValue } from "jotai";
-import { Button, ButtonOwnProps } from "@mui/material";
-import { Logout } from "@mui/icons-material";
+import Button, { ButtonOwnProps } from "@mui/material/Button";
+import LogoutIcon from "@mui/icons-material/Logout";
 import { clearAuthFnAtom, clearSettingsFnAtom } from "./State";
 import library from "./Library";
 import downloadsStore from "./Library";
@@ -32,7 +32,7 @@ function LogOutButton({ size, sx }: LogOutButtonProps) {
       variant="text"
       size={size}
       sx={sx}
-      startIcon={<Logout />}
+      startIcon={<LogoutIcon />}
       onClick={clearAllState}
     >
       Log Out

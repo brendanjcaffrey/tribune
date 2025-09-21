@@ -1,8 +1,8 @@
+import { isObject } from "lodash";
 import { useState, useEffect, useCallback } from "react";
 import axios, { isAxiosError } from "axios";
 import DelayedElement from "./DelayedElement";
 import CenteredHalfAlert from "./CenteredHalfAlert";
-import { isObject } from "lodash";
 import LogOutButton from "./LogOutButton";
 
 interface AuthVerifierProps {

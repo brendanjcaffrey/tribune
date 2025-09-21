@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { WorkerInstance } from "./WorkerInstance";
-import library, { Newsletter } from "./Library";
-import { AgGridReact } from "ag-grid-react";
+import { useWindowSize } from "@react-hook/window-size";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useTheme } from "@mui/material/styles";
+import { enqueueSnackbar } from "notistack";
+import { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
 import {
   ModuleRegistry,
   AllCommunityModule,
@@ -10,7 +12,9 @@ import {
   type CellContextMenuEvent,
   CellClassParams,
 } from "ag-grid-community";
-import { useAtomValue, useSetAtom } from "jotai";
+
+import { WorkerInstance } from "./WorkerInstance";
+import library, { Newsletter } from "./Library";
 import {
   showNewsletterFileCallbackAtom,
   searchAtom,
@@ -20,15 +24,12 @@ import {
 import { SortableNewsletter } from "./SortableNewsletter";
 import { buildMainMessage, FileType } from "./WorkerTypes";
 import { files } from "./Files";
-import { useTheme } from "@mui/material";
 import { compareNewslettersForDisplay } from "./compareNewsletters";
-import { useWindowSize } from "@react-hook/window-size";
 import { GetBodyHeight } from "./Height";
 import {
   NewsletterContextMenu,
   NewsletterContextMenuData,
 } from "./NewsletterContextMenu";
-import { enqueueSnackbar } from "notistack";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 

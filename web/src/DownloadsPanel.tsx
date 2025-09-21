@@ -1,19 +1,18 @@
 import { useState, useEffect, useCallback, JSX } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  Table,
-  TableBody,
-  TableRow,
-  TableCell,
-  Tooltip,
-} from "@mui/material";
 import downloadsStore, { Download } from "./DownloadsStore";
 import { formatBytes, formatTimestamp } from "./Util";
 import { FileDownloadStatusMessage } from "./WorkerTypes";
 import { WorkerInstance } from "./WorkerInstance";
+
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableRow from "@mui/material/TableRow";
+import TableCell from "@mui/material/TableCell";
+import Tooltip from "@mui/material/Tooltip";
 
 function DownloadStatusToDisplay(download: Download): JSX.Element {
   switch (download.status) {

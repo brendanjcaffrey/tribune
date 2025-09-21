@@ -1,24 +1,26 @@
-import { styled, alpha } from "@mui/material/styles";
-import AppBar from "@mui/material/AppBar";
-import Box from "@mui/material/Box";
-import Toolbar from "@mui/material/Toolbar";
-import IconButton from "@mui/material/IconButton";
-import Typography from "@mui/material/Typography";
-import InputBase from "@mui/material/InputBase";
-import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
-import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
-import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
-import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
-
+import { useEffect, useState } from "react";
 import { useAtom, useAtomValue } from "jotai";
 import { anyDownloadErrorsAtom, authVerifiedAtom, searchAtom } from "./State";
-import { useEffect, useState } from "react";
-import { Badge, Tooltip } from "@mui/material";
 import DownloadsPanel from "./DownloadsPanel";
 import SettingsPanel from "./SettingsPanel";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
+
+import { styled, alpha } from "@mui/material/styles";
+import AppBar from "@mui/material/AppBar";
+import Badge from "@mui/material/Badge";
+import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import InputBase from "@mui/material/InputBase";
+import Toolbar from "@mui/material/Toolbar";
+import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
+
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
+import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
+import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
+import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
 
 const Search = styled("div")(({ theme }) => ({
   position: "relative",

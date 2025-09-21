@@ -1,21 +1,20 @@
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  Popover,
-  Tooltip,
-  Grid,
-  FormControlLabel,
-  Switch,
-  IconButton,
-} from "@mui/material";
 import { enqueueSnackbar } from "notistack";
 import { formatBytes } from "./Util";
 import LogOutButton from "./LogOutButton";
-import { HelpOutlineRounded } from "@mui/icons-material";
 import { useAtom } from "jotai";
 import { downloadModeAtom } from "./Settings";
+
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import Popover from "@mui/material/Popover";
+import Tooltip from "@mui/material/Tooltip";
+import Grid from "@mui/material/Grid";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Switch from "@mui/material/Switch";
+import IconButton from "@mui/material/IconButton";
+import HelpOutlineRounded from "@mui/icons-material/HelpOutlineRounded";
 
 interface SettingsPanelProps {
   showSettings: boolean;

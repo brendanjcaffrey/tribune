@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Alert, type AlertColor } from "@mui/material";
+import Alert, { type AlertColor } from "@mui/material/Alert";
 
 interface CenteredHalfAlertProps {
   severity?: AlertColor;

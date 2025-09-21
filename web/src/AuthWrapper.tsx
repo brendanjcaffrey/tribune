@@ -1,11 +1,12 @@
 import { type ReactNode, useEffect } from "react";
+import { useAtom, useSetAtom } from "jotai";
+
 import useAuthToken from "./useAuthToken";
 import AuthForm from "./AuthForm";
 import AuthVerifier from "./AuthVerifier";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 import { authVerifiedAtom, clearAuthFnAtom } from "./State";
-import { useAtom, useSetAtom } from "jotai";
 
 interface AuthWrapperProps {
   children: ReactNode;

@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { useTheme } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 
 interface BackgroundWrapperProps {
   children: ReactNode;

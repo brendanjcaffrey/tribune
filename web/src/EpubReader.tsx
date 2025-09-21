@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { useWindowSize } from "@react-hook/window-size";
+import { Theme, useTheme } from "@mui/material/styles";
 import ePub, { Book, Location, Rendition } from "epubjs";
-import { Theme, useTheme } from "@mui/material";
 import { GetBodyHeight } from "./Height";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";

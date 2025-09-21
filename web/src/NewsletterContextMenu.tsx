@@ -1,17 +1,19 @@
-import { Menu, MenuItem, ListItemIcon, ListItemText } from "@mui/material";
-import {
-  MarkEmailUnread,
-  MarkEmailRead,
-  Book,
-  Source,
-  Delete,
-} from "@mui/icons-material";
 import { SortableNewsletter } from "./SortableNewsletter";
 import { useEffect, useState } from "react";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 import { useAtomValue } from "jotai";
 import { showNewsletterFileCallbackAtom } from "./State";
+
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
+import MarkEmailUnread from "@mui/icons-material/MarkEmailUnread";
+import MarkEmailRead from "@mui/icons-material/MarkEmailRead";
+import Book from "@mui/icons-material/Book";
+import Source from "@mui/icons-material/Source";
+import Delete from "@mui/icons-material/Delete";
 
 export interface NewsletterContextMenuData {
   newsletter: SortableNewsletter;

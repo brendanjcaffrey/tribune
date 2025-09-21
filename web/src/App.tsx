@@ -1,19 +1,21 @@
+import { useState } from "react";
 import { Provider as JotaiProvider } from "jotai";
-import { createTheme, ThemeProvider } from "@mui/material";
 import { SnackbarProvider } from "notistack";
+
+import { createTheme, ThemeProvider } from "@mui/material/styles";
+
 import { BackgroundWrapper } from "./BackgroundWrapper";
 import AuthWrapper from "./AuthWrapper";
-import "./index.css";
 import LibraryWrapper from "./LibraryWrapper";
 import NewsletterList from "./NewsletterList";
 import TopBar from "./TopBar";
 import { files } from "./Files";
 import { store } from "./State";
-import { useState } from "react";
 import EpubReader from "./EpubReader";
 import { Newsletter } from "./Library";
 import Notifier from "./Notifier";
 import SettingsRecorder from "./SettingsRecorder";
+import "./index.css";
 
 const theme = createTheme({
   colorSchemes: {
