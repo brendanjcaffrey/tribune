@@ -69,13 +69,16 @@ export class DownloadManager {
     }
 
     const newsletters = await library().getAllNewsletters();
-    const readNewsletters = newsletters.filter((n) => n.read);
+    const readOrDeletedNewsletters = newsletters.filter(
+      (n) => n.read || n.deleted,
+    );
     let deletedAny = false;
 
-    for (const newsletter of readNewsletters) {
+    for (const newsletter of readOrDeletedNewsletters) {
       if (
         newsletter.epubLastAccessedAt &&
-        this.shouldDeleteFile(newsletter.epubLastAccessedAt)
+        (newsletter.deleted ||
+          this.shouldDeleteFile(newsletter.epubLastAccessedAt))
       ) {
         if (await files().tryDeleteFile("epub", newsletter.id)) {
           deletedAny = true;
@@ -91,7 +94,8 @@ export class DownloadManager {
       }
       if (
         newsletter.sourceLastAccessedAt &&
-        this.shouldDeleteFile(newsletter.sourceLastAccessedAt)
+        (newsletter.deleted ||
+          this.shouldDeleteFile(newsletter.sourceLastAccessedAt))
       ) {
         if (await files().tryDeleteFile("source", newsletter.id)) {
           deletedAny = true;
