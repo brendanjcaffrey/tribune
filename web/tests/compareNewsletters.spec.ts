@@ -2,6 +2,7 @@ import { Newsletter } from "../src/Library";
 import {
   compareNewslettersForApi,
   compareNewslettersForDisplay,
+  compareNewslettersForDownloading,
 } from "../src/compareNewsletters";
 import { expect, test } from "vitest";
 
@@ -63,4 +64,18 @@ test("should sort first by putting read at the bottom, then by created descendin
     .sort(compareNewslettersForDisplay)
     .map((n) => n.id);
   expect(sortedNewsletterIds).toEqual([3, 1, 5, 4, 2]);
+});
+
+test("should sort first then by created ascending, then by id", async () => {
+  const newsletters = [
+    buildNewsletter(2, "2025-01-02 06:00:01.456789+00", false),
+    buildNewsletter(5, "2025-01-04 06:00:01.456789+00", false),
+    buildNewsletter(3, "2025-01-03 06:00:01.456789+00", false),
+    buildNewsletter(1, "2025-01-01 06:00:01.456789+00", false),
+    buildNewsletter(4, "2025-01-04 06:00:01.456789+00", false),
+  ];
+  const sortedNewsletterIds = newsletters
+    .sort(compareNewslettersForDownloading)
+    .map((n) => n.id);
+  expect(sortedNewsletterIds).toEqual([1, 2, 3, 4, 5]);
 });

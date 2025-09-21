@@ -7,16 +7,17 @@ import axios from "axios";
 
 axios.defaults.headers.common["X-Requested-With"] = "XMLHttpRequest";
 
-const syncManager = new SyncManager();
 const downloadManager = new DownloadManager();
+const syncManager = new SyncManager(downloadManager);
 const updateManager = new UpdateManager();
 
 library().setInitializedListener(async () => {
   syncManager.setLibraryInitialized();
   updateManager.setLibraryInitialized();
+  downloadManager.setLibraryInitialized();
 });
 
-onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
+onmessage = async (ev: MessageEvent<MainToWorkerMessage>) => {
   const msg = ev.data;
 
   switch (msg.type) {
@@ -36,11 +37,15 @@ onmessage = (ev: MessageEvent<MainToWorkerMessage>) => {
     case "download file":
       downloadManager.startDownload(msg);
       break;
+    case "set download mode":
+      downloadManager.setDownloadMode(msg.enabled);
+      break;
     case "mark newsletter as read":
       updateManager.markNewsletterAsRead(msg.id);
       break;
     case "mark newsletter as unread":
-      updateManager.markNewsletterAsUnread(msg.id);
+      await updateManager.markNewsletterAsUnread(msg.id);
+      downloadManager.checkForDownloads();
       break;
     case "mark newsletter as deleted":
       updateManager.markNewsletterAsDeleted(msg.id);

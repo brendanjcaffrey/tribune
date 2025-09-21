@@ -3,6 +3,7 @@ import { SyncManager } from "../src/SyncManager";
 import library, { Newsletter } from "../src/Library";
 import axios, { GenericAbortSignal } from "axios";
 import { ErrorMessage, NewslettersUpdated } from "../src/WorkerTypes";
+import { DownloadManager } from "../src/DownloadManager";
 
 vi.mock("axios", () => ({
   default: {
@@ -20,6 +21,12 @@ vi.mock("../src/Library", () => {
   const mockLibrary = new MockLibrary();
   return {
     default: vi.fn(() => mockLibrary),
+  };
+});
+
+vi.mock("../src/Files", () => {
+  return {
+    files: vi.fn(),
   };
 });
 
@@ -237,10 +244,12 @@ const N5_updated = {
 };
 
 describe("SyncManager", () => {
+  const downloadManager = new DownloadManager();
   let syncManager: SyncManager;
 
   beforeEach(() => {
-    syncManager = new SyncManager();
+    downloadManager.checkForDownloads = vi.fn();
+    syncManager = new SyncManager(downloadManager);
 
     vi.useFakeTimers();
     vi.resetAllMocks();
@@ -259,6 +268,7 @@ describe("SyncManager", () => {
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
     expectPutNewsletterCall(N1);
     expectNewsletterUpdatedMessage();
+    expect(vi.mocked(downloadManager.checkForDownloads)).toHaveBeenCalledOnce();
   });
 
   it("should attempt to sync with the latest id/updated at", async () => {
@@ -294,6 +304,7 @@ describe("SyncManager", () => {
 
     expectPutNewsletterCall(N4);
     expectNewsletterUpdatedMessage();
+    expect(vi.mocked(downloadManager.checkForDownloads)).toHaveBeenCalledOnce();
   });
 
   it("should overwrite updated newsletters but keep the epubVersion field", async () => {
@@ -329,6 +340,7 @@ describe("SyncManager", () => {
 
     expectPutNewsletterCall(N5_updated);
     expectNewsletterUpdatedMessage();
+    expect(vi.mocked(downloadManager.checkForDownloads)).toHaveBeenCalledOnce();
   });
 
   it("should post an error when the sync request fails", async () => {
@@ -339,6 +351,7 @@ describe("SyncManager", () => {
     await syncManager.setAuthToken("test-token");
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
     expectErrorPostMessage();
+    expect(vi.mocked(downloadManager.checkForDownloads)).not.toHaveBeenCalled();
   });
 
   it("should cancel pending requests if the auth token is cleared", async () => {
@@ -370,5 +383,6 @@ describe("SyncManager", () => {
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
     expect(library().putNewsletter).toHaveBeenCalledTimes(0);
     expect(postMessage).toHaveBeenCalledTimes(0);
+    expect(vi.mocked(downloadManager.checkForDownloads)).not.toHaveBeenCalled();
   });
 });

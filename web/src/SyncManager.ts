@@ -4,15 +4,21 @@ import { buildWorkerMessage } from "./WorkerTypes";
 import library, { type Newsletter } from "./Library";
 import { compareNewslettersForApi } from "./compareNewsletters";
 import { type APINewsletters } from "./APINewsletters";
+import { DownloadManager } from "./DownloadManager";
 
 const REFRESH_MILLIS = 5 * 60 * 1000;
 
 export class SyncManager {
+  private downloadManager: DownloadManager;
   private authToken: string | null = null;
   private libraryInitialized: boolean = false;
   private timerId: NodeJS.Timeout | null = null;
   private mutex = new Mutex();
   private abortController: AbortController | null = null;
+
+  constructor(downloadManager: DownloadManager) {
+    this.downloadManager = downloadManager;
+  }
 
   public async setLibraryInitialized() {
     this.libraryInitialized = true;
@@ -57,6 +63,7 @@ export class SyncManager {
       } else {
         await this.fetchInitial();
       }
+      this.downloadManager.checkForDownloads();
     } catch (error) {
       if (!this.abortController?.signal.aborted) {
         console.error(error);
