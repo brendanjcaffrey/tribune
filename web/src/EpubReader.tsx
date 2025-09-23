@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWindowSize } from "@react-hook/window-size";
 import { Theme, useTheme } from "@mui/material/styles";
 import ePub, { Book, Location, Rendition } from "epubjs";
@@ -91,6 +91,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
   const renditionRef = useRef<Rendition | null>(null);
   const bookRef = useRef<Book | null>(null);
   const [windowWidth, windowHeight] = useWindowSize();
+  const [percentage, setPercentage] = useState(0);
 
   useEffect(() => {
     if (renditionRef.current) {
@@ -108,6 +109,10 @@ const EpubReader: React.FC<EpubReaderProps> = ({
 
     const book = ePub(file);
     bookRef.current = book;
+
+    book.ready.then(() => {
+      return book.locations.generate(150);
+    });
 
     const rendition = book.renderTo(viewerRef.current, {
       width: "100%",
@@ -156,6 +161,14 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     rendition.on("touchend", handleTouchEnd);
 
     rendition.on("relocated", (location: Location) => {
+      const percentage = bookRef.current?.locations.percentageFromCfi(
+        location.start.cfi,
+      );
+      if (percentage === undefined) {
+        setPercentage(0);
+      } else {
+        setPercentage(Math.floor(percentage * 100));
+      }
       WorkerInstance.postMessage(
         buildMainMessage("update newsletter progress", {
           id: newsletter.id,
@@ -180,7 +193,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
       renditionRef.current = null;
       window.removeEventListener("keydown", handleKey);
     };
-  }, [file, closeFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [file, closeFile, setPercentage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (renditionRef.current) {
@@ -200,10 +213,19 @@ const EpubReader: React.FC<EpubReaderProps> = ({
       <div
         ref={viewerRef}
         style={{
-          height: `${GetBodyHeight(windowHeight) - VERTICAL_PADDING * 2}px`,
+          height: `${GetBodyHeight(windowHeight) - VERTICAL_PADDING * 3}px`,
           width: `${windowWidth}px`,
         }}
       />
+      <div
+        style={{
+          height: `${VERTICAL_PADDING}px`,
+          width: `${windowWidth - 12}px`,
+          textAlign: "right",
+        }}
+      >
+        {percentage}%
+      </div>
     </div>
   );
 };
