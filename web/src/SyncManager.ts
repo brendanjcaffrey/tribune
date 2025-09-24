@@ -10,14 +10,15 @@ const REFRESH_MILLIS = 5 * 60 * 1000;
 
 export class SyncManager {
   private downloadManager: DownloadManager;
+  private mutex: Mutex;
   private authToken: string | null = null;
   private libraryInitialized: boolean = false;
   private timerId: NodeJS.Timeout | null = null;
-  private mutex = new Mutex();
   private abortController: AbortController | null = null;
 
-  constructor(downloadManager: DownloadManager) {
+  constructor(downloadManager: DownloadManager, mutex: Mutex) {
     this.downloadManager = downloadManager;
+    this.mutex = mutex;
   }
 
   public async setLibraryInitialized() {

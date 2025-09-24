@@ -1,3 +1,4 @@
+import { Mutex } from "async-mutex";
 import { DownloadManager } from "./DownloadManager";
 import library from "./Library";
 import { SyncManager } from "./SyncManager";
@@ -7,8 +8,9 @@ import axios from "axios";
 
 axios.defaults.headers.common["X-Requested-With"] = "XMLHttpRequest";
 
-const downloadManager = new DownloadManager();
-const syncManager = new SyncManager(downloadManager);
+const mutex = new Mutex();
+const downloadManager = new DownloadManager(mutex);
+const syncManager = new SyncManager(downloadManager, mutex);
 const updateManager = new UpdateManager();
 
 library().setInitializedListener(async () => {

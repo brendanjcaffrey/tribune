@@ -4,6 +4,7 @@ import library, { Newsletter } from "../src/Library";
 import axios, { GenericAbortSignal } from "axios";
 import { ErrorMessage, NewslettersUpdated } from "../src/WorkerTypes";
 import { DownloadManager } from "../src/DownloadManager";
+import { Mutex } from "async-mutex";
 
 vi.mock("axios", () => ({
   default: {
@@ -244,12 +245,13 @@ const N5_updated = {
 };
 
 describe("SyncManager", () => {
-  const downloadManager = new DownloadManager();
+  const mutex = new Mutex();
+  const downloadManager = new DownloadManager(mutex);
   let syncManager: SyncManager;
 
   beforeEach(() => {
     downloadManager.checkForDownloads = vi.fn();
-    syncManager = new SyncManager(downloadManager);
+    syncManager = new SyncManager(downloadManager, mutex);
 
     vi.useFakeTimers();
     vi.resetAllMocks();
