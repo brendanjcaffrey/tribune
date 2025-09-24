@@ -31,6 +31,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "typescript-lru-cache": "^2.0.0",
+    "vite-plugin-pwa": "^1.0.3",
     "vitest": "^3.2.4"
   },
   "devDependencies": {
