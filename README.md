@@ -14,11 +14,15 @@ Start the UI in development mode with `rake web:vite`. The website should be ava
 
 ### Accessing the web UI remotely
 
-If you want to test on a tablet for example, you need to put a proxy like nginx in front of the vite server that handles TLS termination for you. `navigator.storage` is only available in secure contexts (`http://localhost` and `https://`), which the web app depends on. An example nginx config for development on macOS with tailscale is in this repository at `nginx-development.conf.example`. Make sure to uncomment the `allowedHosts: true` line in `web/vite.config.ts` as well.
+If you want to test on a tablet for example, you need to put a proxy like nginx in front of the vite server that handles TLS termination for you. `navigator.storage` is only available in secure contexts (`http://localhost` and `https://`), which the web app depends on. An example nginx config for development on macOS with tailscale is in this repository at `tribune-dev.conf.example`. Make sure to uncomment the `allowedHosts: true` line in `web/vite.config.ts` as well.
 
 To remotely debug an Android tablet, first enable Developer Mode and then USB Debugging in Android settings. Then enable USB Debugging in the Android Firefox settings. Finally, connect the device and go to `about:debugging` in macOS Firefox and connect to the device.
 
-If you're trying to advance to the next page in an ebook and the browser is closing/goign to the previous page, this is an Android thing. In Settings, search for "System navigation", go to "Gesture navigation" settings and disable "Back Sensitivity/Left edge".
+If you're trying to advance to the next page in an ebook and the browser is closing/going to the previous page, this is an Android thing. In Settings, search for "System navigation", go to "Gesture navigation" settings and disable "Back Sensitivity/Left edge".
+
+### Running the iOS UI
+
+First, copy `ios/Tribune/Config.xcconfig.example` to `ios/Tribune/Config.xcconfig` and update it to point at your api server. Then open the app in Xcode and run.
 
 ### Creating a User
 

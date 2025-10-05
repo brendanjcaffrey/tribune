@@ -51,11 +51,7 @@ public final class Newsletter {
         self.sourceLastAccessedAt = sourceLastAccessedAt
     }
 
-    var readSort: UInt8 {
-        read ? 1 : 0
-    }
-
-    // Formatter: yyyy-MM-dd hh:mm am/pm in LOCAL time, with lowercase am/pm
+    // yyyy-MM-dd hh:mm am/pm in local time, with lowercase am/pm
     static let displayFormatter: DateFormatter = {
         let df = DateFormatter()
         df.locale = .current

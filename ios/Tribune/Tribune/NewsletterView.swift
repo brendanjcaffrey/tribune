@@ -3,6 +3,8 @@ import SwiftUI
 
 struct NewsletterView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var session: Session
+
     @Query(
         filter: NewsletterView.notDeleted,
         sort: NewsletterView.sortBy,

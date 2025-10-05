@@ -3,6 +3,8 @@ import SwiftData
 
 @main
 struct TribuneApp: App {
+    @StateObject var session: Session = Session()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Newsletter.self,
@@ -18,7 +20,7 @@ struct TribuneApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NewsletterView()
+            RootView().environmentObject(session)
         }
         .modelContainer(sharedModelContainer)
     }

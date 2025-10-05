@@ -1,0 +1,2 @@
+API_PROTOCOL = https
+API_HOST = example.com:1847
