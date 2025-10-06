@@ -15,6 +15,7 @@ struct NewsletterView: View {
 
     @State private var showToast = false
     @State private var lastSyncStatus: SyncStatus?
+    @State private var showingSettings = false
 
     var body: some View {
         List {
@@ -50,6 +51,14 @@ struct NewsletterView: View {
         }
         .listStyle(.inset)
         .navigationTitle("Newsletters")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Settings") {
+                    showingSettings = true
+                }
+            }
+        }
         .refreshable() {
             lastSyncStatus = await syncManager.syncLibrary()
             showToast = true
@@ -65,6 +74,9 @@ struct NewsletterView: View {
             case .none:
                 return AlertToast(displayMode: .alert, type: .error(.red), title: "Unknown error")
             }
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
         }
         .onAppear() {
             Task {

@@ -10,7 +10,9 @@ struct RootView: View {
         case .unauthenticated:
             LoginView()
         case .authenticated:
-            NewsletterView()
+            NavigationView {
+                NewsletterView()
+            }
         }
     }
 }

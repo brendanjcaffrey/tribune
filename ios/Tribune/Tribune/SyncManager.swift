@@ -26,7 +26,6 @@ final class SyncManager: ObservableObject {
     }
 
     func syncLibrary() async -> SyncStatus {
-        // prevent overlapping runs (actor serializes, but this guards re-entrancy if awaited within)
         guard !isSyncing else { return .blocked }
 
         if currentSyncTask != nil { fatalError() }
@@ -47,7 +46,6 @@ final class SyncManager: ObservableObject {
                 return SyncStatus.success
             } catch is CancellationError {
                 return SyncStatus.blocked
-                // Silently ignore if we cancelled on purpose
             } catch {
                 return SyncStatus.error(error.localizedDescription)
             }
