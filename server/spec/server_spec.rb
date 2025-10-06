@@ -210,6 +210,22 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
     end
 
+    it 'returns created_at in iso8601 with 6 digits of fractional seconds', :focus do
+      time = Time.utc(2025, 1, 1, 0, 0, 0)
+      create_newsletter(id: 2, created_at: time)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+
+      body = JSON.parse(last_response.body)
+      expect(body['meta']).to eq({})
+      expect(body['result'].size).to eq(1)
+
+      item = body['result'][0]
+      expect(item['id']).to eq(2)
+      expect(item['created_at']).to eq('2025-01-01T00:00:00.000000Z')
+    end
+
     it 'returns only the newest 100 items' do
       105.times do |i|
         create_newsletter(id: i + 1)
