@@ -11,9 +11,11 @@ public final class Newsletter {
     public var read: Bool
     public var deleted: Bool
     public var progress: String
+    // createdAt is displayed, so having it parsed already as a Date is nice
     public var createdAt: Date
-    public var updatedAt: Date
-    public var epubUpdatedAt: Date
+    // updatedAt/epubUpdatedAt need absolute precision, so keep as strings
+    public var updatedAt: String
+    public var epubUpdatedAt: String
     /// This is nil if never downloaded and will match `epubUpdatedAt` once downloaded
     public var epubVersion: String?
     /// These are set to the time it was first downloaded (on download) and updated whenever the file is opened
@@ -26,12 +28,12 @@ public final class Newsletter {
         title: String,
         author: String,
         sourceMimeType: String,
-        read: Bool = false,
-        deleted: Bool = false,
-        progress: String = "",
-        createdAt: Date = .now,
-        updatedAt: Date = .now,
-        epubUpdatedAt: Date = .now,
+        read: Bool,
+        deleted: Bool,
+        progress: String,
+        createdAt: Date,
+        updatedAt: String,
+        epubUpdatedAt: String,
         epubVersion: String? = nil,
         epubLastAccessedAt: Date? = nil,
         sourceLastAccessedAt: Date? = nil

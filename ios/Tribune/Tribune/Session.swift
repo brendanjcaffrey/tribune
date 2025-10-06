@@ -21,11 +21,8 @@ final class Session: ObservableObject {
         state = .authenticating
         Task {
             do {
-                if let jwt = try await APIClient.renewAuth() {
-                    self.state = .authenticated(jwt: jwt)
-                } else {
-                    self.state = .unauthenticated
-                }
+                let jwt = try await APIClient.renewAuth()
+                self.state = .authenticated(jwt: jwt)
             } catch {
                 self.errorMessage = error.localizedDescription
                 self.state = .unauthenticated

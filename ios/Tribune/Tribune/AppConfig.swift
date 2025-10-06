@@ -9,4 +9,18 @@ enum AppConfig {
         else { fatalError("Missing or invalid API_PROTOCOL/API_HOST") }
         return url
     }()
+
+    static let apiProtocol: String = {
+        guard let p = Bundle.main.object(forInfoDictionaryKey: "API_PROTOCOL") as? String else {
+            fatalError("Missing or invalid API_PROTOCOL")
+        }
+        return p
+    }()
+
+    static let apiHost: String = {
+        guard let h = Bundle.main.object(forInfoDictionaryKey: "API_HOST") as? String else {
+            fatalError("Missing or invalid API_HOST")
+        }
+        return h
+    }()
 }

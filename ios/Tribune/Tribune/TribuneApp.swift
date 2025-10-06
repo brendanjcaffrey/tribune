@@ -3,25 +3,35 @@ import SwiftData
 
 @main
 struct TribuneApp: App {
-    @StateObject var session: Session = Session()
+    private let sharedModelContainer: ModelContainer
 
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Newsletter.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    @StateObject private var session: Session
+    @StateObject private var syncManager: SyncManager
 
+    init() {
+        let schema = Schema([Newsletter.self])
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let container = try ModelContainer(for: schema, configurations: [config])
+            self.sharedModelContainer = container
+
+            let library = Library(context: container.mainContext)
+            let downloadManager = DownloadManager()
+
+            _session = StateObject(wrappedValue: Session())
+            _syncManager = StateObject(wrappedValue: SyncManager(library: library, downloadManager: downloadManager))
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
-            RootView().environmentObject(session)
+            RootView()
+                .environmentObject(session)
+                .environmentObject(syncManager)
         }
         .modelContainer(sharedModelContainer)
     }
 }
+

@@ -7,7 +7,6 @@ struct RootView: View {
         switch session.state {
         case .unknown, .authenticating:
             ProgressView("Loading…")
-                .task { /* ensure restore started via Session.init() */ }
         case .unauthenticated:
             LoginView()
         case .authenticated:
