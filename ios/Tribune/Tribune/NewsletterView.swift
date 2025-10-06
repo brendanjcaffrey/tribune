@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 import AlertToast
+import WebKit
 
 struct NewsletterView: View {
     @Environment(\.modelContext) private var modelContext
@@ -20,40 +21,44 @@ struct NewsletterView: View {
     var body: some View {
         List {
             ForEach(newsletters) { n in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(n.title)
-                            .font(.headline)
-                        if n.epubLastAccessedAt != nil {
-                            Image(systemName: "book.closed")
+                NavigationLink {
+                    ReaderWebView(newsletter: n)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(n.title)
+                                .font(.headline)
+                            if n.epubLastAccessedAt != nil {
+                                Image(systemName: "book.closed")
+                            }
+                            if n.sourceLastAccessedAt != nil {
+                                Image(systemName: "folder")
+                            }
                         }
-                        if n.sourceLastAccessedAt != nil {
-                            Image(systemName: "folder")
+                        Text(n.author)
+                            .font(.subheadline)
+                        Text(Newsletter.displayFormatter.string(from: n.createdAt))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle()) // ensures the whole row is swipeable
+                    .opacity(n.read ? 0.6 : 1)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            delete(n)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
                     }
-                    Text(n.author)
-                        .font(.subheadline)
-                    Text(Newsletter.displayFormatter.string(from: n.createdAt))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .contentShape(Rectangle()) // ensures the whole row is swipeable
-                .opacity(n.read ? 0.6 : 1)
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
-                        delete(n)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button {
+                            toggleRead(n)
+                        } label: {
+                            Label(n.read ? "Mark Unread" : "Mark Read",
+                                  systemImage: n.read ? "envelope.badge.fill" : "envelope.open")
+                        }
+                        .tint(.blue)
                     }
-                }
-                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                    Button {
-                        toggleRead(n)
-                    } label: {
-                        Label(n.read ? "Mark Unread" : "Mark Read",
-                              systemImage: n.read ? "envelope.badge.fill" : "envelope.open")
-                    }
-                    .tint(.blue)
                 }
             }
         }

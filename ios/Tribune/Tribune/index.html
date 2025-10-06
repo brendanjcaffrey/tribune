@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="/jszip.min.js"></script>
+  <script src="/epubjs.min.js"></script>
+  <style> #viewer { height: 100vh; width: 100vh; } </style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <script>
+    let rendition;
+
+    async function readLocalFileToArrayBuffer(url) {
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Fetch failed: ${res.status}`);
+      }
+      return await res.arrayBuffer();
+    }
+
+    // Called from Swift
+    async function openBook(path) {
+      try {
+        const buf = await readLocalFileToArrayBuffer(path);
+        const book = ePub(buf);
+        rendition = book.renderTo(document.getElementById("viewer"), { width: "100%", height: "100%" });
+        rendition.display();
+
+        book.on("relocated", (location) => {
+          window.webkit.messageHandlers.readerEvent.postMessage({
+            type: "progress",
+            cfi: location.start.cfi
+          });
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  </script>
+</body>
+</html>
