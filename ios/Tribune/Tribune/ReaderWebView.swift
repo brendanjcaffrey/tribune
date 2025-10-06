@@ -23,7 +23,7 @@ struct ReaderWebView: UIViewRepresentable {
         let url = URL(string: "tribune://host/index.html")!
         webView.load(URLRequest(url: url))
         webView.navigationDelegate = context.coordinator
-        context.coordinator.epubId = newsletter.id
+        context.coordinator.newsletter = newsletter
         context.coordinator.webView = webView
 
         return webView
@@ -33,20 +33,26 @@ struct ReaderWebView: UIViewRepresentable {
     }
 
     class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
-        var epubId: Int?
+        var newsletter: Newsletter?
         weak var webView: WKWebView?
 
         // Called when JS posts events
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            //if message.name == "readerEvent" {
-                print("Swift got event: \(message.body)")
-            //}
+            if message.name == "readerEvent", let obj = message.body as? NSDictionary, let type = obj["type"] as? String {
+                if type == "progress", let cfi = obj["cfi"] {
+                    // TODO update progress
+                    print("progress: \(cfi)")
+                } else if type == "at end" {
+                    // TODO mark as read
+                    print("at end")
+                }
+            }
         }
 
         // Once the HTML is loaded, inject the file path
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            if let id = epubId {
-                let js = "openBook('/\(id)')"
+            if let newsletter = newsletter {
+                let js = "openBook('/\(newsletter.id)', '\(newsletter.progress)')"
                 webView.evaluateJavaScript(js, completionHandler: nil)
             }
         }

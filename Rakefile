@@ -137,17 +137,33 @@ namespace :web do
     end
   end
 
-  desc 'Format code in the ui code'
+  desc 'Format the web code'
   task :format do
     Dir.chdir('web') do
       exec('npm run format')
     end
   end
 
-  desc 'Check formatting in the ui code'
+  desc 'Check formatting in the web code'
   task :format_check do
     Dir.chdir('web') do
       command.run('npm run format:check')
+    end
+  end
+end
+
+namespace :ios do
+  desc 'Format the ios code'
+  task :format do
+    Dir.chdir('web') do
+      exec('npm run ios_format')
+    end
+  end
+
+  desc 'Check formatting in the ios code'
+  task :format_check do
+    Dir.chdir('web') do
+      command.run('npm run ios_format:check')
     end
   end
 end
@@ -156,7 +172,7 @@ desc 'Install ruby & node dependencies'
 task install: %i[server:install web:install]
 
 desc 'Run all checks'
-task checks: %i[server:lint web:lint web:format_check]
+task checks: %i[server:lint web:lint web:format_check ios:format_check]
 
 namespace :user do
   desc 'Create a user interactively'

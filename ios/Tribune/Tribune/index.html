@@ -1,42 +1,235 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <script src="/jszip.min.js"></script>
-  <script src="/epubjs.min.js"></script>
-  <style> #viewer { height: 100vh; width: 100vh; } </style>
-</head>
-<body>
-  <div id="viewer"></div>
-  <script>
-    let rendition;
-
-    async function readLocalFileToArrayBuffer(url) {
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(`Fetch failed: ${res.status}`);
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <script src="/jszip.min.js"></script>
+    <script src="/epubjs.min.js"></script>
+    <style>
+      /* this is a bit hacky, but prevents a flash of white on page load in dark mode */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #fff;
+        color: #000;
       }
-      return await res.arrayBuffer();
-    }
 
-    // Called from Swift
-    async function openBook(path) {
-      try {
-        const buf = await readLocalFileToArrayBuffer(path);
-        const book = ePub(buf);
-        rendition = book.renderTo(document.getElementById("viewer"), { width: "100%", height: "100%" });
-        rendition.display();
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background-color: #121212;
+          color: #fff;
+        }
+      }
+    </style>
+  </head>
+  <body style="margin: 0">
+    <div id="container">
+      <div id="viewer"></div>
+      <div
+        id="footer"
+        style="
+          text-align: right;
+          font-family: Roboto, Helvetica, Arial, sans-serif;
+          padding-right: 12px;
+        "
+      ></div>
+    </div>
+    <script>
+      const footerHeight = 20;
+      let rendition;
 
-        book.on("relocated", (location) => {
-          window.webkit.messageHandlers.readerEvent.postMessage({
-            type: "progress",
-            cfi: location.start.cfi
+      async function readLocalFileToArrayBuffer(url) {
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`Fetch failed: ${res.status}`);
+        }
+        return await res.arrayBuffer();
+      }
+
+      function setPercentage(percentage) {
+        document.getElementById("footer").innerText = `${percentage}%`;
+      }
+
+      function getLightStyles() {
+        return {
+          body: {
+            background: "#fff !important",
+            color: "rgba(0, 0, 0, 0.87) !important",
+            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            fontSize: "1rem !important",
+            lineHeight: "1.5 !important",
+            margin: "16px !important",
+            padding: "8px !important",
+          },
+          h1: {
+            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            fontSize: "6rem !important",
+            fontWeight: "300 !important",
+            lineHeight: "1.167 !important",
+          },
+          h2: {
+            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            fontSize: "3.75rem !important",
+            fontWeight: "300 !important",
+            lineHeight: "1.2 !important",
+          },
+          a: {
+            color: "#1976d2 !important",
+            textDecoration: "none",
+          },
+          p: {
+            marginBottom: "16px",
+          },
+        };
+      }
+
+      function getDarkStyles() {
+        return {
+          body: {
+            background: "#121212 !important",
+            color: "#fff !important",
+            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            fontSize: "1rem !important",
+            lineHeight: "1.5 !important",
+            margin: "16px !important",
+            padding: "8px !important",
+          },
+          h1: {
+            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            fontSize: "6rem !important",
+            fontWeight: "300 !important",
+            lineHeight: "1.167 !important",
+          },
+          h2: {
+            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            fontSize: "3.75rem !important",
+            fontWeight: "300 !important",
+            lineHeight: "1.2 !important",
+          },
+          a: {
+            color: "#90caf9 !important",
+            textDecoration: "none",
+          },
+          p: {
+            marginBottom: "16px",
+          },
+        };
+      }
+
+      // Called from Swift
+      async function openBook(path, initialProgress) {
+        try {
+          const buf = await readLocalFileToArrayBuffer(path);
+          const book = ePub(buf);
+          book.ready.then(() => {
+            return book.locations.generate(150);
           });
-        });
-      } catch (e) {
-        console.error(e);
+
+          // TODO clean up all the styles
+          const windowHeight = window.innerHeight;
+          const windowWidth = window.innerWidth;
+          const container = document.getElementById("container");
+          const viewer = document.getElementById("viewer");
+          const footer = document.getElementById("footer");
+
+          container.style.width = viewer.style.width = `${windowWidth}px`;
+          container.style.height = `${windowHeight}px`;
+          viewer.style.height = `${windowHeight - footerHeight}px`;
+          footer.style.height = `${footerHeight}px`;
+          footer.style.width = `${windowWidth - 12}px`;
+          // window.addEventListener('resize', () => {}); // TODO
+
+          rendition = book.renderTo(viewer, {
+            width: "100%",
+            height: "100%",
+            allowPopups: true,
+            allowScriptedContent: true,
+          });
+
+          let randomThemeName = Math.random().toString(36).substring(2, 15);
+          if (
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ) {
+            rendition.themes.register(randomThemeName, getDarkStyles());
+            footer.style.backgroundColor = "#121212";
+            footer.style.color = "#fff";
+          } else {
+            rendition.themes.register(randomThemeName, getLightStyles());
+            footer.style.backgroundColor = "#fff";
+            footer.style.color = "#000";
+          }
+          rendition.themes.select(randomThemeName);
+
+          window
+            .matchMedia("(prefers-color-scheme: dark)")
+            .addEventListener("change", (event) => {
+              const newColorScheme = event.matches ? "dark" : "light";
+              // TODO
+            });
+
+          if (initialProgress.length > 0) {
+            rendition.display(initialProgress);
+          } else {
+            rendition.display();
+          }
+
+          let startX = 0;
+          const handleTouchStart = (e) => {
+            startX = e.changedTouches[0].screenX;
+          };
+
+          const handleTouchEnd = (e) => {
+            const endX = e.changedTouches[0].screenX;
+            const deltaX = endX - startX;
+            const threshold = 50; // px threshold to count as swipe
+
+            if (Math.abs(deltaX) > threshold) {
+              if (deltaX < 0) {
+                rendition.next();
+              } else {
+                rendition.prev();
+              }
+            } else {
+              if (startX < window.innerWidth / 2) {
+                rendition.prev();
+              } else {
+                rendition.next();
+              }
+            }
+          };
+
+          rendition.on("touchstart", handleTouchStart);
+          rendition.on("touchend", handleTouchEnd);
+
+          rendition.on("relocated", (location) => {
+            const percentage = book.locations.percentageFromCfi(
+              location.start.cfi,
+            );
+            if (percentage === undefined) {
+              setPercentage(0);
+            } else {
+              setPercentage(Math.floor(percentage * 100));
+            }
+            window.webkit.messageHandlers.readerEvent.postMessage({
+              type: "progress",
+              cfi: location.start.cfi,
+            });
+            if (location.atEnd) {
+              window.webkit.messageHandlers.readerEvent.postMessage({
+                type: "at end",
+              });
+            }
+          });
+        } catch (e) {
+          console.error(e);
+        }
       }
-    }
-  </script>
-</body>
+    </script>
+  </body>
 </html>
