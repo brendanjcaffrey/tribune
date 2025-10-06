@@ -58,8 +58,6 @@ enum APIClient {
             throw APIError.notAuthorized
         }
         let url = AppConfig.baseURL.appending(path: newslettersPath)
-        print(url)
-        print(stored)
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
@@ -108,6 +106,25 @@ enum APIClient {
         }
 
         return try Self.buildDecoder().decode(NewslettersResponse.self, from: data)
+    }
+
+    // GET /newsletters/:id/:type
+    static func getNewsletterFile(type: FileType, id: Int) async throws -> Data {
+        guard let stored = try Keychain.readJWT(service: keychainService, account: keychainAccount) else {
+            throw APIError.notAuthorized
+        }
+        let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "/\(id)/\(type)")
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(code) else {
+            throw APIError.badStatus(code)
+        }
+
+        return data
     }
 
     private static func formURLEncoded(_ params: [String: String]) -> String {

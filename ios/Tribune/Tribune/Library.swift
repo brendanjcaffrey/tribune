@@ -21,6 +21,29 @@ final class Library: LibraryProtocol {
     }
 
     @MainActor
+    func getUnreadUndeletedNewsletters() async throws -> [Newsletter] {
+        var fetch = FetchDescriptor<Newsletter>()
+        fetch.predicate = #Predicate { n in
+            n.deleted == false && n.read == false
+        }
+        fetch.sortBy = [
+            .init(\.createdAt, order: .forward),  // oldest first
+            .init(\.id, order: .forward)          // stable tiebreaker
+        ]
+        return try context.fetch(fetch)
+    }
+
+    @MainActor
+    func getNewslettersWithFilesToDelete() async throws -> [Newsletter] {
+        var fetch = FetchDescriptor<Newsletter>()
+        fetch.predicate = #Predicate { n in
+            (n.deleted == true || n.read == true) &&
+            (n.epubLastAccessedAt != nil || n.sourceLastAccessedAt != nil)
+        }
+        return try context.fetch(fetch)
+    }
+
+    @MainActor
     func getNewestNewsletter() async throws -> Newsletter? {
         var fetch = FetchDescriptor<Newsletter>()
         fetch.sortBy = [
@@ -62,5 +85,10 @@ final class Library: LibraryProtocol {
         fetch.fetchLimit = 1
         let res = try context.fetch(fetch)
         return res.first
+    }
+
+    @MainActor
+    func save() throws {
+        try context.save()
     }
 }

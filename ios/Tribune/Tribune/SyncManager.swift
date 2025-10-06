@@ -33,7 +33,7 @@ final class SyncManager: ObservableObject {
 
         currentSyncTask = Task { [weak self] in
             guard let self else { return SyncStatus.blocked }
-            defer { Task { await self.finishSyncAndSchedule() } }
+            defer { self.finishSync() }
 
             do {
                 if try await library.hasAnyNewsletters() {
@@ -42,7 +42,7 @@ final class SyncManager: ObservableObject {
                     try await fetchInitial()
                 }
 
-                Task { self.downloadManager?.checkForDownloads() }
+                Task { await self.downloadManager?.checkForDownloads() }
                 return SyncStatus.success
             } catch is CancellationError {
                 return SyncStatus.blocked
@@ -109,7 +109,7 @@ final class SyncManager: ObservableObject {
         }
     }
 
-    private func finishSyncAndSchedule() async {
+    private func finishSync() {
         isSyncing = false
         currentSyncTask = nil
     }

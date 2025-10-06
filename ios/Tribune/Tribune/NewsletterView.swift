@@ -21,8 +21,16 @@ struct NewsletterView: View {
         List {
             ForEach(newsletters) { n in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(n.title)
-                        .font(.headline)
+                    HStack {
+                        Text(n.title)
+                            .font(.headline)
+                        if n.epubLastAccessedAt != nil {
+                            Image(systemName: "book.closed")
+                        }
+                        if n.sourceLastAccessedAt != nil {
+                            Image(systemName: "folder")
+                        }
+                    }
                     Text(n.author)
                         .font(.subheadline)
                     Text(Newsletter.displayFormatter.string(from: n.createdAt))
@@ -77,16 +85,21 @@ struct NewsletterView: View {
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
+            .onDisappear() {
+                Task { await doBackgroundSync() }
+            }
         }
         .onAppear() {
-            Task {
-                lastSyncStatus = await syncManager.syncLibrary()
-                if let status = lastSyncStatus, case .success = status {
-                    showToast = false
-                } else {
-                    showToast = true
-                }
-            }
+            Task { await doBackgroundSync() }
+        }
+    }
+
+    private func doBackgroundSync() async {
+        lastSyncStatus = await syncManager.syncLibrary()
+        if let status = lastSyncStatus, case .success = status {
+            showToast = false
+        } else {
+            showToast = true
         }
     }
 

@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var session: Session
     @EnvironmentObject private var syncManager: SyncManager
+    @EnvironmentObject private var downloadManager: DownloadManager
     @State private var isDownloadModeOn: Bool = Defaults.getDownloadMode()
     @State private var isWiping = false
     @State private var wipeError: String?
@@ -49,9 +50,13 @@ struct SettingsView: View {
         isWiping = true
         wipeError = nil
         do {
+            syncManager.reset()
+            downloadManager.reset()
             try wipeAllData()
             try modelContext.save()
             Defaults.clear()
+            Files.deleteDirectory(type: .epub)
+            Files.deleteDirectory(type: .source)
             session.signOut()
         } catch {
             wipeError = "Failed to clear local data: \(error.localizedDescription)"

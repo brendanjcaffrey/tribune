@@ -1,3 +1,3 @@
 protocol DownloadManaging: AnyObject {
-    func checkForDownloads()
+    func checkForDownloads() async
 }

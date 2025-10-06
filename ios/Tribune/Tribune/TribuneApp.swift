@@ -6,6 +6,7 @@ struct TribuneApp: App {
     private let sharedModelContainer: ModelContainer
 
     @StateObject private var session: Session
+    @StateObject private var downloadManager: DownloadManager
     @StateObject private var syncManager: SyncManager
 
     init() {
@@ -16,10 +17,12 @@ struct TribuneApp: App {
             self.sharedModelContainer = container
 
             let library = Library(context: container.mainContext)
-            let downloadManager = DownloadManager()
+            let downloadManager = DownloadManager(library: library)
+            let syncManager = SyncManager(library: library, downloadManager: downloadManager)
 
             _session = StateObject(wrappedValue: Session())
-            _syncManager = StateObject(wrappedValue: SyncManager(library: library, downloadManager: downloadManager))
+            _downloadManager = StateObject(wrappedValue: downloadManager)
+            _syncManager = StateObject(wrappedValue: syncManager)
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
@@ -29,6 +32,7 @@ struct TribuneApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .environmentObject(downloadManager)
                 .environmentObject(syncManager)
         }
         .modelContainer(sharedModelContainer)
