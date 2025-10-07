@@ -21,7 +21,7 @@
       @media (prefers-color-scheme: dark) {
         html,
         body {
-          background-color: #121212;
+          background-color: #000;
           color: #fff;
         }
       }
@@ -41,6 +41,13 @@
     </div>
     <script>
       const footerHeight = 20;
+      const footerRight = 12;
+      const lightBackgroundColor = "#ffffff";
+      const lightForegroundColor = "rgba(0, 0, 0, 0.87)";
+      const lightLinkColor = "#1976d2";
+      const darkBackgroundColor = "#000000";
+      const darkForegroundColor = "#ffffff";
+      const darkLinkColor = "#90caf9";
       let rendition;
 
       async function readLocalFileToArrayBuffer(url) {
@@ -55,70 +62,63 @@
         document.getElementById("footer").innerText = `${percentage}%`;
       }
 
-      function getLightStyles() {
+      function getStyles(backgroundColor, foregroundColor, linkColor) {
         return {
           body: {
-            background: "#fff !important",
-            color: "rgba(0, 0, 0, 0.87) !important",
-            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
-            fontSize: "1rem !important",
-            lineHeight: "1.5 !important",
+            background: `${backgroundColor} !important`,
+            color: `${foregroundColor} !important`,
+            "font-family":
+              '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            "font-size": "1rem !important",
+            "line-height": "1.5 !important",
             margin: "16px !important",
             padding: "8px !important",
           },
           h1: {
-            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
-            fontSize: "6rem !important",
-            fontWeight: "300 !important",
-            lineHeight: "1.167 !important",
+            "font-family":
+              '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            "font-size": "3rem !important",
+            "font-weight": "400 !important",
+            "line-height": "1.167 !important",
           },
           h2: {
-            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
-            fontSize: "3.75rem !important",
-            fontWeight: "300 !important",
-            lineHeight: "1.2 !important",
+            "font-family":
+              '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            "font-size": "2.125rem !important",
+            "font-weight": "400 !important",
+            "line-height": "1.235 !important",
+          },
+          h3: {
+            "font-family":
+              '"Roboto", "Helvetica", "Arial", sans-serif !important',
+            "font-size": "1.5rem !important",
+            "font-weight": "400 !important",
+            "line-height": "1.334 !important",
           },
           a: {
-            color: "#1976d2 !important",
-            textDecoration: "none",
+            color: `${linkColor} !important`,
+            "text-decoration": "none",
           },
           p: {
-            marginBottom: "16px",
+            "margin-bottom": "16px",
           },
         };
       }
 
+      function getLightStyles() {
+        return getStyles(
+          lightBackgroundColor,
+          lightForegroundColor,
+          lightLinkColor,
+        );
+      }
+
       function getDarkStyles() {
-        return {
-          body: {
-            background: "#121212 !important",
-            color: "#fff !important",
-            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
-            fontSize: "1rem !important",
-            lineHeight: "1.5 !important",
-            margin: "16px !important",
-            padding: "8px !important",
-          },
-          h1: {
-            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
-            fontSize: "6rem !important",
-            fontWeight: "300 !important",
-            lineHeight: "1.167 !important",
-          },
-          h2: {
-            fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif !important',
-            fontSize: "3.75rem !important",
-            fontWeight: "300 !important",
-            lineHeight: "1.2 !important",
-          },
-          a: {
-            color: "#90caf9 !important",
-            textDecoration: "none",
-          },
-          p: {
-            marginBottom: "16px",
-          },
-        };
+        return getStyles(
+          darkBackgroundColor,
+          darkForegroundColor,
+          darkLinkColor,
+        );
       }
 
       // Called from Swift
@@ -130,7 +130,6 @@
             return book.locations.generate(150);
           });
 
-          // TODO clean up all the styles
           const windowHeight = window.innerHeight;
           const windowWidth = window.innerWidth;
           const container = document.getElementById("container");
@@ -141,7 +140,7 @@
           container.style.height = `${windowHeight}px`;
           viewer.style.height = `${windowHeight - footerHeight}px`;
           footer.style.height = `${footerHeight}px`;
-          footer.style.width = `${windowWidth - 12}px`;
+          footer.style.width = `${windowWidth - footerRight}px`;
           // window.addEventListener('resize', () => {}); // TODO
 
           rendition = book.renderTo(viewer, {
@@ -157,12 +156,12 @@
             window.matchMedia("(prefers-color-scheme: dark)").matches
           ) {
             rendition.themes.register(randomThemeName, getDarkStyles());
-            footer.style.backgroundColor = "#121212";
-            footer.style.color = "#fff";
+            footer.style.backgroundColor = darkBackgroundColor;
+            footer.style.color = darkForegroundColor;
           } else {
             rendition.themes.register(randomThemeName, getLightStyles());
-            footer.style.backgroundColor = "#fff";
-            footer.style.color = "#000";
+            footer.style.backgroundColor = lightBackgroundColor;
+            footer.style.color = lightForegroundColor;
           }
           rendition.themes.select(randomThemeName);
 
