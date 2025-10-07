@@ -67,22 +67,22 @@ struct NewsletterView: View {
                     }
                     .contentShape(Rectangle()) // ensures the whole row is swipeable
                     .opacity(n.read ? 0.6 : 1)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            delete(n)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        delete(n)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
                     }
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button {
-                            toggleRead(n)
-                        } label: {
-                            Label(n.read ? "Mark Unread" : "Mark Read",
-                                  systemImage: n.read ? "envelope.badge.fill" : "envelope.open")
-                        }
-                        .tint(.blue)
+                }
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button {
+                        toggleRead(n)
+                    } label: {
+                        Label(n.read ? "Mark Unread" : "Mark Read",
+                              systemImage: n.read ? "envelope.badge.fill" : "envelope.open")
                     }
+                    .tint(.blue)
                 }
             }
         }
