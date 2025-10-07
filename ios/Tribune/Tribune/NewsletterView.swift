@@ -7,6 +7,7 @@ internal import Builders
 
 struct NewsletterView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var session: Session
     @EnvironmentObject private var syncManager: SyncManager
     @EnvironmentObject private var downloadManager: DownloadManager
@@ -125,6 +126,11 @@ struct NewsletterView: View {
                     }
             }
             .onAppear() {
+                Task { await doBackgroundSync() }
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
                 Task { await doBackgroundSync() }
             }
         }
