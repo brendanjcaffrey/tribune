@@ -9,6 +9,7 @@ struct NewsletterView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var session: Session
     @EnvironmentObject private var syncManager: SyncManager
+    @EnvironmentObject private var downloadManager: DownloadManager
 
     @Query(
         filter: NewsletterView.notDeleted,
@@ -16,97 +17,125 @@ struct NewsletterView: View {
         animation: .default
     ) private var newsletters: [Newsletter]
 
-    @State private var showToast = false
+    @State private var path: [Newsletter] = []
+    @State private var showSyncToast = false
     @State private var lastSyncStatus: SyncStatus?
+    @State private var showDownloadToast = false
+    @State private var lastDownloadError: String?
     @State private var showingSettings = false
 
     var body: some View {
-        List {
-            ForEach(newsletters) { n in
-                NavigationLink {
-                    ReaderWebView(newsletter: n)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(separator: " ") {
-                            Text(n.title)
+        NavigationStack(path: $path) {
+            List {
+                ForEach(newsletters) { n in
+                    Button {
+                        Task {
                             if n.epubLastAccessedAt != nil {
-                                Text(Image(systemName: "book.closed"))
+                                path.append(n)
+                            } else {
+                                do {
+                                    try await downloadManager.downloadEpub(newsletter: n)
+                                    path.append(n)
+                                } catch {
+                                    lastDownloadError = error.localizedDescription
+                                    showDownloadToast = true
+                                }
                             }
-                            if n.sourceLastAccessedAt != nil {
-                                Text(Image(systemName: "folder"))
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(separator: " ") {
+                                Text(n.title)
+                                if n.epubLastAccessedAt != nil {
+                                    Text(Image(systemName: "book.closed"))
+                                }
+                                if n.sourceLastAccessedAt != nil {
+                                    Text(Image(systemName: "folder"))
+                                }
+                            }
+                                .font(.headline)
+                            Text(n.author)
+                                .font(.subheadline)
+                            HStack {
+                                Text(Newsletter.displayFormatter.string(from: n.createdAt))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if downloadManager.currentEpubDownloadId == n.id || downloadManager.currentSourceDownloadId == n.id {
+                                    ProgressView().controlSize( .small)
+                                }
                             }
                         }
-                            .font(.headline)
-                        Text(n.author)
-                            .font(.subheadline)
-                        Text(Newsletter.displayFormatter.string(from: n.createdAt))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle()) // ensures the whole row is swipeable
-                    .opacity(n.read ? 0.6 : 1)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            delete(n)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+                        .contentShape(Rectangle()) // ensures the whole row is swipeable
+                        .opacity(n.read ? 0.6 : 1)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                delete(n)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
-                    }
-                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                        Button {
-                            toggleRead(n)
-                        } label: {
-                            Label(n.read ? "Mark Unread" : "Mark Read",
-                                  systemImage: n.read ? "envelope.badge.fill" : "envelope.open")
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            Button {
+                                toggleRead(n)
+                            } label: {
+                                Label(n.read ? "Mark Unread" : "Mark Read",
+                                      systemImage: n.read ? "envelope.badge.fill" : "envelope.open")
+                            }
+                            .tint(.blue)
                         }
-                        .tint(.blue)
                     }
                 }
             }
-        }
-        .listStyle(.inset)
-        .navigationTitle("Newsletters")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Settings") {
-                    showingSettings = true
+            .listStyle(.inset)
+            .navigationTitle("Newsletters")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: Newsletter.self) { n in
+                ReaderWebView(newsletter: n)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Settings") {
+                        showingSettings = true
+                    }
                 }
             }
-        }
-        .refreshable() {
-            lastSyncStatus = await syncManager.syncLibrary()
-            showToast = true
-        }
-        .toast(isPresenting: $showToast){
-            switch lastSyncStatus {
-            case .blocked:
-                return AlertToast(displayMode: .alert, type: .error(.red), title: "Sync blocked!")
-            case .error(let msg):
-                return AlertToast(displayMode: .alert, type: .error(.red), title: "Sync error", subTitle: msg)
-            case .success:
-                return AlertToast(displayMode: .banner(.slide), type: .complete(.green), title: "Sync success!")
-            case .none:
-                return AlertToast(displayMode: .alert, type: .error(.red), title: "Unknown error")
+            .refreshable() {
+                lastSyncStatus = await syncManager.syncLibrary()
+                showSyncToast = true
             }
-        }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-            .onDisappear() {
+            .toast(isPresenting: $showSyncToast) {
+                switch lastSyncStatus {
+                case .blocked:
+                    return AlertToast(displayMode: .alert, type: .error(.red), title: "Sync blocked!")
+                case .error(let msg):
+                    return AlertToast(displayMode: .alert, type: .error(.red), title: "Sync error", subTitle: msg)
+                case .success:
+                    return AlertToast(displayMode: .banner(.slide), type: .complete(.green), title: "Sync success!")
+                case .none:
+                    return AlertToast(displayMode: .alert, type: .error(.red), title: "Unknown error")
+                }
+            }
+            .toast(isPresenting: $showDownloadToast) {
+                return AlertToast(displayMode: .alert, type: .error(.red), title: "Download error", subTitle: lastDownloadError ?? "")
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
+                    .onDisappear() {
+                        Task { await doBackgroundSync() }
+                    }
+            }
+            .onAppear() {
                 Task { await doBackgroundSync() }
             }
-        }
-        .onAppear() {
-            Task { await doBackgroundSync() }
         }
     }
 
     private func doBackgroundSync() async {
         lastSyncStatus = await syncManager.syncLibrary()
         if let status = lastSyncStatus, case .success = status {
-            showToast = false
+            showSyncToast = false
         } else {
-            showToast = true
+            showSyncToast = true
         }
     }
 

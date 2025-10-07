@@ -7,6 +7,8 @@ class DownloadManager : DownloadManaging, ObservableObject {
 
     private var currentTask: Task<Void, Never>?
     @Published private var isWorking = false
+    @Published var currentEpubDownloadId: Int?
+    @Published var currentSourceDownloadId: Int?
 
     init(library: LibraryProtocol) {
         self.library = library
@@ -49,8 +51,10 @@ class DownloadManager : DownloadManaging, ObservableObject {
         }
     }
 
-    private func downloadEpub(newsletter: Newsletter) async throws {
+    func downloadEpub(newsletter: Newsletter) async throws {
         guard !Files.fileExists(type: .epub, id: newsletter.id) else { return }
+        currentEpubDownloadId = newsletter.id
+        defer { currentEpubDownloadId = nil }
 
         let data = try await APIClient.getNewsletterFile(type: .epub, id: newsletter.id)
         Files.writeFile(type: .epub, id: newsletter.id, data: data)
@@ -59,8 +63,10 @@ class DownloadManager : DownloadManaging, ObservableObject {
         try library.save()
     }
 
-    private func downloadSource(newsletter: Newsletter) async throws {
+    func downloadSource(newsletter: Newsletter) async throws {
         guard !Files.fileExists(type: .source, id: newsletter.id) else { return }
+        currentSourceDownloadId = newsletter.id
+        defer { currentSourceDownloadId = nil }
 
         let data = try await APIClient.getNewsletterFile(type: .source, id: newsletter.id)
         Files.writeFile(type: .source, id: newsletter.id, data: data)
