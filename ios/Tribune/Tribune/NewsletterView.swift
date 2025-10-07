@@ -2,6 +2,8 @@ import SwiftData
 import SwiftUI
 import AlertToast
 import WebKit
+import TextBuilder
+internal import Builders
 
 struct NewsletterView: View {
     @Environment(\.modelContext) private var modelContext
@@ -25,16 +27,16 @@ struct NewsletterView: View {
                     ReaderWebView(newsletter: n)
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack {
+                        Text(separator: " ") {
                             Text(n.title)
-                                .font(.headline)
                             if n.epubLastAccessedAt != nil {
-                                Image(systemName: "book.closed")
+                                Text(Image(systemName: "book.closed"))
                             }
                             if n.sourceLastAccessedAt != nil {
-                                Image(systemName: "folder")
+                                Text(Image(systemName: "folder"))
                             }
                         }
+                            .font(.headline)
                         Text(n.author)
                             .font(.subheadline)
                         Text(Newsletter.displayFormatter.string(from: n.createdAt))

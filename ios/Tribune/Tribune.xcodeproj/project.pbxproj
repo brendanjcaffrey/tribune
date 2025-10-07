@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		C66CADD22E9345C8002FA0F5 /* AlertToast in Frameworks */ = {isa = PBXBuildFile; productRef = C66CADD12E9345C8002FA0F5 /* AlertToast */; };
+		C66EEE002E94BA7D00AC6E7B /* TextBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = C66EEDFF2E94BA7D00AC6E7B /* TextBuilder */; };
 		C6AB99892E93078900874657 /* Config.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = C6AB99882E93078900874657 /* Config.xcconfig */; };
 /* End PBXBuildFile section */
 
@@ -72,6 +73,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C66CADD22E9345C8002FA0F5 /* AlertToast in Frameworks */,
+				C66EEE002E94BA7D00AC6E7B /* TextBuilder in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -142,6 +144,7 @@
 			name = Tribune;
 			packageProductDependencies = (
 				C66CADD12E9345C8002FA0F5 /* AlertToast */,
+				C66EEDFF2E94BA7D00AC6E7B /* TextBuilder */,
 			);
 			productName = Tribune;
 			productReference = C61648E92E8D703B004B9FA4 /* Tribune.app */;
@@ -227,6 +230,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				C6AB99A72E93457000874657 /* XCRemoteSwiftPackageReference "AlertToast" */,
+				C6DDFB9C2E94BA6300874E2D /* XCRemoteSwiftPackageReference "swiftui-text-builder" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C61648EA2E8D703B004B9FA4 /* Products */;
@@ -628,6 +632,14 @@
 				minimumVersion = 1.3.9;
 			};
 		};
+		C6DDFB9C2E94BA6300874E2D /* XCRemoteSwiftPackageReference "swiftui-text-builder" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/davdroman/swiftui-text-builder";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.0.2;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -635,6 +647,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C6AB99A72E93457000874657 /* XCRemoteSwiftPackageReference "AlertToast" */;
 			productName = AlertToast;
+		};
+		C66EEDFF2E94BA7D00AC6E7B /* TextBuilder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C6DDFB9C2E94BA6300874E2D /* XCRemoteSwiftPackageReference "swiftui-text-builder" */;
+			productName = TextBuilder;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
