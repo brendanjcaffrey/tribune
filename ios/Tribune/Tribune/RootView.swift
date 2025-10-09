@@ -11,7 +11,7 @@ struct RootView: View {
             LoginView()
         case .authenticated:
             NavigationView {
-                NewsletterView()
+                MainView()
             }
         }
     }
