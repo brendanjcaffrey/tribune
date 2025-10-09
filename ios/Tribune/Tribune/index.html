@@ -203,22 +203,32 @@
           }
 
           let startX = 0;
+          let startTime = 0;
           const handleTouchStart = (e) => {
             startX = e.changedTouches[0].screenX;
+            startTime = new Date().getTime();
           };
 
           const handleTouchEnd = (e) => {
+            const endTime = new Date().getTime();
+            const deltaTime = endTime - startTime;
+            const timeThreshold = 250;
+
             const endX = e.changedTouches[0].screenX;
             const deltaX = endX - startX;
             const threshold = 50; // px threshold to count as swipe
 
+            // if it's a swipe, ignore the time threshold
             if (Math.abs(deltaX) > threshold) {
               if (deltaX < 0) {
                 rendition.next();
               } else {
                 rendition.prev();
               }
-            } else {
+              // otherwise, only allow quick taps (so hold to highlight a word works)
+              // NB: the selection API doesn't seem to work in webviews so this is the best we can do right now
+              // unfortunately, that means deselecting text will result in a page turn
+            } else if (deltaTime < timeThreshold) {
               if (startX < window.innerWidth / 2) {
                 rendition.prev();
               } else {
