@@ -29,9 +29,10 @@ struct NewsletterRow: View {
                     }
                 }
             }
-            .contentShape(Rectangle())  // ensures the whole row is swipeable
+            .frame(maxWidth: .infinity, alignment: .leading)
             .opacity(n.read ? 0.6 : 1)
         }
+        .contentShape(Rectangle())  // ensures the whole row is swipeable
         .simultaneousGesture(LongPressGesture()
             .onEnded { _ in
                 onContextMenu()
