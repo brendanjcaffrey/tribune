@@ -1,5 +1,10 @@
 import Foundation
 
+enum APIFileType {
+    case epub
+    case source
+}
+
 enum APIClient {
     private static let authPath = "/auth"
     private static let newslettersPath = "/newsletters"
@@ -126,7 +131,7 @@ enum APIClient {
     }
 
     // GET /newsletters/:id/:type
-    static func getNewsletterFile(type: FileType, id: Int) async throws -> Data {
+    static func getNewsletterFile(type: APIFileType, id: Int) async throws -> Data {
         guard let stored = try getToken() else {
             throw APIError.notAuthorized
         }

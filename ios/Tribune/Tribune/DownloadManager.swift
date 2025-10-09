@@ -64,12 +64,12 @@ class DownloadManager : DownloadManaging, ObservableObject {
     }
 
     func downloadSource(newsletter: Newsletter) async throws {
-        guard !Files.fileExists(type: .source, id: newsletter.id) else { return }
+        guard !Files.fileExists(type: newsletter.sourceFileType, id: newsletter.id) else { return }
         currentSourceDownloadId = newsletter.id
         defer { currentSourceDownloadId = nil }
 
         let data = try await APIClient.getNewsletterFile(type: .source, id: newsletter.id)
-        Files.writeFile(type: .source, id: newsletter.id, data: data)
+        Files.writeFile(type: newsletter.sourceFileType, id: newsletter.id, data: data)
         newsletter.sourceLastAccessedAt = .now
         try library.save()
     }
@@ -84,7 +84,7 @@ class DownloadManager : DownloadManaging, ObservableObject {
                 try library.save()
             }
             if shouldDelete(date: newsletter.sourceLastAccessedAt) {
-                Files.deleteFile(type: .source, id: newsletter.id)
+                Files.deleteFile(type: newsletter.sourceFileType, id: newsletter.id)
                 newsletter.sourceLastAccessedAt = nil
                 try library.save()
             }

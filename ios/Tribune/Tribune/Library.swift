@@ -61,7 +61,7 @@ final class Library: LibraryProtocol {
             // update fields
             existing.title = n.title
             existing.author = n.author
-            existing.sourceMimeType = n.sourceMimeType
+            existing.sourceFileType = n.sourceFileType
             existing.read = n.read
             existing.deleted = n.deleted
             existing.progress = n.progress

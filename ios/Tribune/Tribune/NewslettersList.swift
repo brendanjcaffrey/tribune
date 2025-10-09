@@ -9,6 +9,7 @@ struct NewslettersList: View {
     let onTap: (_: Newsletter) -> Void
     let onDelete: (_: Newsletter) -> Void
     let onToggleRead: (_: Newsletter) -> Void
+    let onContextMenu: (_: Newsletter) -> Void
 
     @Query private var newsletters: [Newsletter]
 
@@ -17,11 +18,13 @@ struct NewslettersList: View {
         onTap: @escaping (_: Newsletter) -> Void,
         onDelete: @escaping (_: Newsletter) -> Void,
         onToggleRead: @escaping (_: Newsletter) -> Void,
+        onContextMenu: @escaping (_: Newsletter) -> Void,
     ) {
         self.searchText = searchText
         self.onTap = onTap
         self.onDelete = onDelete
         self.onToggleRead = onToggleRead
+        self.onContextMenu = onContextMenu
 
         let predicate = #Predicate<Newsletter> { n in
             if n.deleted {
@@ -61,7 +64,8 @@ struct NewslettersList: View {
                             n: n,
                             onTap: { onTap(n) },
                             onDelete: { onDelete(n) },
-                            onToggleRead: { onToggleRead(n) }
+                            onToggleRead: { onToggleRead(n) },
+                            onContextMenu: { onContextMenu(n) },
                         )
                     }
                 }

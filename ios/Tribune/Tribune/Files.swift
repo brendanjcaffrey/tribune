@@ -1,12 +1,22 @@
 import Foundation
 import UIKit
 
-enum FileType: String {
+public enum FileType: String, Codable, CaseIterable {
     case epub
-    case source
+    case pdf
+    case html
 }
 
 class Files {
+    static func mimeToFileType(_ mimeType: String) -> FileType {
+        switch mimeType {
+        case "application/epub+zip": return .epub
+        case "application/pdf": return .pdf
+        case "text/html": return .html
+        default: fatalError()
+        }
+    }
+
     static func getDirectory(type: FileType) -> URL {
         return URL.documentsDirectory.appending(path: type.rawValue)
     }
@@ -37,7 +47,7 @@ class Files {
 
     static func getFile(type: FileType, id: Int) -> URL {
         let directory = getDirectory(type: type)
-        return directory.appendingPathComponent(String(id))
+        return directory.appendingPathComponent("\(id).\(type.rawValue)")
     }
 
     static func fileExists(type: FileType, id: Int) -> Bool {

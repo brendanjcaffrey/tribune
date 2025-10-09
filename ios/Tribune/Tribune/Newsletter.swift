@@ -7,7 +7,7 @@ public final class Newsletter {
     public var id: Int
     public var title: String
     public var author: String
-    public var sourceMimeType: String
+    public var sourceFileType: FileType
     public var read: Bool
     public var deleted: Bool
     public var progress: String
@@ -41,7 +41,7 @@ public final class Newsletter {
         self.id = id
         self.title = title
         self.author = author
-        self.sourceMimeType = sourceMimeType
+        self.sourceFileType = Files.mimeToFileType(sourceMimeType)
         self.read = read
         self.deleted = deleted
         self.progress = progress

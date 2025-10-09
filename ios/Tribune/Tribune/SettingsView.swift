@@ -55,8 +55,9 @@ struct SettingsView: View {
             try wipeAllData()
             try modelContext.save()
             Defaults.clear()
-            Files.deleteDirectory(type: .epub)
-            Files.deleteDirectory(type: .source)
+            for type in FileType.allCases {
+                Files.deleteDirectory(type: type)
+            }
             session.signOut()
         } catch {
             wipeError = "Failed to clear local data: \(error.localizedDescription)"

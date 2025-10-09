@@ -4,6 +4,7 @@ import SwiftData
 import SwiftUI
 import TextBuilder
 import WebKit
+import QuickLook
 
 struct MainView: View {
     @Environment(\.modelContext) private var modelContext
@@ -13,7 +14,10 @@ struct MainView: View {
     @EnvironmentObject private var downloadManager: DownloadManager
 
     @State private var searchText: String = ""
+    @State private var contextMenuNewsletter: Newsletter?
+    @State private var showContextMenu: Bool = false
     @State private var presentedEpub: Newsletter?
+    @State private var presentedSourceURL: URL?
     @State private var showSyncToast = false
     @State private var lastSyncStatus: SyncStatus?
     @State private var showDownloadToast = false
@@ -23,20 +27,28 @@ struct MainView: View {
     var body: some View {
         NewslettersList(
             searchText: searchText,
-            onTap: { n in handleTap(n) },
+            onTap: { n in openEpub(n) },
             onDelete: { n in delete(n) },
-            onToggleRead: { n in toggleRead(n) }
+            onToggleRead: { n in toggleRead(n) },
+            onContextMenu: { n in contextMenu(n) },
         )
         .navigationTitle("Newsletters")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { settingsToolbar }
         .refreshable { await runLibrarySync() }
         .searchable(text: $searchText, prompt: "Search newsletters...")
+        .confirmationDialog(
+            "Newsletter options",
+            isPresented: $showContextMenu,
+            titleVisibility: .hidden,
+            actions: { contextMenuActions() },
+        )
         .fullScreenCover(item: $presentedEpub) { n in
             ReaderWebView(newsletter: n, library: Library(context: modelContext)) {
                 presentedEpub = nil
             }
         }
+        .quickLookPreview($presentedSourceURL)
         .sheet(isPresented: $showingSettings) { settingsSheet }
         .toast(
             isPresenting: $showSyncToast,
@@ -69,6 +81,17 @@ struct MainView: View {
             .onDisappear { triggerBackgroundSync() }
     }
 
+    @ViewBuilder
+    private func contextMenuActions() -> some View {
+        if let n = contextMenuNewsletter {
+            Button("Mark as \(n.read ? "Unread" : "Read")", action: { toggleRead(n) })
+            Button("Open ePub", action: { openEpub(n) })
+            Button("Open Source", action: { openSource(n) })
+            Button("Delete", role: .destructive, action: { delete(n) })
+        }
+        Button("Cancel", role: .cancel) { }
+    }
+
     private func makeSyncToast(for status: SyncStatus?) -> AlertToast {
         switch status {
         case .blocked:
@@ -93,7 +116,7 @@ struct MainView: View {
 
 extension MainView {
     @MainActor
-    func handleTap(_ n: Newsletter) {
+    func openEpub(_ n: Newsletter) {
         Task {
             if n.epubLastAccessedAt != nil {
                 presentedEpub = n
@@ -102,6 +125,23 @@ extension MainView {
             do {
                 try await downloadManager.downloadEpub(newsletter: n)
                 presentedEpub = n
+            } catch {
+                lastDownloadError = error.localizedDescription
+                showDownloadToast = true
+            }
+        }
+    }
+
+    @MainActor
+    func openSource(_ n: Newsletter) {
+        Task {
+            if n.sourceLastAccessedAt != nil {
+                presentedSourceURL = Files.getFile(type: n.sourceFileType, id: n.id)
+                return
+            }
+            do {
+                try await downloadManager.downloadSource(newsletter: n)
+                presentedSourceURL = Files.getFile(type: n.sourceFileType, id: n.id)
             } catch {
                 lastDownloadError = error.localizedDescription
                 showDownloadToast = true
@@ -143,6 +183,12 @@ extension MainView {
         if !item.deleted {
             Task { try? await Library(context: modelContext).markNewsletterDeleted(item) }
         }
+    }
+
+    @MainActor
+    func contextMenu(_ item: Newsletter) {
+        contextMenuNewsletter = item
+        showContextMenu = true
     }
 }
 

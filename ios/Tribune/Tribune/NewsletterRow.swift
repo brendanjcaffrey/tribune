@@ -9,6 +9,7 @@ struct NewsletterRow: View {
     let onTap: () -> Void
     let onDelete: () -> Void
     let onToggleRead: () -> Void
+    let onContextMenu: () -> Void
 
     var body: some View {
         Button(action: onTap) {
@@ -31,6 +32,11 @@ struct NewsletterRow: View {
             .contentShape(Rectangle())  // ensures the whole row is swipeable
             .opacity(n.read ? 0.6 : 1)
         }
+        .simultaneousGesture(LongPressGesture()
+            .onEnded { _ in
+                onContextMenu()
+            }
+        )
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
