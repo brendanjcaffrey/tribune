@@ -88,6 +88,34 @@ final class Library: LibraryProtocol {
     }
 
     @MainActor
+    func markNewsletterRead(_ n: Newsletter) async throws {
+        n.read = true
+        try save()
+        await UpdateManager.shared.markNewsletterAsRead(n.id)
+    }
+
+    @MainActor
+    func markNewsletterUnread(_ n: Newsletter) async throws {
+        n.read = false
+        try save()
+        await UpdateManager.shared.markNewsletterAsUnread(n.id)
+    }
+
+    @MainActor
+    func markNewsletterDeleted(_ n: Newsletter) async throws {
+        n.deleted = true
+        try save()
+        await UpdateManager.shared.markNewsletterAsDeleted(n.id)
+    }
+
+    @MainActor
+    func updateNewsletterProgress(_ n: Newsletter, progress: String) async throws {
+        n.progress = progress
+        try save()
+        await UpdateManager.shared.updateNewsletterProgress(n.id, progress: progress)
+    }
+
+    @MainActor
     func save() throws {
         try context.save()
     }

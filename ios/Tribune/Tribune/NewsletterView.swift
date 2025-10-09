@@ -25,6 +25,8 @@ struct NewsletterView: View {
     @State private var lastDownloadError: String?
     @State private var showingSettings = false
 
+    // NB: if you get an error about the compiler not being able to type check this in a reasonable amount of time,
+    // try commenting out the .onChange block at the end and it should show you the real error
     var body: some View {
         List {
             ForEach(newsletters) { n in
@@ -101,7 +103,7 @@ struct NewsletterView: View {
             showSyncToast = true
         }
         .sheet(item: $presentedEpub) { n in
-            ReaderWebView(newsletter: n)
+            ReaderWebView(newsletter: n, library: Library(context: modelContext))
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
@@ -144,14 +146,16 @@ struct NewsletterView: View {
     }
 
     private func toggleRead(_ item: Newsletter) {
-        item.read.toggle()
-        try? modelContext.save()
+        if item.read {
+            Task { try? await Library(context: modelContext).markNewsletterUnread(item) }
+        } else {
+            Task { try? await Library(context: modelContext).markNewsletterRead(item) }
+        }
     }
 
     private func delete(_ item: Newsletter) {
         if !item.deleted {
-            item.deleted = true
-            try? modelContext.save()
+            Task { try? await Library(context: modelContext).markNewsletterDeleted(item) }
         }
     }
 }

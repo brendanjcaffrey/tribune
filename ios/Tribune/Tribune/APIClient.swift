@@ -3,6 +3,9 @@ import Foundation
 enum APIClient {
     private static let authPath = "/auth"
     private static let newslettersPath = "/newsletters"
+    private static let readPath = "/read"
+    private static let unreadPath = "/unread"
+    private static let progressPath = "/progress"
     private static let keychainService = "com.jcaffrey.tribune.auth"
     private static let keychainAccount = "jwt"
 
@@ -139,6 +142,81 @@ enum APIClient {
         }
 
         return data
+    }
+
+    // PUT /newsletters/:id/read
+    static func newsletterRead(id: Int) async throws {
+        guard let stored = try getToken() else {
+            throw APIError.notAuthorized
+        }
+        let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "\(id)")
+            .appending(path: readPath)
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
+
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(code) else {
+            throw APIError.badStatus(code)
+        }
+    }
+
+    // PUT /newsletters/:id/unread
+    static func newsletterUnread(id: Int) async throws {
+        guard let stored = try getToken() else {
+            throw APIError.notAuthorized
+        }
+        let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "\(id)")
+            .appending(path: unreadPath)
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
+
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(code) else {
+            throw APIError.badStatus(code)
+        }
+    }
+
+    // DELETE /newsletters/:id
+    static func deleteNewsletter(id: Int) async throws {
+        guard let stored = try getToken() else {
+            throw APIError.notAuthorized
+        }
+        let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "\(id)")
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
+
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(code) else {
+            throw APIError.badStatus(code)
+        }
+    }
+
+    // PUT /newsletters/:id/progress
+    static func newsletterProgress(id: Int, progress: String) async throws {
+        guard let stored = try getToken() else {
+            throw APIError.notAuthorized
+        }
+        let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "\(id)").appending(path: "progress")
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
+        req.setValue(
+            "application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        req.httpBody = formURLEncoded([
+            "progress": progress
+        ]).data(using: .utf8)
+
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(code) else {
+            throw APIError.badStatus(code)
+        }
     }
 
     private static func formURLEncoded(_ params: [String: String]) -> String {

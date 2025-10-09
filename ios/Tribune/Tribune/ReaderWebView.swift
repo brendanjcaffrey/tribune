@@ -3,6 +3,7 @@ import WebKit
 
 struct ReaderWebView: UIViewRepresentable {
     let newsletter: Newsletter
+    let library: Library
     let coordinator = Coordinator()
 
     func makeCoordinator() -> Coordinator {
@@ -24,6 +25,7 @@ struct ReaderWebView: UIViewRepresentable {
         webView.load(URLRequest(url: url))
         webView.navigationDelegate = context.coordinator
         context.coordinator.newsletter = newsletter
+        context.coordinator.library = library
         context.coordinator.webView = webView
 
         return webView
@@ -34,17 +36,17 @@ struct ReaderWebView: UIViewRepresentable {
 
     class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var newsletter: Newsletter?
+        var library: Library?
         weak var webView: WKWebView?
 
         // Called when JS posts events
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard let n = newsletter, let l = library else { return }
             if message.name == "readerEvent", let obj = message.body as? NSDictionary, let type = obj["type"] as? String {
-                if type == "progress", let cfi = obj["cfi"] {
-                    // TODO update progress
-                    print("progress: \(cfi)")
-                } else if type == "at end" {
-                    // TODO mark as read
-                    print("at end")
+                if type == "progress", let cfi = obj["cfi"] as? String {
+                    Task { try? await l.updateNewsletterProgress(n, progress: cfi) }
+                } else if type == "at end" && !n.read {
+                    Task { try? await l.markNewsletterRead(n) }
                 }
             }
         }
