@@ -33,11 +33,26 @@
       <div
         id="footer"
         style="
-          text-align: right;
-          font-family: Roboto, Helvetica, Arial, sans-serif;
-          padding-right: 12px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-sizing: border-box;
+          padding: 0 12px;
         "
-      ></div>
+      >
+        <span
+          id="progress"
+          style="font-family: Roboto, Helvetica, Arial, sans-serif"
+        >
+        </span>
+        <button
+          id="dismiss"
+          style="border: none; background-color: transparent; font-size: 20px"
+          onclick="dismiss()"
+        >
+          X
+        </button>
+      </div>
     </div>
     <script>
       const footerHeight = 20;
@@ -58,8 +73,14 @@
         return await res.arrayBuffer();
       }
 
+      function dismiss() {
+        window.webkit.messageHandlers.readerEvent.postMessage({
+          type: "dismiss",
+        });
+      }
+
       function setPercentage(percentage) {
-        document.getElementById("footer").innerText = `${percentage}%`;
+        document.getElementById("progress").innerText = `${percentage}%`;
       }
 
       function getStyles(backgroundColor, foregroundColor, linkColor) {
@@ -135,6 +156,7 @@
           const container = document.getElementById("container");
           const viewer = document.getElementById("viewer");
           const footer = document.getElementById("footer");
+          const dismiss = document.getElementById("dismiss");
 
           container.style.width = viewer.style.width = `${windowWidth}px`;
           container.style.height = `${windowHeight}px`;
@@ -158,10 +180,12 @@
             rendition.themes.register(randomThemeName, getDarkStyles());
             footer.style.backgroundColor = darkBackgroundColor;
             footer.style.color = darkForegroundColor;
+            dismiss.style.color = darkLinkColor;
           } else {
             rendition.themes.register(randomThemeName, getLightStyles());
             footer.style.backgroundColor = lightBackgroundColor;
             footer.style.color = lightForegroundColor;
+            dismiss.style.color = lightLinkColor;
           }
           rendition.themes.select(randomThemeName);
 

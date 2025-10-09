@@ -102,8 +102,10 @@ struct NewsletterView: View {
             lastSyncStatus = await syncManager.syncLibrary()
             showSyncToast = true
         }
-        .sheet(item: $presentedEpub) { n in
-            ReaderWebView(newsletter: n, library: Library(context: modelContext))
+        .fullScreenCover(item: $presentedEpub) { n in
+            ReaderWebView(newsletter: n, library: Library(context: modelContext)) {
+                presentedEpub = nil
+            }
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
