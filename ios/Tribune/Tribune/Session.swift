@@ -18,6 +18,11 @@ final class Session: ObservableObject {
     }
 
     func restore() {
+        if !APIClient.hasToken() {
+            state = .unauthenticated
+            return
+        }
+
         state = .authenticating
         Task {
             do {

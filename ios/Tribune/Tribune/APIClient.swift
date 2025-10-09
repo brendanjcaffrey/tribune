@@ -6,7 +6,21 @@ enum APIClient {
     private static let keychainService = "com.jcaffrey.tribune.auth"
     private static let keychainAccount = "jwt"
 
-    // POST /auth with form body -> { "jwt": "<token>" }
+    private static func getToken() throws -> String? {
+        return try Keychain.readJWT(service: keychainService, account: keychainAccount)
+    }
+
+    static func hasToken() -> Bool {
+        do {
+            let token = try getToken()
+            print("token: \(token ?? "nil")")
+            return token != nil && token != ""
+        } catch {
+            return false
+        }
+    }
+
+    // POST /auth
     static func signIn(username: String, password: String) async throws -> String {
         let url = AppConfig.baseURL.appending(path: authPath)
         var req = URLRequest(url: url)
@@ -26,9 +40,9 @@ enum APIClient {
         return auth.jwt
     }
 
-    // PUT /auth with Authorization: Bearer <jwt> -> { "jwt": "<token>" }
+    // PUT /auth
     static func renewAuth() async throws -> String {
-        guard let stored = try Keychain.readJWT(service: keychainService, account: keychainAccount) else {
+        guard let stored = try getToken() else {
             throw APIError.notAuthorized
         }
         let url = AppConfig.baseURL.appending(path: authPath)
@@ -54,7 +68,7 @@ enum APIClient {
 
     // GET /newsletters
     static func getNewsletters() async throws -> NewslettersResponse {
-        guard let stored = try Keychain.readJWT(service: keychainService, account: keychainAccount) else {
+        guard let stored = try getToken() else {
             throw APIError.notAuthorized
         }
         let url = AppConfig.baseURL.appending(path: newslettersPath)
@@ -72,7 +86,7 @@ enum APIClient {
     }
 
     static func getNewslettersAfter(newsletter: Newsletter) async throws -> NewslettersResponse {
-        guard let stored = try Keychain.readJWT(service: keychainService, account: keychainAccount) else {
+        guard let stored = try getToken() else {
             throw APIError.notAuthorized
         }
         var components = URLComponents()
@@ -110,7 +124,7 @@ enum APIClient {
 
     // GET /newsletters/:id/:type
     static func getNewsletterFile(type: FileType, id: Int) async throws -> Data {
-        guard let stored = try Keychain.readJWT(service: keychainService, account: keychainAccount) else {
+        guard let stored = try getToken() else {
             throw APIError.notAuthorized
         }
         let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "/\(id)/\(type)")
