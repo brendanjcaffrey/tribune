@@ -21,7 +21,6 @@ enum APIClient {
     static func hasToken() -> Bool {
         do {
             let token = try getToken()
-            print("token: \(token ?? "nil")")
             return token != nil && token != ""
         } catch {
             return false

@@ -1,9 +1,12 @@
 import Foundation
 import Combine
+import Reachability
 
 @MainActor
 class DownloadManager : DownloadManaging, ObservableObject {
     private let library: LibraryProtocol
+    private let reachability: Reachability
+    private var onWifi: Bool = false
 
     private var currentTask: Task<Void, Never>?
     @Published private var isWorking = false
@@ -12,6 +15,27 @@ class DownloadManager : DownloadManaging, ObservableObject {
 
     init(library: LibraryProtocol) {
         self.library = library
+        self.reachability = try! Reachability()
+        self.reachability.whenReachable = { reachability in
+            self.onWifi = reachability.connection == .wifi
+            if self.onWifi {
+                Task { await self.checkForDownloads() }
+            } else if Defaults.getDownloadMode() && !Defaults.getDownloadOnCellular() {
+                self.reset()
+            }
+        }
+        self.reachability.whenUnreachable = { _ in
+            self.onWifi = false
+            if Defaults.getDownloadMode() && !Defaults.getDownloadOnCellular() {
+                self.reset()
+            }
+        }
+
+        try! self.reachability.startNotifier()
+    }
+
+    deinit {
+        self.reachability.stopNotifier()
     }
 
     func reset() {
@@ -40,8 +64,17 @@ class DownloadManager : DownloadManaging, ObservableObject {
         }
     }
 
+    func checkIfCancelNeeded() {
+        if isWorking && !Defaults.getDownloadMode() {
+            reset()
+        } else if isWorking && Defaults.getDownloadMode() && !Defaults.getDownloadOnCellular() && !onWifi {
+            reset()
+        }
+    }
+
     private func checkForDownloadsInner() async throws {
         guard Defaults.getDownloadMode() else { return }
+        if !Defaults.getDownloadOnCellular() && !onWifi { return }
 
         let newsletters = try await library.getUnreadUndeletedNewsletters()
         for newsletter in newsletters {

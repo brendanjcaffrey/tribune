@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C633CFA42E9AB709007F8C2D /* Reachability in Frameworks */ = {isa = PBXBuildFile; productRef = C633CFA32E9AB709007F8C2D /* Reachability */; };
 		C66CADD22E9345C8002FA0F5 /* AlertToast in Frameworks */ = {isa = PBXBuildFile; productRef = C66CADD12E9345C8002FA0F5 /* AlertToast */; };
 		C66EEE002E94BA7D00AC6E7B /* TextBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = C66EEDFF2E94BA7D00AC6E7B /* TextBuilder */; };
 		C6AB99892E93078900874657 /* Config.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = C6AB99882E93078900874657 /* Config.xcconfig */; };
@@ -73,6 +74,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C66CADD22E9345C8002FA0F5 /* AlertToast in Frameworks */,
+				C633CFA42E9AB709007F8C2D /* Reachability in Frameworks */,
 				C66EEE002E94BA7D00AC6E7B /* TextBuilder in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -145,6 +147,7 @@
 			packageProductDependencies = (
 				C66CADD12E9345C8002FA0F5 /* AlertToast */,
 				C66EEDFF2E94BA7D00AC6E7B /* TextBuilder */,
+				C633CFA32E9AB709007F8C2D /* Reachability */,
 			);
 			productName = Tribune;
 			productReference = C61648E92E8D703B004B9FA4 /* Tribune.app */;
@@ -231,6 +234,7 @@
 			packageReferences = (
 				C6AB99A72E93457000874657 /* XCRemoteSwiftPackageReference "AlertToast" */,
 				C6DDFB9C2E94BA6300874E2D /* XCRemoteSwiftPackageReference "swiftui-text-builder" */,
+				C620D6EA2E9AB6A900D97E1A /* XCRemoteSwiftPackageReference "Reachability" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C61648EA2E8D703B004B9FA4 /* Products */;
@@ -626,6 +630,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		C620D6EA2E9AB6A900D97E1A /* XCRemoteSwiftPackageReference "Reachability" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ashleymills/Reachability.swift";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
 		C6AB99A72E93457000874657 /* XCRemoteSwiftPackageReference "AlertToast" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/elai950/AlertToast/";
@@ -645,6 +657,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		C633CFA32E9AB709007F8C2D /* Reachability */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C620D6EA2E9AB6A900D97E1A /* XCRemoteSwiftPackageReference "Reachability" */;
+			productName = Reachability;
+		};
 		C66CADD12E9345C8002FA0F5 /* AlertToast */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C6AB99A72E93457000874657 /* XCRemoteSwiftPackageReference "AlertToast" */;

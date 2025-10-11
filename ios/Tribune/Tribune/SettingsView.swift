@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject private var syncManager: SyncManager
     @EnvironmentObject private var downloadManager: DownloadManager
     @State private var isDownloadModeOn: Bool = Defaults.getDownloadMode()
+    @State private var downloadModeOnCellular: Bool = Defaults.getDownloadOnCellular()
     @State private var isWiping = false
     @State private var wipeError: String?
 
@@ -20,6 +21,20 @@ struct SettingsView: View {
                 .toggleStyle(SwitchToggleStyle(tint: .blue))
                 .onChange(of: isDownloadModeOn) {
                     Defaults.setDownloadMode(isDownloadModeOn)
+                    if !isDownloadModeOn {
+                        Defaults.setDownloadOnCellular(false)
+                    }
+                }
+
+                if isDownloadModeOn {
+                    Toggle(isOn: $downloadModeOnCellular) {
+                        Text("Download Mode On Cellular Data")
+                            .font(.headline)
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: .blue))
+                    .onChange(of: downloadModeOnCellular) {
+                        Defaults.setDownloadOnCellular(downloadModeOnCellular)
+                    }
                 }
 
                 Button(role: .destructive) {
@@ -42,6 +57,9 @@ struct SettingsView: View {
             .padding()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .onDisappear() {
+                downloadManager.checkIfCancelNeeded()
+            }
         }
     }
 

@@ -2,9 +2,11 @@ import Foundation
 
 class Defaults {
     static let downloadModeKey = "downloadMode"
+    static let downloadOnCellularKey = "downloadOnCellular"
 
     static func clear() {
         save(downloadModeKey, "false")
+        save(downloadOnCellularKey, "false")
     }
 
     static func getDownloadMode() -> Bool {
@@ -13,6 +15,14 @@ class Defaults {
 
     static func setDownloadMode(_ value: Bool) {
         save(downloadModeKey, value ? "true" : "false")
+    }
+
+    static func getDownloadOnCellular() -> Bool {
+        return load(downloadOnCellularKey) == "true"
+    }
+
+    static func setDownloadOnCellular(_ value: Bool) {
+        save(downloadOnCellularKey, value ? "true" : "false")
     }
 
     private static func save(_ key: String, _ value: String) {
