@@ -11,6 +11,11 @@ export interface ErrorMessage {
   error: string;
 }
 
+export interface SuccessMessage {
+  type: "success";
+  success: string;
+}
+
 export interface SetAuthTokenMessage {
   type: "set auth token";
   authToken: string;
@@ -22,6 +27,11 @@ export interface ClearAuthTokenMessage {
 
 export interface StartSyncMessage {
   type: "start sync";
+}
+
+export interface SyncStatusMessage {
+  type: "sync status";
+  running: boolean;
 }
 
 export interface NewslettersUpdated {
@@ -91,6 +101,8 @@ export type MainToWorkerMessage =
 export type WorkerToMainMessage =
   | ErrorMessage
   | InfoMessage
+  | SuccessMessage
+  | SyncStatusMessage
   | NewslettersUpdated
   | FileFetchedMessage
   | FileDownloadStatusMessage;

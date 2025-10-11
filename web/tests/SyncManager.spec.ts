@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SyncManager } from "../src/SyncManager";
 import library, { Newsletter } from "../src/Library";
 import axios, { GenericAbortSignal } from "axios";
-import { ErrorMessage, NewslettersUpdated } from "../src/WorkerTypes";
+import {
+  ErrorMessage,
+  NewslettersUpdated,
+  SyncStatusMessage,
+} from "../src/WorkerTypes";
 import { DownloadManager } from "../src/DownloadManager";
 import { Mutex } from "async-mutex";
 
@@ -101,19 +105,32 @@ function expectAxiosGetCalls(requests: Request[]) {
   vi.mocked(axios.get).mockClear();
 }
 
-function expectNewsletterUpdatedMessage() {
-  expect(postMessage).toHaveBeenCalledTimes(1);
+function expectSyncStatusMessages() {
+  expect(postMessage).toHaveBeenCalledWith({
+    type: "sync status",
+    running: true,
+  } as SyncStatusMessage);
+  expect(postMessage).toHaveBeenCalledWith({
+    type: "sync status",
+    running: false,
+  } as SyncStatusMessage);
+}
+
+function expectNewsletterUpdatedAndSyncStatusMessages() {
+  expect(postMessage).toHaveBeenCalledTimes(3);
   expect(postMessage).toHaveBeenCalledWith({
     type: "newsletters updated",
   } as NewslettersUpdated);
+  expectSyncStatusMessages();
 }
 
-function expectErrorPostMessage() {
-  expect(postMessage).toHaveBeenCalledTimes(1);
+function expectErrorAndSyncStatusMessage() {
+  expect(postMessage).toHaveBeenCalledTimes(3);
   expect(postMessage).toHaveBeenCalledWith({
     type: "error",
     error: "mock error",
   } as ErrorMessage);
+  expectSyncStatusMessages();
 }
 
 const A1 = {
@@ -269,7 +286,7 @@ describe("SyncManager", () => {
 
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
     expectPutNewsletterCall(N1);
-    expectNewsletterUpdatedMessage();
+    expectNewsletterUpdatedAndSyncStatusMessages();
     expect(vi.mocked(downloadManager.checkForDownloads)).toHaveBeenCalledOnce();
   });
 
@@ -305,7 +322,7 @@ describe("SyncManager", () => {
     ]);
 
     expectPutNewsletterCall(N4);
-    expectNewsletterUpdatedMessage();
+    expectNewsletterUpdatedAndSyncStatusMessages();
     expect(vi.mocked(downloadManager.checkForDownloads)).toHaveBeenCalledOnce();
   });
 
@@ -341,7 +358,7 @@ describe("SyncManager", () => {
     ]);
 
     expectPutNewsletterCall(N5_updated);
-    expectNewsletterUpdatedMessage();
+    expectNewsletterUpdatedAndSyncStatusMessages();
     expect(vi.mocked(downloadManager.checkForDownloads)).toHaveBeenCalledOnce();
   });
 
@@ -352,7 +369,7 @@ describe("SyncManager", () => {
     await syncManager.setLibraryInitialized();
     await syncManager.setAuthToken("test-token");
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
-    expectErrorPostMessage();
+    expectErrorAndSyncStatusMessage();
     expect(vi.mocked(downloadManager.checkForDownloads)).not.toHaveBeenCalled();
   });
 
@@ -384,7 +401,8 @@ describe("SyncManager", () => {
 
     expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
     expect(library().putNewsletter).toHaveBeenCalledTimes(0);
-    expect(postMessage).toHaveBeenCalledTimes(0);
+    expect(postMessage).toHaveBeenCalledTimes(2);
+    expectSyncStatusMessages();
     expect(vi.mocked(downloadManager.checkForDownloads)).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,10 @@ function Notifier() {
         enqueueSnackbar(`worker error: ${message.error}`, {
           variant: "error",
         });
+      } else if (message.type == "success") {
+        enqueueSnackbar(message.success, {
+          variant: "success",
+        });
       }
     });
     return () => {

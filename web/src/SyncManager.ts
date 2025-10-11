@@ -39,15 +39,17 @@ export class SyncManager {
   }
 
   forceSyncLibrary() {
-    /* unawaited */ this.syncLibrary();
+    /* unawaited */ this.syncLibrary(true);
     postMessage(buildWorkerMessage("info", { info: "Sync started" }));
   }
 
-  syncLibrary(): Promise<void> {
-    return this.mutex.runExclusive(async () => this.syncLibraryExclusive());
+  syncLibrary(notifyDone: boolean = false): Promise<void> {
+    return this.mutex.runExclusive(async () =>
+      this.syncLibraryExclusive(notifyDone),
+    );
   }
 
-  private async syncLibraryExclusive() {
+  private async syncLibraryExclusive(notifyDone: boolean = false) {
     if (this.authToken === null || !this.libraryInitialized) {
       return;
     }
@@ -58,6 +60,7 @@ export class SyncManager {
     }
 
     try {
+      postMessage(buildWorkerMessage("sync status", { running: true }));
       this.abortController = new AbortController();
       if (await library().hasAnyNewsletters()) {
         await this.fetchUpdates();
@@ -78,6 +81,12 @@ export class SyncManager {
       this.abortController = null;
       if (this.authToken !== null) {
         this.timerId = setTimeout(() => this.syncLibrary(), REFRESH_MILLIS);
+      }
+      postMessage(buildWorkerMessage("sync status", { running: false }));
+      if (notifyDone) {
+        postMessage(
+          buildWorkerMessage("success", { success: "Sync succeeded" }),
+        );
       }
     }
   }

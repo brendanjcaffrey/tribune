@@ -75,6 +75,7 @@ export default function TopBar({
   const anyDownloadErrors = useAtomValue(anyDownloadErrorsAtom);
   const [showDownloads, setShowDownloads] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [syncRunning, setSyncRunning] = useState(false);
   const authVerified = useAtomValue(authVerifiedAtom);
 
   const toggleShowDownloads = () => {
@@ -95,6 +96,17 @@ export default function TopBar({
       setShowSettings(false);
     }
   }, [authVerified]);
+
+  useEffect(() => {
+    const listener = WorkerInstance.addMessageListener(async (message) => {
+      if (message.type === "sync status") {
+        setSyncRunning(message.running);
+      }
+    });
+    return () => {
+      WorkerInstance.removeMessageListener(listener);
+    };
+  }, []);
 
   return (
     <Box sx={{ flexGrow: 1 }}>
@@ -124,7 +136,23 @@ export default function TopBar({
               </Search>
               <Box sx={{ display: { xs: "none", md: "flex" } }}>
                 <IconButton size="large" color="inherit" onClick={startSync}>
-                  <SyncRoundedIcon />
+                  {syncRunning ? (
+                    <SyncRoundedIcon
+                      sx={{
+                        animation: "spin 2s linear infinite",
+                        "@keyframes spin": {
+                          "0%": {
+                            transform: "rotate(360deg)",
+                          },
+                          "100%": {
+                            transform: "rotate(0deg)",
+                          },
+                        },
+                      }}
+                    />
+                  ) : (
+                    <SyncRoundedIcon />
+                  )}
                 </IconButton>
                 <Tooltip title="Download Status">
                   <IconButton
