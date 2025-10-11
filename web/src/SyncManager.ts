@@ -38,18 +38,20 @@ export class SyncManager {
     }
   }
 
-  forceSyncLibrary() {
-    /* unawaited */ this.syncLibrary(true);
-    postMessage(buildWorkerMessage("info", { info: "Sync started" }));
+  forceSyncLibrary(sendNotifications: boolean) {
+    /* unawaited */ this.syncLibrary(sendNotifications);
+    if (sendNotifications) {
+      postMessage(buildWorkerMessage("info", { info: "Sync started" }));
+    }
   }
 
-  syncLibrary(notifyDone: boolean = false): Promise<void> {
+  syncLibrary(sendNotifications: boolean = false): Promise<void> {
     return this.mutex.runExclusive(async () =>
-      this.syncLibraryExclusive(notifyDone),
+      this.syncLibraryExclusive(sendNotifications),
     );
   }
 
-  private async syncLibraryExclusive(notifyDone: boolean = false) {
+  private async syncLibraryExclusive(sendNotifications: boolean = false) {
     if (this.authToken === null || !this.libraryInitialized) {
       return;
     }
@@ -83,7 +85,7 @@ export class SyncManager {
         this.timerId = setTimeout(() => this.syncLibrary(), REFRESH_MILLIS);
       }
       postMessage(buildWorkerMessage("sync status", { running: false }));
-      if (notifyDone) {
+      if (sendNotifications) {
         postMessage(
           buildWorkerMessage("success", { success: "Sync succeeded" }),
         );

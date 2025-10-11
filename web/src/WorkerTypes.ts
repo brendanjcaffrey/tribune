@@ -27,6 +27,7 @@ export interface ClearAuthTokenMessage {
 
 export interface StartSyncMessage {
   type: "start sync";
+  background: boolean;
 }
 
 export interface SyncStatusMessage {

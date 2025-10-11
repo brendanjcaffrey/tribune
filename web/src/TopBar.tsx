@@ -87,7 +87,9 @@ export default function TopBar({
   };
 
   const startSync = () => {
-    WorkerInstance.postMessage(buildMainMessage("start sync", {}));
+    WorkerInstance.postMessage(
+      buildMainMessage("start sync", { background: false }),
+    );
   };
 
   useEffect(() => {
@@ -107,6 +109,18 @@ export default function TopBar({
       WorkerInstance.removeMessageListener(listener);
     };
   }, []);
+
+  useEffect(() => {
+    if (authVerified) {
+      const handleFocus = () => {
+        WorkerInstance.postMessage(
+          buildMainMessage("start sync", { background: true }),
+        );
+      };
+      window.addEventListener("focus", handleFocus);
+      return () => window.removeEventListener("focus", handleFocus);
+    }
+  }, [authVerified]);
 
   return (
     <Box sx={{ flexGrow: 1 }}>

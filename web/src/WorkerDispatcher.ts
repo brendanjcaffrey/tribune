@@ -34,7 +34,7 @@ onmessage = async (ev: MessageEvent<MainToWorkerMessage>) => {
       updateManager.clearAuthToken();
       break;
     case "start sync":
-      syncManager.forceSyncLibrary();
+      syncManager.forceSyncLibrary(!msg.background);
       break;
     case "download file":
       downloadManager.startDownload(msg);
