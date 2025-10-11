@@ -25,7 +25,7 @@ final class SyncManager: ObservableObject {
         currentSyncTask = nil
     }
 
-    func syncLibrary() async -> SyncStatus {
+    func syncLibrary(skipDownload: Bool = false) async -> SyncStatus {
         guard !isSyncing else { return .blocked }
 
         if currentSyncTask != nil { fatalError() }
@@ -42,7 +42,9 @@ final class SyncManager: ObservableObject {
                     try await fetchInitial()
                 }
 
-                Task { await self.downloadManager?.checkForDownloads() }
+                if !skipDownload {
+                    Task { await self.downloadManager?.checkForDownloads() }
+                }
                 return SyncStatus.success
             } catch is CancellationError {
                 return SyncStatus.blocked

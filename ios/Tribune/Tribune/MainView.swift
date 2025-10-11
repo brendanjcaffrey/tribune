@@ -5,6 +5,7 @@ import SwiftUI
 import TextBuilder
 import WebKit
 import QuickLook
+import BackgroundTasks
 
 struct MainView: View {
     @Environment(\.modelContext) private var modelContext
