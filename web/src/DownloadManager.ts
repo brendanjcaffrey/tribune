@@ -212,6 +212,16 @@ export class DownloadManager {
 
   async downloadFile(id: number, fileType: FileType) {
     try {
+      postMessage(
+        buildWorkerMessage("file download status", {
+          id: id,
+          fileType: fileType,
+          status: "in progress",
+          receivedBytes: 0,
+          totalBytes: 0,
+        }),
+      );
+
       this.abortController = new AbortController();
       const { data } = await axios.get(`/newsletters/${id}/${fileType}`, {
         signal: this.abortController.signal,

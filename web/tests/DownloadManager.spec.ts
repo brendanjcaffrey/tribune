@@ -127,9 +127,18 @@ describe("DownloadManager", () => {
       epubLastAccessedAt: "2025-09-05T00:00:00.000Z",
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(5);
+    expect(postMessage).toHaveBeenCalledTimes(7);
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "epub",
+        status: "in progress",
+        receivedBytes: 0,
+        totalBytes: 0,
+      }),
     );
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("file download status", {
@@ -144,6 +153,15 @@ describe("DownloadManager", () => {
       buildWorkerMessage("file fetched", {
         id: 1,
         fileType: "epub",
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 2,
+        fileType: "epub",
+        status: "in progress",
+        receivedBytes: 0,
+        totalBytes: 0,
       }),
     );
     expect(postMessage).toHaveBeenCalledWith(
@@ -237,9 +255,18 @@ describe("DownloadManager", () => {
       epubLastAccessedAt: "2025-09-05T00:00:00.000Z",
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledTimes(4);
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 2,
+        fileType: "epub",
+        status: "in progress",
+        receivedBytes: 0,
+        totalBytes: 0,
+      }),
     );
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("file download status", {
@@ -325,9 +352,18 @@ describe("DownloadManager", () => {
       sourceLastAccessedAt: "2025-09-05T00:00:00.000Z",
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledTimes(4);
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 2,
+        fileType: "source",
+        status: "in progress",
+        receivedBytes: 0,
+        totalBytes: 0,
+      }),
     );
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("file download status", {
@@ -380,7 +416,15 @@ describe("DownloadManager", () => {
 
     expect(files().tryWriteFile).toHaveBeenCalledTimes(0);
     expect(library().updateNewsletter).toHaveBeenCalledTimes(0);
-    expect(postMessage).toHaveBeenCalledTimes(0);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "file download status",
+      id: 1,
+      fileType: "epub",
+      status: "in progress",
+      receivedBytes: 0,
+      totalBytes: 0,
+    });
   });
 
   it("should delete epub & source files for deleted newsletters right away", async () => {
@@ -610,9 +654,18 @@ describe("DownloadManager", () => {
       epubVersion: "2025-09-01 12:00:00.000000+00",
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledTimes(4);
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "epub",
+        status: "in progress",
+        receivedBytes: 0,
+        totalBytes: 0,
+      }),
     );
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("file download status", {
@@ -672,9 +725,18 @@ describe("DownloadManager", () => {
       epubVersion: "2025-09-01 12:00:00.000000+00",
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledTimes(4);
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "epub",
+        status: "in progress",
+        receivedBytes: 0,
+        totalBytes: 0,
+      }),
     );
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("file download status", {
@@ -734,9 +796,18 @@ describe("DownloadManager", () => {
       sourceLastAccessedAt: "2025-09-05T00:00:00.000Z",
     });
 
-    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledTimes(4);
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "source",
+        status: "in progress",
+        receivedBytes: 0,
+        totalBytes: 0,
+      }),
     );
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("file download status", {

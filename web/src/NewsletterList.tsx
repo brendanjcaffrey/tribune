@@ -22,6 +22,7 @@ import {
   searchAtom,
   showNewsletterContextMenuCallbackAtom,
   store,
+  inProgressDownloadsAtom,
 } from "./State";
 import { SortableNewsletter } from "./SortableNewsletter";
 import { buildMainMessage, FileType } from "./WorkerTypes";
@@ -32,6 +33,7 @@ import {
   NewsletterContextMenu,
   NewsletterContextMenuData,
 } from "./NewsletterContextMenu";
+import CircularProgress from "@mui/material/CircularProgress";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -87,6 +89,10 @@ const gridOptions: GridOptions = {
                 }}
               />
             )}
+            {params.data &&
+              store.get(inProgressDownloadsAtom).has(params.data.id) && (
+                <CircularProgress size={12} sx={{ marginLeft: "4px" }} />
+              )}
           </>
         );
       },
@@ -141,6 +147,7 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
   const pendingDownload = useRef<PendingDownload | null>(null);
   const [newsletters, setNewsletters] = useState<SortableNewsletter[]>([]);
   const [windowWidth, windowHeight] = useWindowSize();
+  const setInProgressDownloads = useSetAtom(inProgressDownloadsAtom);
   const [contextMenuData, setContextMenuData] =
     useState<NewsletterContextMenuData | null>(null);
 
@@ -198,6 +205,10 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
           return { ...n, createdAt: new Date(n.createdAt), sortIndex: i };
         }),
     );
+    // the grid won't update after a big download mode pull without this
+    setTimeout(() => {
+      gridRef.current?.api.refreshCells({ force: true });
+    }, 1);
   }, [setNewsletters]);
 
   useEffect(() => {
@@ -240,13 +251,43 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
             }
           }
         }
+      } else if (message.type === "file download status") {
+        if (message.status === "in progress") {
+          setInProgressDownloads((prev) => {
+            const newMap = new Map(prev);
+            if (!newMap.has(message.id)) {
+              newMap.set(message.id, new Set());
+            }
+            newMap.get(message.id)?.add(message.fileType);
+            return newMap;
+          });
+        } else {
+          setInProgressDownloads((prev) => {
+            const newMap = new Map(prev);
+            if (newMap.has(message.id)) {
+              newMap.get(message.id)?.delete(message.fileType);
+              if (newMap.get(message.id)?.size === 0) {
+                newMap.delete(message.id);
+              }
+            }
+            return newMap;
+          });
+        }
+        const row = gridRef.current?.api.getRowNode(message.id.toString());
+        if (row !== undefined) {
+          gridRef.current?.api.refreshCells({
+            force: true,
+            rowNodes: [row],
+            columns: ["title"],
+          });
+        }
       }
     });
     updateNewsletters();
     return () => {
       WorkerInstance.removeMessageListener(listener);
     };
-  }, [updateNewsletters, setNewsletterData]);
+  }, [updateNewsletters, setNewsletterData, setInProgressDownloads]);
 
   useEffect(() => {
     if (gridRef.current && gridRef.current.api) {
@@ -271,6 +312,7 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
           theme={agTheme}
           gridOptions={gridOptions}
           rowData={newsletters}
+          getRowId={(n) => n.data.id.toString()}
         />
       </div>
       <NewsletterContextMenu
