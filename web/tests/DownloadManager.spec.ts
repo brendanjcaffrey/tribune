@@ -26,6 +26,7 @@ vi.mock("../src/Library", () => {
   MockLibrary.prototype.getNewsletters = vi.fn();
   MockLibrary.prototype.getAllNewsletters = vi.fn();
   MockLibrary.prototype.updateNewsletter = vi.fn();
+  MockLibrary.prototype.getNewsletter = vi.fn();
 
   const mockLibrary = new MockLibrary();
   return {
@@ -483,6 +484,274 @@ describe("DownloadManager", () => {
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("newsletters updated", {}),
+    );
+  });
+
+  it("should touch the file and immediately respond if startDownload is called for an existing epub", async () => {
+    const newsletter = buildNewsletter(
+      1,
+      "2025-09-01 12:00:00.000000+00",
+      false,
+      false,
+      "2025-09-01 12:00:00.000000+00",
+      "2025-09-01 12:01:00.000000+00", // epub downloaded with correct version
+    );
+    vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
+    vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
+    vi.mocked(files().fileExists).mockResolvedValueOnce(true);
+
+    await downloadManager.setAuthToken("mock-token");
+    await downloadManager.setLibraryInitialized();
+
+    await downloadManager.startDownload({
+      type: "download file",
+      fileType: "epub",
+      mime: "application/epub+zip",
+      id: 1,
+    });
+
+    expect(axios.get).toHaveBeenCalledTimes(0);
+    expect(files().fileExists).toHaveBeenCalledTimes(1);
+    expect(files().fileExists).toHaveBeenCalledWith("epub", 1);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "file fetched",
+      fileType: "epub",
+      id: 1,
+    });
+    expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
+    const nUpdate = vi.mocked(library().updateNewsletter).mock.calls[0];
+    expect(nUpdate[0]).toBe(1);
+    expect(nUpdate[1](newsletter)).toEqual({
+      epubVersion: newsletter.epubUpdatedAt,
+      epubLastAccessedAt: "2025-09-05T00:00:00.000Z",
+    });
+  });
+
+  it("should touch the file and immediately respond if startDownload is called for an existing source", async () => {
+    const newsletter = buildNewsletter(
+      1,
+      "2025-09-01 12:00:00.000000+00",
+      false,
+      false,
+      "2025-09-01 12:00:00.000000+00",
+      "2025-09-01 12:01:00.000000+00", // epub downloaded with correct version
+      "2025-09-01 12:02:00.000000+00", // source downloaded
+    );
+    vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
+    vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
+    vi.mocked(files().fileExists).mockResolvedValueOnce(true);
+
+    await downloadManager.setAuthToken("mock-token");
+    await downloadManager.setLibraryInitialized();
+
+    await downloadManager.startDownload({
+      type: "download file",
+      fileType: "source",
+      mime: "text/html",
+      id: 1,
+    });
+
+    expect(axios.get).toHaveBeenCalledTimes(0);
+    expect(files().fileExists).toHaveBeenCalledTimes(1);
+    expect(files().fileExists).toHaveBeenCalledWith("source", 1);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "file fetched",
+      fileType: "source",
+      id: 1,
+    });
+    expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
+    const nUpdate = vi.mocked(library().updateNewsletter).mock.calls[0];
+    expect(nUpdate[0]).toBe(1);
+    expect(nUpdate[1](newsletter)).toEqual({
+      sourceLastAccessedAt: "2025-09-05T00:00:00.000Z",
+    });
+  });
+
+  it("should redownload an epub if it has a new version if startDownload is called", async () => {
+    const nBuffer = new ArrayBuffer(20);
+    vi.mocked(axios.get).mockResolvedValueOnce({ data: nBuffer });
+
+    const newsletter = buildNewsletter(
+      1,
+      "2025-09-01 12:00:00.000000+00",
+      false,
+      false,
+      "2025-09-01 12:01:00.000000+00",
+      "2025-09-01 12:01:00.000000+00", // epub downloaded with correct version
+    );
+    vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
+    vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
+    vi.mocked(files().fileExists).mockResolvedValueOnce(true);
+    vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
+
+    await downloadManager.setAuthToken("mock-token");
+    await downloadManager.setLibraryInitialized();
+
+    await downloadManager.startDownload({
+      type: "download file",
+      fileType: "epub",
+      mime: "application/epub+zip",
+      id: 1,
+    });
+
+    expect(axios.get).toHaveBeenCalledTimes(1);
+    expectAxiosGetCall(1, "epub");
+
+    expect(files().tryWriteFile).toHaveBeenCalledTimes(1);
+    expect(files().tryWriteFile).toHaveBeenCalledWith("epub", 1, nBuffer);
+
+    expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
+    const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
+    expect(n2Update[0]).toBe(1);
+    expect(n2Update[1](newsletter)).toEqual({
+      epubLastAccessedAt: "2025-09-05T00:00:00.000Z",
+      epubVersion: "2025-09-01 12:00:00.000000+00",
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "epub",
+        status: "done",
+        receivedBytes: 20,
+        totalBytes: 20,
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file fetched", {
+        id: 1,
+        fileType: "epub",
+      }),
+    );
+  });
+
+  it("should download an epub if startDownload is called", async () => {
+    const nBuffer = new ArrayBuffer(20);
+    vi.mocked(axios.get).mockResolvedValueOnce({ data: nBuffer });
+
+    const newsletter = buildNewsletter(
+      1,
+      "2025-09-01 12:00:00.000000+00",
+      false,
+      false,
+      null,
+      null,
+    );
+    vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
+    vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
+    vi.mocked(files().fileExists).mockResolvedValueOnce(false);
+    vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
+
+    await downloadManager.setAuthToken("mock-token");
+    await downloadManager.setLibraryInitialized();
+
+    await downloadManager.startDownload({
+      type: "download file",
+      fileType: "epub",
+      mime: "application/epub+zip",
+      id: 1,
+    });
+
+    expect(axios.get).toHaveBeenCalledTimes(1);
+    expectAxiosGetCall(1, "epub");
+
+    expect(files().tryWriteFile).toHaveBeenCalledTimes(1);
+    expect(files().tryWriteFile).toHaveBeenCalledWith("epub", 1, nBuffer);
+
+    expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
+    const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
+    expect(n2Update[0]).toBe(1);
+    expect(n2Update[1](newsletter)).toEqual({
+      epubLastAccessedAt: "2025-09-05T00:00:00.000Z",
+      epubVersion: "2025-09-01 12:00:00.000000+00",
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "epub",
+        status: "done",
+        receivedBytes: 20,
+        totalBytes: 20,
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file fetched", {
+        id: 1,
+        fileType: "epub",
+      }),
+    );
+  });
+
+  it("should download a source if startDownload is called", async () => {
+    const nBuffer = new ArrayBuffer(20);
+    vi.mocked(axios.get).mockResolvedValueOnce({ data: nBuffer });
+
+    const newsletter = buildNewsletter(
+      1,
+      "2025-09-01 12:00:00.000000+00",
+      false,
+      false,
+      "2025-09-01 12:01:00.000000+00",
+      "2025-09-01 12:01:00.000000+00", // epub downloaded with correct version
+      null,
+    );
+    vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
+    vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
+    vi.mocked(files().fileExists).mockResolvedValueOnce(false);
+    vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
+
+    await downloadManager.setAuthToken("mock-token");
+    await downloadManager.setLibraryInitialized();
+
+    await downloadManager.startDownload({
+      type: "download file",
+      fileType: "source",
+      mime: "text/html",
+      id: 1,
+    });
+
+    expect(axios.get).toHaveBeenCalledTimes(1);
+    expectAxiosGetCall(1, "source");
+
+    expect(files().tryWriteFile).toHaveBeenCalledTimes(1);
+    expect(files().tryWriteFile).toHaveBeenCalledWith("source", 1, nBuffer);
+
+    expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
+    const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
+    expect(n2Update[0]).toBe(1);
+    expect(n2Update[1](newsletter)).toEqual({
+      sourceLastAccessedAt: "2025-09-05T00:00:00.000Z",
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "source",
+        status: "done",
+        receivedBytes: 20,
+        totalBytes: 20,
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file fetched", {
+        id: 1,
+        fileType: "source",
+      }),
     );
   });
 });
