@@ -15,3 +15,19 @@ export function PersistedDownloadMode(value: boolean) {
 }
 
 export const downloadModeAtom = atom(GetPersistedDownloadMode());
+
+const DOWNLOAD_PDFS_KEY = "downloadPDFs";
+function GetPersistedDownloadPDFs(): boolean {
+  const value = localStorage.getItem(DOWNLOAD_PDFS_KEY);
+  if (value === null) {
+    return false;
+  } else {
+    return value === "true";
+  }
+}
+
+export function PersistDownloadPDFs(value: boolean) {
+  localStorage.setItem(DOWNLOAD_PDFS_KEY, value.toString());
+}
+
+export const downloadPDFsAtom = atom(GetPersistedDownloadPDFs());

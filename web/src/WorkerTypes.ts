@@ -51,6 +51,11 @@ export interface SetDownloadModeEnabledMessage {
   enabled: boolean;
 }
 
+export interface SetDownloadPDFsEnabledMessage {
+  type: "set download pdfs";
+  enabled: boolean;
+}
+
 export interface FileFetchedMessage {
   type: "file fetched";
   fileType: FileType;
@@ -94,6 +99,7 @@ export type MainToWorkerMessage =
   | StartSyncMessage
   | DownloadFileMessage
   | SetDownloadModeEnabledMessage
+  | SetDownloadPDFsEnabledMessage
   | MarkNewsletterAsReadMessage
   | MarkNewsletterAsUnreadMessage
   | MarkNewsletterAsDeletedMessage

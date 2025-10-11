@@ -42,6 +42,9 @@ onmessage = async (ev: MessageEvent<MainToWorkerMessage>) => {
     case "set download mode":
       downloadManager.setDownloadMode(msg.enabled);
       break;
+    case "set download pdfs":
+      downloadManager.setDownloadPDFs(msg.enabled);
+      break;
     case "mark newsletter as read":
       updateManager.markNewsletterAsRead(msg.id);
       break;

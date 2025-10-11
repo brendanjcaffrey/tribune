@@ -3,7 +3,7 @@ import { enqueueSnackbar } from "notistack";
 import { formatBytes } from "./Util";
 import LogOutButton from "./LogOutButton";
 import { useAtom } from "jotai";
-import { downloadModeAtom } from "./Settings";
+import { downloadModeAtom, downloadPDFsAtom } from "./Settings";
 
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -70,6 +70,9 @@ function SettingsPanel({
       return;
     }
     setDownloadMode(event.target.checked);
+    if (!event.target.checked) {
+      setDownloadPDFs(false);
+    }
   };
 
   const openDownloadModeHelp = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -78,6 +81,28 @@ function SettingsPanel({
 
   const closeDownloadModeHelp = () => {
     setDownloadModeHelpAnchorEl(null);
+  };
+
+  const [downloadPDFs, setDownloadPDFs] = useAtom(downloadPDFsAtom);
+  const [downloadPDFsHelpAnchorEl, setDownloadPDFsHelpAnchorEl] =
+    useState<HTMLButtonElement | null>(null);
+  const downloadPDFsHelpOpen = Boolean(downloadPDFsHelpAnchorEl);
+
+  const handleDownloadPDFsChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    if (!persisted || !downloadMode) {
+      return;
+    }
+    setDownloadPDFs(event.target.checked);
+  };
+
+  const openDownloadPDFsHelp = (event: React.MouseEvent<HTMLButtonElement>) => {
+    setDownloadPDFsHelpAnchorEl(event.currentTarget);
+  };
+
+  const closeDownloadPDFsHelp = () => {
+    setDownloadPDFsHelpAnchorEl(null);
   };
 
   const [usage, setUsage] = useState(0);
@@ -144,6 +169,23 @@ function SettingsPanel({
               <HelpOutlineRounded />
             </IconButton>
           </Grid>
+          <Grid size={10}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={downloadPDFs}
+                  onChange={handleDownloadPDFsChange}
+                  disabled={!downloadMode}
+                />
+              }
+              label="Download PDF Sources"
+            />
+          </Grid>
+          <Grid size={2}>
+            <IconButton onClick={openDownloadPDFsHelp}>
+              <HelpOutlineRounded />
+            </IconButton>
+          </Grid>
           <Grid container spacing={0} sx={{ width: "300px" }}>
             <Grid size={12}>
               <Tooltip title={`${formatBytes(usage)} / ${formatBytes(quota)}`}>
@@ -181,9 +223,23 @@ function SettingsPanel({
           }}
         >
           <div style={{ padding: "10px", maxWidth: "300px" }}>
-            Download mode will aggressively download all epub files at page load
+            Download mode will aggressively download all ePub files at page load
             so you can read them all without having an internet connection. This
             mode is only available if storage persistence is enabled.
+          </div>
+        </Popover>
+        <Popover
+          open={downloadPDFsHelpOpen}
+          anchorEl={downloadPDFsHelpAnchorEl}
+          onClose={closeDownloadPDFsHelp}
+          anchorOrigin={{
+            vertical: "bottom",
+            horizontal: "left",
+          }}
+        >
+          <div style={{ padding: "10px", maxWidth: "300px" }}>
+            Download mode only downloads ePub files by default. With this option
+            on, it will also download any PDF source files.
           </div>
         </Popover>
       </DialogContent>

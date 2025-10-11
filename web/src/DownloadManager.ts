@@ -12,6 +12,7 @@ import { Mutex } from "async-mutex";
 export class DownloadManager {
   private authToken: string | null = null;
   private downloadModeEnabled: boolean = false;
+  private downloadPDFsEnabled: boolean = false;
   private libraryInitialized: boolean = false;
   private abortController: AbortController | null = null;
   private mutex: Mutex;
@@ -52,6 +53,11 @@ export class DownloadManager {
     await this.checkForDownloads();
   }
 
+  public async setDownloadPDFs(enabled: boolean) {
+    this.downloadPDFsEnabled = enabled;
+    await this.checkForDownloads();
+  }
+
   public checkForDownloads(): Promise<void> {
     return this.mutex.runExclusive(async () =>
       this.checkForDownloadsExclusive(),
@@ -80,6 +86,22 @@ export class DownloadManager {
       if (!this.authToken) {
         // logged out in the middle
         return;
+      }
+    }
+
+    if (this.downloadPDFsEnabled) {
+      for (const newsletter of unreadNewsletters) {
+        if (
+          newsletter.sourceMimeType == "application/pdf" &&
+          newsletter.sourceLastAccessedAt == null
+        ) {
+          downloadedAny = true;
+          await this.downloadFile(newsletter.id, "source");
+        }
+        if (!this.authToken) {
+          // logged out in the middle
+          return;
+        }
       }
     }
 

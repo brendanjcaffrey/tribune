@@ -41,12 +41,13 @@ function buildNewsletter(
   epubVersion: string | null = null,
   epubLastAccessedAt: string | null = null,
   sourceLastAccessedAt: string | null = null,
+  sourceMimeType: string = "index/html",
 ): Newsletter {
   return {
     id,
     title: id.toString(),
     author: id.toString(),
-    sourceMimeType: "index/html",
+    sourceMimeType,
     read,
     deleted,
     progress: "",
@@ -252,6 +253,94 @@ describe("DownloadManager", () => {
       buildWorkerMessage("file fetched", {
         id: 2,
         fileType: "epub",
+      }),
+    );
+  });
+
+  it("if download pdfs is enabled, it should download any unread pdfs", async () => {
+    const n2Buffer = new ArrayBuffer(20);
+    vi.mocked(axios.get).mockResolvedValueOnce({ data: n2Buffer });
+    vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
+
+    const newsletters = [
+      buildNewsletter(
+        1,
+        "2025-09-01 12:00:00.000000+00",
+        false,
+        false,
+        "2025-09-01 12:00:00.000000+00", // epubVersion == epubLastUpdatedAt, no download needed
+        null,
+        null,
+        "index/html", // html source, no pdf download needed
+      ),
+      buildNewsletter(
+        2,
+        "2025-09-01 12:00:00.000000+00",
+        false,
+        false,
+        "2025-09-01 12:00:00.000000+00", // epubVersion == epubLastUpdatedAt, no download needed
+        null,
+        null,
+        "application/pdf", // pdf source, download needed
+      ),
+      buildNewsletter(
+        3,
+        "2025-09-01 12:00:00.000000+00",
+        true,
+        false,
+        null,
+        null,
+        null,
+        "application/pdf", // pdf source but read, no download needed
+      ),
+      buildNewsletter(
+        4,
+        "2025-09-01 12:00:00.000000+00",
+        false,
+        true,
+        null,
+        null,
+        null,
+        "application/pdf", // pdf source but deleted, no download needed
+      ),
+    ];
+    vi.mocked(library().getAllNewsletters).mockResolvedValue(newsletters);
+
+    await downloadManager.setLibraryInitialized();
+    await downloadManager.setDownloadMode(true);
+    await downloadManager.setDownloadPDFs(true);
+    await downloadManager.setAuthToken("mock-token");
+
+    expect(axios.get).toHaveBeenCalledTimes(1);
+    expectAxiosGetCall(2, "source");
+
+    expect(files().tryWriteFile).toHaveBeenCalledTimes(1);
+    expect(files().tryWriteFile).toHaveBeenCalledWith("source", 2, n2Buffer);
+
+    expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
+    const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
+    expect(n2Update[0]).toBe(2);
+    expect(n2Update[1](newsletters[1])).toEqual({
+      sourceLastAccessedAt: "2025-09-05T00:00:00.000Z",
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 2,
+        fileType: "source",
+        status: "done",
+        receivedBytes: 20,
+        totalBytes: 20,
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file fetched", {
+        id: 2,
+        fileType: "source",
       }),
     );
   });
