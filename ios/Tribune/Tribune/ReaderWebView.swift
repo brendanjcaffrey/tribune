@@ -21,6 +21,7 @@ struct ReaderWebView: UIViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isInspectable = true
+        webView.scrollView.isScrollEnabled = false
 
         let url = URL(string: "tribune://host/index.html")!
         webView.load(URLRequest(url: url))
