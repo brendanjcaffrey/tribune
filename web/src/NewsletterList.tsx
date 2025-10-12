@@ -253,6 +253,8 @@ function NewsletterList({
           message.fileType === pendingDownload.current?.fileType &&
           message.id === pendingDownload.current?.id
         ) {
+          pendingDownload.current = null;
+          updateNewsletterDownloadStatus(message.id);
           if (message.fileType === "epub") {
             const file = await files().tryReadFile(
               message.fileType,
