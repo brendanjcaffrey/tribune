@@ -1,9 +1,10 @@
 import { isObject } from "lodash";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import axios, { isAxiosError } from "axios";
 import DelayedElement from "./DelayedElement";
 import CenteredHalfAlert from "./CenteredHalfAlert";
 import LogOutButton from "./LogOutButton";
+import Button from "@mui/material/Button";
 
 interface AuthVerifierProps {
   authToken: string;
@@ -17,11 +18,20 @@ function AuthVerifier({
   setAuthVerified,
 }: AuthVerifierProps) {
   const [error, setError] = useState("");
+  const abortController = useRef<AbortController | null>(null);
+  const useOffline = () => {
+    if (abortController.current) {
+      abortController.current.abort();
+    }
+    setAuthVerified(true);
+  };
 
   const checkAuth = useCallback(async () => {
     try {
+      abortController.current = new AbortController();
       const { data } = await axios.put("/auth", undefined, {
         headers: { Authorization: `Bearer ${authToken}` },
+        signal: abortController.current.signal,
       });
 
       if (isObject(data) && "jwt" in data && typeof data["jwt"] === "string") {
@@ -32,6 +42,11 @@ function AuthVerifier({
         setAuthToken("");
       }
     } catch (error) {
+      if (!abortController.current?.signal.aborted) {
+        abortController.current = null;
+        return;
+      }
+
       console.error(error);
       if (
         isAxiosError(error) &&
@@ -60,7 +75,12 @@ function AuthVerifier({
   } else {
     return (
       <DelayedElement>
-        <CenteredHalfAlert severity="info">Verifying auth...</CenteredHalfAlert>
+        <CenteredHalfAlert
+          severity="info"
+          action={<Button onClick={useOffline}>Use Offline</Button>}
+        >
+          Verifying auth...
+        </CenteredHalfAlert>
       </DelayedElement>
     );
   }
