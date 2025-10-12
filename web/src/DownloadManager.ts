@@ -9,6 +9,8 @@ import library from "./Library";
 import { compareNewslettersForDownloading } from "./compareNewsletters";
 import { Mutex } from "async-mutex";
 
+type DownloadAttemptResult = "succeeded" | "failed" | "aborted";
+
 export class DownloadManager {
   private authToken: string | null = null;
   private downloadModeEnabled: boolean = false;
@@ -81,11 +83,9 @@ export class DownloadManager {
     for (const newsletter of unreadNewsletters) {
       if (newsletter.epubVersion != newsletter.epubUpdatedAt) {
         downloadedAny = true;
-        await this.downloadFile(newsletter.id, "epub");
-      }
-      if (!this.authToken) {
-        // logged out in the middle
-        return;
+        if ((await this.downloadFile(newsletter.id, "epub")) == "aborted") {
+          return;
+        }
       }
     }
 
@@ -96,11 +96,9 @@ export class DownloadManager {
           newsletter.sourceLastAccessedAt == null
         ) {
           downloadedAny = true;
-          await this.downloadFile(newsletter.id, "source");
-        }
-        if (!this.authToken) {
-          // logged out in the middle
-          return;
+          if ((await this.downloadFile(newsletter.id, "source")) == "aborted") {
+            return;
+          }
         }
       }
     }
@@ -180,8 +178,15 @@ export class DownloadManager {
     return ageMillis > 3 * 24 * 60 * 60 * 1000;
   }
 
-  public async startDownload(msg: DownloadFileMessage) {
-    if (!this.authToken) {
+  public startDownload(msg: DownloadFileMessage): Promise<void> {
+    return this.mutex.runExclusive(async () =>
+      this.startDownloadExclusive(msg),
+    );
+  }
+
+  async startDownloadExclusive(msg: DownloadFileMessage) {
+    if (!this.authToken || !this.libraryInitialized) {
+      postMessage(buildWorkerMessage("error", { error: "not authenticated" }));
       return;
     }
 
@@ -210,7 +215,11 @@ export class DownloadManager {
     postMessage(buildWorkerMessage("newsletters updated", {}));
   }
 
-  async downloadFile(id: number, fileType: FileType) {
+  async downloadFile(
+    id: number,
+    fileType: FileType,
+  ): Promise<DownloadAttemptResult> {
+    let result: DownloadAttemptResult = "succeeded";
     try {
       postMessage(
         buildWorkerMessage("file download status", {
@@ -262,7 +271,10 @@ export class DownloadManager {
         throw new Error("failed to write downloaded file");
       }
     } catch (error) {
-      if (!this.abortController?.signal.aborted) {
+      if (this.abortController?.signal.aborted) {
+        result = "aborted";
+      } else {
+        result = "failed";
         console.error(error);
         postMessage(
           buildWorkerMessage("file download status", {
@@ -277,6 +289,7 @@ export class DownloadManager {
     } finally {
       this.abortController = null;
     }
+    return result;
   }
 
   async touchFile(id: number, fileType: FileType) {
