@@ -22,7 +22,6 @@ import {
   searchAtom,
   showNewsletterContextMenuCallbackAtom,
   store,
-  inProgressDownloadsAtom,
 } from "./State";
 import { SortableNewsletter } from "./SortableNewsletter";
 import { buildMainMessage, FileType } from "./WorkerTypes";
@@ -36,16 +35,6 @@ import {
 import CircularProgress from "@mui/material/CircularProgress";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-
-function fadedIfRead(params: CellClassParams) {
-  if (params.data && !params.data.read) {
-    return null;
-  } else if (params.data && params.data.read) {
-    return { color: "gray" };
-  } else {
-    return null;
-  }
-}
 
 const gridOptions: GridOptions = {
   suppressCellFocus: true,
@@ -63,13 +52,26 @@ const gridOptions: GridOptions = {
     },
     {
       field: "title",
-      cellStyle: fadedIfRead,
+      cellClassRules: {
+        "is-read": (p) => !!p.data?.read,
+      },
       flex: 4,
+      valueGetter: (p) => ({
+        title: p.data.title,
+        hasEpub: p.data.epubLastAccessedAt !== null,
+        hasSource: p.data.sourceLastAccessedAt !== null,
+        isDownloading: p.data.downloadInProgress,
+      }),
+      equals: (a, b) =>
+        a?.title === b?.title &&
+        a?.hasEpub === b?.hasEpub &&
+        a?.hasSource === b?.hasSource &&
+        a?.isDownloading === b?.isDownloading,
       cellRenderer: (params: CustomCellRendererProps<SortableNewsletter>) => {
         return (
           <>
-            {params.value}
-            {params.data?.epubLastAccessedAt && (
+            {params.value.title}
+            {params.value.hasEpub && (
               <Book
                 fontSize="small"
                 sx={{
@@ -79,7 +81,7 @@ const gridOptions: GridOptions = {
                 }}
               />
             )}
-            {params.data?.sourceLastAccessedAt && (
+            {params.value.hasSource && (
               <Source
                 fontSize="small"
                 sx={{
@@ -89,23 +91,26 @@ const gridOptions: GridOptions = {
                 }}
               />
             )}
-            {params.data &&
-              store.get(inProgressDownloadsAtom).has(params.data.id) && (
-                <CircularProgress size={12} sx={{ marginLeft: "4px" }} />
-              )}
+            {params.value.isDownloading && (
+              <CircularProgress size={12} sx={{ marginLeft: "4px" }} />
+            )}
           </>
         );
       },
     },
     {
       field: "author",
-      cellStyle: fadedIfRead,
+      cellClassRules: {
+        "is-read": (p) => !!p.data?.read,
+      },
       flex: 4,
     },
     {
       field: "createdAt",
       cellDataType: "dateTime",
-      cellStyle: fadedIfRead,
+      cellClassRules: {
+        "is-read": (p) => !!p.data?.read,
+      },
       flex: 2,
       headerName: "Published",
     },
@@ -142,12 +147,14 @@ interface PendingDownload {
   fileType: FileType;
 }
 
-function NewsletterList({ setNewsletterData }: NewsletterListProps) {
+function NewsletterList({
+  setNewsletterData: setDisplayedNewsletterData,
+}: NewsletterListProps) {
   const gridRef = useRef<AgGridReact>(null);
   const pendingDownload = useRef<PendingDownload | null>(null);
   const [newsletters, setNewsletters] = useState<SortableNewsletter[]>([]);
   const [windowWidth, windowHeight] = useWindowSize();
-  const setInProgressDownloads = useSetAtom(inProgressDownloadsAtom);
+  const inProgressDownloads = useRef<Map<number, Set<FileType>>>(new Map());
   const [contextMenuData, setContextMenuData] =
     useState<NewsletterContextMenuData | null>(null);
 
@@ -202,7 +209,12 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
         .filter((n) => !n.deleted)
         .sort(compareNewslettersForDisplay)
         .map((n, i) => {
-          return { ...n, createdAt: new Date(n.createdAt), sortIndex: i };
+          return {
+            ...n,
+            createdAt: new Date(n.createdAt),
+            sortIndex: i,
+            downloadInProgress: inProgressDownloads.current.has(n.id),
+          };
         }),
     );
     // the grid won't update after a big download mode pull without this
@@ -228,7 +240,7 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
             const newsletter = await library().getNewsletter(message.id);
             if (file !== null && newsletter !== undefined) {
               const contents = await file.arrayBuffer();
-              setNewsletterData(newsletter, contents);
+              setDisplayedNewsletterData(newsletter, contents);
             }
           } else {
             const url = await files().tryGetFileURL(
@@ -252,42 +264,40 @@ function NewsletterList({ setNewsletterData }: NewsletterListProps) {
           }
         }
       } else if (message.type === "file download status") {
+        const downloads = inProgressDownloads.current;
         if (message.status === "in progress") {
-          setInProgressDownloads((prev) => {
-            const newMap = new Map(prev);
-            if (!newMap.has(message.id)) {
-              newMap.set(message.id, new Set());
-            }
-            newMap.get(message.id)?.add(message.fileType);
-            return newMap;
-          });
+          if (!downloads.has(message.id)) {
+            downloads.set(message.id, new Set());
+          }
+          downloads.get(message.id)?.add(message.fileType);
         } else {
-          setInProgressDownloads((prev) => {
-            const newMap = new Map(prev);
-            if (newMap.has(message.id)) {
-              newMap.get(message.id)?.delete(message.fileType);
-              if (newMap.get(message.id)?.size === 0) {
-                newMap.delete(message.id);
-              }
+          if (downloads.has(message.id)) {
+            downloads.get(message.id)?.delete(message.fileType);
+            if (downloads.get(message.id)?.size === 0) {
+              downloads.delete(message.id);
             }
-            return newMap;
-          });
+          }
         }
-        const row = gridRef.current?.api.getRowNode(message.id.toString());
-        if (row !== undefined) {
-          gridRef.current?.api.refreshCells({
-            force: true,
-            rowNodes: [row],
-            columns: ["title"],
-          });
-        }
+        setNewsletters((newsletters) => {
+          const idx = newsletters.findIndex((n) => n.id === message.id);
+          if (idx >= 0) {
+            const updated = [...newsletters];
+            updated[idx] = {
+              ...updated[idx],
+              downloadInProgress: downloads.has(message.id),
+            };
+            return updated;
+          } else {
+            return newsletters;
+          }
+        });
       }
     });
     updateNewsletters();
     return () => {
       WorkerInstance.removeMessageListener(listener);
     };
-  }, [updateNewsletters, setNewsletterData, setInProgressDownloads]);
+  }, [updateNewsletters, setDisplayedNewsletterData, setNewsletters]);
 
   useEffect(() => {
     if (gridRef.current && gridRef.current.api) {

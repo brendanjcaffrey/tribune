@@ -8,9 +8,6 @@ export const store = createStore();
 export const authVerifiedAtom = atom(false);
 export const searchAtom = atom("");
 export const anyDownloadErrorsAtom = atom(false);
-export const inProgressDownloadsAtom = atom<Map<number, Set<FileType>>>(
-  new Map(),
-);
 
 export const showNewsletterFileCallbackAtom = atom({
   fn: (_: SortableNewsletter, __: FileType) => {}, // eslint-disable-line
