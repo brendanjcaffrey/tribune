@@ -12,7 +12,6 @@ import {
   type GridOptions,
   themeMaterial,
   type CellContextMenuEvent,
-  CellClassParams,
 } from "ag-grid-community";
 
 import { WorkerInstance } from "./WorkerInstance";
