@@ -211,8 +211,18 @@ export class DownloadManager {
       return;
     }
 
-    await this.downloadFile(msg.id, msg.fileType);
-    postMessage(buildWorkerMessage("newsletters updated", {}));
+    switch (await this.downloadFile(msg.id, msg.fileType)) {
+      case "succeeded":
+        postMessage(buildWorkerMessage("newsletters updated", {}));
+        break;
+      case "failed":
+        postMessage(
+          buildWorkerMessage("error", { error: "failed to download file" }),
+        );
+        break;
+      case "aborted":
+        break; // nop
+    }
   }
 
   async downloadFile(

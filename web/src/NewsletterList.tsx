@@ -175,10 +175,32 @@ function NewsletterList({
     headerColumnResizeHandleColor: muiTheme.palette.info.main,
   });
 
+  const updateNewsletterDownloadStatus = useCallback(
+    (id: number) => {
+      setNewsletters((newsletters) => {
+        const idx = newsletters.findIndex((n) => n.id === id);
+        if (idx >= 0) {
+          const updated = [...newsletters];
+          updated[idx] = {
+            ...updated[idx],
+            downloadInProgress:
+              inProgressDownloads.current.has(id) ||
+              pendingDownload.current?.id === id,
+          };
+          return updated;
+        } else {
+          return newsletters;
+        }
+      });
+    },
+    [setNewsletters],
+  );
+
   useEffect(() => {
     setShowNewsletterFileCallback({
       fn: (newsletter: SortableNewsletter, fileType: FileType) => {
         pendingDownload.current = { id: newsletter.id, fileType: fileType };
+        updateNewsletterDownloadStatus(newsletter.id);
         WorkerInstance.postMessage(
           buildMainMessage("download file", {
             id: newsletter.id,
@@ -191,7 +213,7 @@ function NewsletterList({
         );
       },
     });
-  }, [setShowNewsletterFileCallback]);
+  }, [setShowNewsletterFileCallback, updateNewsletterDownloadStatus]);
 
   useEffect(() => {
     setShowNewsletterContextMenuCallback({
@@ -270,33 +292,33 @@ function NewsletterList({
           }
           downloads.get(message.id)?.add(message.fileType);
         } else {
+          if (
+            message.status === "error" ||
+            (message.status === "canceled" &&
+              pendingDownload.current?.id === message.id &&
+              pendingDownload.current?.fileType === message.fileType)
+          ) {
+            pendingDownload.current = null;
+          }
           if (downloads.has(message.id)) {
             downloads.get(message.id)?.delete(message.fileType);
             if (downloads.get(message.id)?.size === 0) {
               downloads.delete(message.id);
             }
           }
+          updateNewsletterDownloadStatus(message.id);
         }
-        setNewsletters((newsletters) => {
-          const idx = newsletters.findIndex((n) => n.id === message.id);
-          if (idx >= 0) {
-            const updated = [...newsletters];
-            updated[idx] = {
-              ...updated[idx],
-              downloadInProgress: downloads.has(message.id),
-            };
-            return updated;
-          } else {
-            return newsletters;
-          }
-        });
       }
     });
     updateNewsletters();
     return () => {
       WorkerInstance.removeMessageListener(listener);
     };
-  }, [updateNewsletters, setDisplayedNewsletterData, setNewsletters]);
+  }, [
+    updateNewsletters,
+    setDisplayedNewsletterData,
+    updateNewsletterDownloadStatus,
+  ]);
 
   useEffect(() => {
     if (gridRef.current && gridRef.current.api) {
