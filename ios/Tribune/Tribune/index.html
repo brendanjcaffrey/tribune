@@ -63,7 +63,6 @@
       const darkBackgroundColor = "#000000";
       const darkForegroundColor = "#ffffff";
       const darkLinkColor = "#90caf9";
-      let rendition;
 
       async function readLocalFileToArrayBuffer(url) {
         const res = await fetch(url);
@@ -77,10 +76,6 @@
         window.webkit.messageHandlers.readerEvent.postMessage({
           type: "dismiss",
         });
-      }
-
-      function setPercentage(percentage) {
-        document.getElementById("progress").innerText = `${percentage}%`;
       }
 
       function getStyles(backgroundColor, foregroundColor, linkColor) {
@@ -145,10 +140,22 @@
       // Called from Swift
       async function openBook(path, initialProgress) {
         try {
+          let cfi = null;
           const buf = await readLocalFileToArrayBuffer(path);
           const book = ePub(buf);
+
+          function updateProgress() {
+            if (cfi) {
+              const percentage = book.locations.percentageFromCfi(cfi);
+              const progress =
+                percentage === undefined ? 0 : Math.floor(percentage * 100);
+              document.getElementById("progress").innerText = `${progress}%`;
+            }
+          }
           book.ready.then(() => {
-            return book.locations.generate(150);
+            book.locations.generate(150).then(() => {
+              updateProgress();
+            });
           });
 
           const windowHeight = window.innerHeight;
@@ -165,7 +172,7 @@
           footer.style.width = `${windowWidth - footerRight}px`;
           // window.addEventListener('resize', () => {}); // TODO
 
-          rendition = book.renderTo(viewer, {
+          const rendition = book.renderTo(viewer, {
             width: "100%",
             height: "100%",
             allowPopups: true,
@@ -241,14 +248,8 @@
           rendition.on("touchend", handleTouchEnd);
 
           rendition.on("relocated", (location) => {
-            const percentage = book.locations.percentageFromCfi(
-              location.start.cfi,
-            );
-            if (percentage === undefined) {
-              setPercentage(0);
-            } else {
-              setPercentage(Math.floor(percentage * 100));
-            }
+            cfi = location.start.cfi;
+            updateProgress();
             window.webkit.messageHandlers.readerEvent.postMessage({
               type: "progress",
               cfi: location.start.cfi,

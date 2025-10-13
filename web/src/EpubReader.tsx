@@ -96,8 +96,22 @@ const EpubReader: React.FC<EpubReaderProps> = ({
   const viewerRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition | null>(null);
   const bookRef = useRef<Book | null>(null);
+  const cfiRef = useRef<string | null>(null);
   const [windowWidth, windowHeight] = useWindowSize();
   const [percentage, setPercentage] = useState(0);
+
+  const updatePercentage = () => {
+    if (bookRef.current && cfiRef.current) {
+      const percentage = bookRef.current.locations.percentageFromCfi(
+        cfiRef.current,
+      );
+      setPercentage(
+        percentage === undefined ? 0 : Math.floor(percentage * 100),
+      );
+    } else {
+      setPercentage(0);
+    }
+  };
 
   useEffect(() => {
     if (renditionRef.current) {
@@ -117,7 +131,9 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     bookRef.current = book;
 
     book.ready.then(() => {
-      return book.locations.generate(150);
+      book.locations.generate(150).then(() => {
+        updatePercentage();
+      });
     });
 
     const rendition = book.renderTo(viewerRef.current, {
@@ -167,14 +183,8 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     rendition.on("touchend", handleTouchEnd);
 
     rendition.on("relocated", (location: Location) => {
-      const percentage = bookRef.current?.locations.percentageFromCfi(
-        location.start.cfi,
-      );
-      if (percentage === undefined) {
-        setPercentage(0);
-      } else {
-        setPercentage(Math.floor(percentage * 100));
-      }
+      cfiRef.current = location.start.cfi;
+      updatePercentage();
       WorkerInstance.postMessage(
         buildMainMessage("update newsletter progress", {
           id: newsletter.id,
