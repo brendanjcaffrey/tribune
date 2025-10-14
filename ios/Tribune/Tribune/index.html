@@ -137,6 +137,42 @@
         );
       }
 
+      function setTheme(rendition) {
+        const footer = document.getElementById("footer");
+        const dismiss = document.getElementById("dismiss");
+        let randomThemeName = Math.random().toString(36).substring(2, 15);
+        if (
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches
+        ) {
+          rendition.themes.register(randomThemeName, getDarkStyles());
+          footer.style.backgroundColor = darkBackgroundColor;
+          footer.style.color = darkForegroundColor;
+          dismiss.style.color = darkLinkColor;
+        } else {
+          rendition.themes.register(randomThemeName, getLightStyles());
+          footer.style.backgroundColor = lightBackgroundColor;
+          footer.style.color = lightForegroundColor;
+          dismiss.style.color = lightLinkColor;
+        }
+        rendition.themes.select(randomThemeName);
+      }
+
+      function setDimensions() {
+        const windowHeight = window.innerHeight;
+        const windowWidth = window.innerWidth;
+        const container = document.getElementById("container");
+        const viewer = document.getElementById("viewer");
+        const footer = document.getElementById("footer");
+        const dismiss = document.getElementById("dismiss");
+
+        container.style.width = viewer.style.width = `${windowWidth}px`;
+        container.style.height = `${windowHeight}px`;
+        viewer.style.height = `${windowHeight - footerHeight}px`;
+        footer.style.height = `${footerHeight}px`;
+        footer.style.width = `${windowWidth - footerRight}px`;
+      }
+
       // Called from Swift
       async function openBook(path, initialProgress) {
         try {
@@ -158,20 +194,12 @@
             });
           });
 
-          const windowHeight = window.innerHeight;
-          const windowWidth = window.innerWidth;
-          const container = document.getElementById("container");
+          setDimensions();
+          window.addEventListener("resize", () => {
+            setDimensions();
+          });
+
           const viewer = document.getElementById("viewer");
-          const footer = document.getElementById("footer");
-          const dismiss = document.getElementById("dismiss");
-
-          container.style.width = viewer.style.width = `${windowWidth}px`;
-          container.style.height = `${windowHeight}px`;
-          viewer.style.height = `${windowHeight - footerHeight}px`;
-          footer.style.height = `${footerHeight}px`;
-          footer.style.width = `${windowWidth - footerRight}px`;
-          // window.addEventListener('resize', () => {}); // TODO
-
           const rendition = book.renderTo(viewer, {
             width: "100%",
             height: "100%",
@@ -179,28 +207,11 @@
             allowScriptedContent: true,
           });
 
-          let randomThemeName = Math.random().toString(36).substring(2, 15);
-          if (
-            window.matchMedia &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches
-          ) {
-            rendition.themes.register(randomThemeName, getDarkStyles());
-            footer.style.backgroundColor = darkBackgroundColor;
-            footer.style.color = darkForegroundColor;
-            dismiss.style.color = darkLinkColor;
-          } else {
-            rendition.themes.register(randomThemeName, getLightStyles());
-            footer.style.backgroundColor = lightBackgroundColor;
-            footer.style.color = lightForegroundColor;
-            dismiss.style.color = lightLinkColor;
-          }
-          rendition.themes.select(randomThemeName);
-
+          setTheme(rendition);
           window
             .matchMedia("(prefers-color-scheme: dark)")
             .addEventListener("change", (event) => {
-              const newColorScheme = event.matches ? "dark" : "light";
-              // TODO
+              setTheme(rendition);
             });
 
           if (initialProgress.length > 0) {
