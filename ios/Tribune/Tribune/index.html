@@ -247,6 +247,10 @@
               // NB: the selection API doesn't seem to work in webviews so this is the best we can do right now
               // unfortunately, that means deselecting text will result in a page turn
             } else if (deltaTime < timeThreshold) {
+              // don't change page when tapping on a link
+              if (e.target && e.target.tagName == "A") {
+                return;
+              }
               if (startX < window.innerWidth / 2) {
                 rendition.prev();
               } else {
