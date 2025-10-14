@@ -4,15 +4,16 @@ import TextBuilder
 
 struct NewsletterRow: View {
     @EnvironmentObject private var downloadManager: DownloadManager
+    @State private var showContextMenu: Bool = false
 
     let n: Newsletter
-    let onTap: () -> Void
-    let onDelete: () -> Void
-    let onToggleRead: () -> Void
-    let onContextMenu: () -> Void
+    let openEpub: () -> Void
+    let openSource: () -> Void
+    let deleteNewsletter: () -> Void
+    let toggleRead: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
+        Button(action: openEpub) {
             VStack(alignment: .leading, spacing: 4) {
                 titleLine
                     .font(.headline)
@@ -35,22 +36,28 @@ struct NewsletterRow: View {
         .contentShape(Rectangle())  // ensures the whole row is swipeable
         .simultaneousGesture(LongPressGesture()
             .onEnded { _ in
-                onContextMenu()
+                contextMenu()
             }
         )
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive, action: onDelete) {
+            Button(role: .destructive, action: deleteNewsletter) {
                 Label("Delete", systemImage: "trash")
             }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            Button(action: onToggleRead) {
+            Button(action: toggleRead) {
                 Label(
                     n.read ? "Mark Unread" : "Mark Read",
                     systemImage: n.read ? "envelope.badge.fill" : "envelope.open")
             }
             .tint(.blue)
         }
+        .confirmationDialog(
+            "Newsletter options",
+            isPresented: $showContextMenu,
+            titleVisibility: .hidden,
+            actions: { contextMenuActions() },
+        )
     }
 
     @ViewBuilder
@@ -64,5 +71,19 @@ struct NewsletterRow: View {
                 Text(Image(systemName: "folder"))
             }
         }
+    }
+
+    @ViewBuilder
+    private func contextMenuActions() -> some View {
+        Button("Mark as \(n.read ? "Unread" : "Read")", action: { toggleRead() })
+        Button("Open ePub", action: { openEpub() })
+        Button("Open Source", action: { openSource() })
+        Button("Delete", role: .destructive, action: { deleteNewsletter() })
+        Button("Cancel", role: .cancel) { }
+    }
+
+    @MainActor
+    func contextMenu() {
+        showContextMenu = true
     }
 }

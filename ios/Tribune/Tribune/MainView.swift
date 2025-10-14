@@ -15,8 +15,6 @@ struct MainView: View {
     @EnvironmentObject private var downloadManager: DownloadManager
 
     @State private var searchText: String = ""
-    @State private var contextMenuNewsletter: Newsletter?
-    @State private var showContextMenu: Bool = false
     @State private var presentedEpub: Newsletter?
     @State private var presentedSourceURL: URL?
     @State private var showSyncToast = false
@@ -28,22 +26,16 @@ struct MainView: View {
     var body: some View {
         NewslettersList(
             searchText: searchText,
-            onTap: { n in openEpub(n) },
-            onDelete: { n in delete(n) },
-            onToggleRead: { n in toggleRead(n) },
-            onContextMenu: { n in contextMenu(n) },
+            openEpub: { n in openEpub(n) },
+            openSource: { n in openSource(n) },
+            deleteNewsletter: { n in delete(n) },
+            toggleRead: { n in toggleRead(n) },
         )
         .navigationTitle("Newsletters")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { settingsToolbar }
         .refreshable { await runLibrarySync() }
         .searchable(text: $searchText, prompt: "Search newsletters...")
-        .confirmationDialog(
-            "Newsletter options",
-            isPresented: $showContextMenu,
-            titleVisibility: .hidden,
-            actions: { contextMenuActions() },
-        )
         .fullScreenCover(item: $presentedEpub) { n in
             ReaderWebView(newsletter: n, library: Library(context: modelContext)) {
                 presentedEpub = nil
@@ -80,17 +72,6 @@ struct MainView: View {
     private var settingsSheet: some View {
         SettingsView()
             .onDisappear { triggerBackgroundSync() }
-    }
-
-    @ViewBuilder
-    private func contextMenuActions() -> some View {
-        if let n = contextMenuNewsletter {
-            Button("Mark as \(n.read ? "Unread" : "Read")", action: { toggleRead(n) })
-            Button("Open ePub", action: { openEpub(n) })
-            Button("Open Source", action: { openSource(n) })
-            Button("Delete", role: .destructive, action: { delete(n) })
-        }
-        Button("Cancel", role: .cancel) { }
     }
 
     private func makeSyncToast(for status: SyncStatus?) -> AlertToast {
@@ -184,12 +165,6 @@ extension MainView {
         if !item.deleted {
             Task { try? await Library(context: modelContext).markNewsletterDeleted(item) }
         }
-    }
-
-    @MainActor
-    func contextMenu(_ item: Newsletter) {
-        contextMenuNewsletter = item
-        showContextMenu = true
     }
 }
 

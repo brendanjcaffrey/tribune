@@ -6,25 +6,25 @@ struct NewslettersList: View {
     @Environment(\.modelContext) private var modelContext
 
     let searchText: String
-    let onTap: (_: Newsletter) -> Void
-    let onDelete: (_: Newsletter) -> Void
-    let onToggleRead: (_: Newsletter) -> Void
-    let onContextMenu: (_: Newsletter) -> Void
+    let openEpub: (_: Newsletter) -> Void
+    let openSource: (_: Newsletter) -> Void
+    let deleteNewsletter: (_: Newsletter) -> Void
+    let toggleRead: (_: Newsletter) -> Void
 
     @Query private var newsletters: [Newsletter]
 
     init(
         searchText: String,
-        onTap: @escaping (_: Newsletter) -> Void,
-        onDelete: @escaping (_: Newsletter) -> Void,
-        onToggleRead: @escaping (_: Newsletter) -> Void,
-        onContextMenu: @escaping (_: Newsletter) -> Void,
+        openEpub: @escaping (_: Newsletter) -> Void,
+        openSource: @escaping (_: Newsletter) -> Void,
+        deleteNewsletter: @escaping (_: Newsletter) -> Void,
+        toggleRead: @escaping (_: Newsletter) -> Void
     ) {
         self.searchText = searchText
-        self.onTap = onTap
-        self.onDelete = onDelete
-        self.onToggleRead = onToggleRead
-        self.onContextMenu = onContextMenu
+        self.openEpub = openEpub
+        self.openSource = openSource
+        self.deleteNewsletter = deleteNewsletter
+        self.toggleRead = toggleRead
 
         let predicate = #Predicate<Newsletter> { n in
             if n.deleted {
@@ -62,10 +62,10 @@ struct NewslettersList: View {
                     ForEach(newsletters) { n in
                         NewsletterRow(
                             n: n,
-                            onTap: { onTap(n) },
-                            onDelete: { onDelete(n) },
-                            onToggleRead: { onToggleRead(n) },
-                            onContextMenu: { onContextMenu(n) },
+                            openEpub: { openEpub(n) },
+                            openSource: { openSource(n) },
+                            deleteNewsletter: { deleteNewsletter(n) },
+                            toggleRead: { toggleRead(n) },
                         )
                     }
                 }
