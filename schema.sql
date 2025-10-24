@@ -11,6 +11,7 @@ CREATE TABLE newsletters (
     title TEXT NOT NULL,
     author TEXT NOT NULL,
     source_mime_type TEXT NOT NULL,
+    source_id TEXT NOT NULL UNIQUE,
     read BOOLEAN DEFAULT FALSE,
     deleted BOOLEAN DEFAULT FALSE,
     progress TEXT NOT NULL DEFAULT '',

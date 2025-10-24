@@ -20,8 +20,8 @@ GET_NEWSLETTERS_QUERY = "#{GET_NEWSLETTERS_QUERY_START} #{GET_NEWSLETTERS_QUERY_
 GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) > ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
 GET_NEWSLETTERS_BEFORE_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) < ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
 
-CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, source_mime_type) VALUES ($1, $2, $3) RETURNING id;'
-CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, source_mime_type, created_at) VALUES ($1, $2, $3, $4) RETURNING id;'
+CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, source_id, source_mime_type) VALUES ($1, $2, $3, $4) RETURNING id;'
+CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, source_id, source_mime_type, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING id;'
 NEWSLETTER_EXISTS_QUERY = 'SELECT EXISTS(SELECT 1 FROM newsletters WHERE id = $1 AND deleted = FALSE);'
 NEWSLETTER_SOURCE_MIME_TYPE_QUERY = 'SELECT source_mime_type FROM newsletters WHERE id = $1 AND deleted = FALSE;'
 
@@ -64,8 +64,9 @@ EPUB_UPDATED_NEWSLETTER_QUERY = <<-SQL
       updated_at = CURRENT_TIMESTAMP,
       epub_updated_at = CURRENT_TIMESTAMP,
       progress = ''
-  WHERE id = $1
-      AND deleted = FALSE;
+  WHERE source_id = $1
+      AND deleted = FALSE
+  RETURNING id;
 SQL
 
 EPUB_MIME_TYPE = 'application/epub+zip'
@@ -249,13 +250,14 @@ class Server < Sinatra::Base
 
     title = metadata['title']
     author = metadata['author']
-    halt 400, 'Missing title or author in metadata' if title.nil? || title.empty? || author.nil? || author.empty?
+    source_id = metadata['source_id']
+    halt 400, 'Missing title, author or source_id in metadata' if title.nil? || title.empty? || author.nil? || author.empty? || source_id.nil? || source_id.empty?
 
     source_mime_type = params[:source_file][:type]
     result = if metadata['created_at']
-               query(CREATE_NEWSLETTER_AT_TIME_QUERY, [title, author, source_mime_type, metadata['created_at']])
+               query(CREATE_NEWSLETTER_AT_TIME_QUERY, [title, author, source_id, source_mime_type, metadata['created_at']])
              else
-               query(CREATE_NEWSLETTER_QUERY, [title, author, source_mime_type])
+               query(CREATE_NEWSLETTER_QUERY, [title, author, source_id, source_mime_type])
              end
 
     if (id = result[0]['id'])
@@ -304,16 +306,16 @@ class Server < Sinatra::Base
     end
   end
 
-  put '/newsletters/:id/epub' do
+  put '/newsletters/:source_id/epub' do
     halt 401, 'Unauthorized' unless authed?
-    halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
+    halt 400, 'Invalid ID' if params[:source_id].nil? || params[:source_id].empty?
     halt 400, 'Missing epub file' if !params[:epub_file] || !(epub_tempfile = params[:epub_file][:tempfile])
     halt 400, 'Invalid epub mime type' unless params[:epub_file][:type] == EPUB_MIME_TYPE
 
-    result = update_query(EPUB_UPDATED_NEWSLETTER_QUERY, [params[:id].to_i])
-    halt 404, 'Newsletter not found' if result.zero?
+    result = query(EPUB_UPDATED_NEWSLETTER_QUERY, [params[:source_id]])
+    halt 404, 'Newsletter not found' if result.empty?
 
-    FileUtils.move(epub_tempfile.path, epub_path(params[:id].to_i))
+    FileUtils.move(epub_tempfile.path, epub_path(result.first['id']))
     'epub updated'
   end
 end
