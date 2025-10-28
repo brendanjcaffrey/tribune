@@ -227,6 +227,19 @@ namespace :user do
     print 'Enter username: '
     username = $stdin.gets.strip
 
+    db = PG.connect(
+      dbname: config.database_name,
+      user: config.database_username,
+      password: config.database_password,
+      host: config.database_host,
+      port: config.database_port
+    )
+    res = db.exec_params('SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)', [username])
+    if res.to_a[0]['exists'] != 't'
+      puts "❌ User does not exist: #{username}"
+      exit 1
+    end
+
     puts build_jwt(username, config.server_secret)
   end
 end
