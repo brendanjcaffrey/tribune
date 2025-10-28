@@ -104,7 +104,9 @@ final class SyncManager: ObservableObject {
                 createdAt: item.created_at,
                 updatedAt: item.updated_at,
                 epubUpdatedAt: item.epub_updated_at,
+                sourceUpdatedAt: item.source_updated_at,
                 epubVersion: original?.epubVersion,
+                sourceVersion: original?.sourceVersion,
                 epubLastAccessedAt: original?.epubLastAccessedAt,
                 sourceLastAccessedAt: original?.sourceLastAccessedAt
             )

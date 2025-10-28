@@ -13,11 +13,13 @@ public final class Newsletter {
     public var progress: String
     // createdAt is displayed, so having it parsed already as a Date is nice
     public var createdAt: Date
-    // updatedAt/epubUpdatedAt need absolute precision, so keep as strings
+    // updatedAt/epubUpdatedAt/sourceUpdatedAt need absolute precision, so keep as strings
     public var updatedAt: String
     public var epubUpdatedAt: String
-    /// This is nil if never downloaded and will match `epubUpdatedAt` once downloaded
+    public var sourceUpdatedAt: String
+    /// These are nil if never downloaded and will match `[epub|source]UpdatedAt` once downloaded
     public var epubVersion: String?
+    public var sourceVersion: String?
     /// These are set to the time it was first downloaded (on download) and updated whenever the file is opened
     /// This is used to decide when to delete old files
     public var epubLastAccessedAt: Date?
@@ -34,7 +36,9 @@ public final class Newsletter {
         createdAt: Date,
         updatedAt: String,
         epubUpdatedAt: String,
+        sourceUpdatedAt: String,
         epubVersion: String? = nil,
+        sourceVersion: String? = nil,
         epubLastAccessedAt: Date? = nil,
         sourceLastAccessedAt: Date? = nil
     ) {
@@ -48,7 +52,9 @@ public final class Newsletter {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.epubUpdatedAt = epubUpdatedAt
+        self.sourceUpdatedAt = sourceUpdatedAt
         self.epubVersion = epubVersion
+        self.sourceVersion = sourceVersion
         self.epubLastAccessedAt = epubLastAccessedAt
         self.sourceLastAccessedAt = sourceLastAccessedAt
     }

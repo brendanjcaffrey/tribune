@@ -12,6 +12,7 @@ struct NewslettersResponse: Codable {
         let created_at: Date
         let updated_at: String
         let epub_updated_at: String
+        let source_updated_at: String
     }
     let result: [Item]
 }

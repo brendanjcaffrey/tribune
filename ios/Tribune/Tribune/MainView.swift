@@ -167,20 +167,3 @@ extension MainView {
         }
     }
 }
-
-#Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: Newsletter.self, configurations: config)
-    for i in 0..<100 {
-        let newsletter = Newsletter(
-            id: i, title: "title\(i)", author: "author\(i)", sourceMimeType: "text/html",
-            read: false, deleted: false, progress: "", createdAt: Date(), updatedAt: "",
-            epubUpdatedAt: "")
-        container.mainContext.insert(newsletter)
-    }
-    let session = Session()
-    return NavigationStack {
-        MainView().environmentObject(session)
-    }
-    .modelContainer(container)
-}

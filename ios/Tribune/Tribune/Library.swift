@@ -68,7 +68,9 @@ final class Library: LibraryProtocol {
             existing.createdAt = n.createdAt
             existing.updatedAt = n.updatedAt
             existing.epubUpdatedAt = n.epubUpdatedAt
+            existing.sourceUpdatedAt = n.sourceUpdatedAt
             existing.epubVersion = n.epubVersion
+            existing.sourceVersion = n.sourceVersion
             existing.epubLastAccessedAt = n.epubLastAccessedAt
             existing.sourceLastAccessedAt = n.sourceLastAccessedAt
         } else {

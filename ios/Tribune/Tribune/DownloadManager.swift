@@ -85,7 +85,12 @@ class DownloadManager : DownloadManaging, ObservableObject {
     }
 
     func downloadEpub(newsletter: Newsletter) async throws {
-        guard !Files.fileExists(type: .epub, id: newsletter.id) else { return }
+        var exists = Files.fileExists(type: .epub, id: newsletter.id)
+        if newsletter.epubVersion != newsletter.epubUpdatedAt {
+            exists = false
+        }
+        if exists { return }
+
         currentEpubDownloadId = newsletter.id
         defer { currentEpubDownloadId = nil }
 
@@ -97,13 +102,19 @@ class DownloadManager : DownloadManaging, ObservableObject {
     }
 
     func downloadSource(newsletter: Newsletter) async throws {
-        guard !Files.fileExists(type: newsletter.sourceFileType, id: newsletter.id) else { return }
+        var exists = Files.fileExists(type: newsletter.sourceFileType, id: newsletter.id)
+        if newsletter.sourceVersion != newsletter.sourceUpdatedAt {
+            exists = false
+        }
+        if exists { return }
+
         currentSourceDownloadId = newsletter.id
         defer { currentSourceDownloadId = nil }
 
         let data = try await APIClient.getNewsletterFile(type: .source, id: newsletter.id)
         Files.writeFile(type: newsletter.sourceFileType, id: newsletter.id, data: data)
         newsletter.sourceLastAccessedAt = .now
+        newsletter.sourceVersion = newsletter.sourceUpdatedAt
         try library.save()
     }
 
@@ -119,6 +130,7 @@ class DownloadManager : DownloadManaging, ObservableObject {
             if shouldDelete(date: newsletter.sourceLastAccessedAt) {
                 Files.deleteFile(type: newsletter.sourceFileType, id: newsletter.id)
                 newsletter.sourceLastAccessedAt = nil
+                newsletter.sourceVersion = nil
                 try library.save()
             }
         }
