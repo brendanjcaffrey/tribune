@@ -171,7 +171,9 @@ export class SyncManager {
         createdAt: n.created_at,
         updatedAt: n.updated_at,
         epubUpdatedAt: n.epub_updated_at,
+        sourceUpdatedAt: n.source_updated_at,
         epubVersion: original ? original.epubVersion : null,
+        sourceVersion: original ? original.sourceVersion : null,
         epubLastAccessedAt: original ? original.epubLastAccessedAt : null,
         sourceLastAccessedAt: original ? original.sourceLastAccessedAt : null,
       };

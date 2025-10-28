@@ -135,7 +135,9 @@ function buildNewsletter(
     createdAt: timestamp,
     updatedAt: timestamp,
     epubUpdatedAt: timestamp,
+    sourceUpdatedAt: timestamp,
     epubVersion: null,
+    sourceVersion: null,
     epubLastAccessedAt: null,
     sourceLastAccessedAt: null,
   };

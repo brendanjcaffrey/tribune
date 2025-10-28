@@ -34,30 +34,28 @@ vi.mock("../src/Library", () => {
   };
 });
 
-function buildNewsletter(
-  id: number,
-  timestamp: string,
-  read: boolean,
-  deleted: boolean,
-  epubVersion: string | null = null,
-  epubLastAccessedAt: string | null = null,
-  sourceLastAccessedAt: string | null = null,
-  sourceMimeType: string = "index/html",
-): Newsletter {
-  return {
-    id,
-    title: id.toString(),
-    author: id.toString(),
-    sourceMimeType,
-    read,
-    deleted,
+type RequiredNewsletterFields = Pick<Newsletter, "id" | "createdAt">;
+type PartialNewsletterInput = Partial<Newsletter> & RequiredNewsletterFields;
+
+function buildNewsletter(input: PartialNewsletterInput): Newsletter {
+  const defaultNewsletterValues: Omit<Newsletter, "id" | "createdAt"> = {
+    title: input.id.toString(),
+    author: input.id.toString(),
+    sourceMimeType: "text/html",
+    read: false,
+    deleted: false,
     progress: "",
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    epubUpdatedAt: timestamp,
-    epubVersion,
-    epubLastAccessedAt,
-    sourceLastAccessedAt,
+    updatedAt: input.createdAt,
+    epubUpdatedAt: input.createdAt,
+    sourceUpdatedAt: input.createdAt,
+    epubVersion: null,
+    sourceVersion: null,
+    epubLastAccessedAt: null,
+    sourceLastAccessedAt: null,
+  };
+  return {
+    ...defaultNewsletterValues,
+    ...input,
   };
 }
 
@@ -94,10 +92,30 @@ describe("DownloadManager", () => {
     vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
 
     const newsletters = [
-      buildNewsletter(1, "2025-09-01 12:00:00.000000+00", false, false),
-      buildNewsletter(2, "2025-09-02 12:00:00.000000+00", false, false),
-      buildNewsletter(3, "2025-09-03 12:00:00.000000+00", true, false),
-      buildNewsletter(4, "2025-09-04 12:00:00.000000+00", false, true),
+      buildNewsletter({
+        id: 1,
+        createdAt: "2025-09-01 12:00:00.000000+00",
+        read: false,
+        deleted: false,
+      }),
+      buildNewsletter({
+        id: 2,
+        createdAt: "2025-09-02 12:00:00.000000+00",
+        read: false,
+        deleted: false,
+      }),
+      buildNewsletter({
+        id: 3,
+        createdAt: "2025-09-03 12:00:00.000000+00",
+        read: true,
+        deleted: false,
+      }),
+      buildNewsletter({
+        id: 4,
+        createdAt: "2025-09-04 12:00:00.000000+00",
+        read: false,
+        deleted: true,
+      }),
     ];
     vi.mocked(library().getAllNewsletters).mockResolvedValue(newsletters);
 
@@ -183,10 +201,30 @@ describe("DownloadManager", () => {
 
   it("if download mode is disabled, it shouldn't download anything", async () => {
     const newsletters = [
-      buildNewsletter(1, "2025-09-01 12:00:00.000000+00", false, false),
-      buildNewsletter(2, "2025-09-02 12:00:00.000000+00", false, false),
-      buildNewsletter(3, "2025-09-03 12:00:00.000000+00", true, false),
-      buildNewsletter(4, "2025-09-04 12:00:00.000000+00", false, true),
+      buildNewsletter({
+        id: 1,
+        createdAt: "2025-09-01 12:00:00.000000+00",
+        read: false,
+        deleted: false,
+      }),
+      buildNewsletter({
+        id: 2,
+        createdAt: "2025-09-02 12:00:00.000000+00",
+        read: false,
+        deleted: false,
+      }),
+      buildNewsletter({
+        id: 3,
+        createdAt: "2025-09-03 12:00:00.000000+00",
+        read: true,
+        deleted: false,
+      }),
+      buildNewsletter({
+        id: 4,
+        createdAt: "2025-09-04 12:00:00.000000+00",
+        read: false,
+        deleted: true,
+      }),
     ];
     vi.mocked(library().getAllNewsletters).mockResolvedValue(newsletters);
 
@@ -206,34 +244,34 @@ describe("DownloadManager", () => {
     vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
 
     const newsletters = [
-      buildNewsletter(
-        1,
-        "2025-09-01 12:00:00.000000+00",
-        false,
-        false,
-        "2025-09-01 12:00:00.000000+00", // epubVersion == epubLastUpdatedAt, no download needed
-      ),
-      buildNewsletter(
-        2,
-        "2025-09-02 12:00:00.000000+00",
-        false,
-        false,
-        "2025-09-02 12:00:01.000000+00", // epubVersion != epubLastUpdatedAt, download needed
-      ),
-      buildNewsletter(
-        3,
-        "2025-09-03 12:00:00.000000+00",
-        true,
-        false,
-        "2025-09-03 12:00:01.000000+00", // epubVersion != epubLastUpdatedAt but marked read, no download needed
-      ),
-      buildNewsletter(
-        4,
-        "2025-09-04 12:00:00.000000+00",
-        false,
-        true,
-        "2025-09-04 12:00:01.000000+00", // epubVersion != epubLastUpdatedAt but deleted, no download needed
-      ),
+      buildNewsletter({
+        id: 1,
+        createdAt: "2025-09-01 12:00:00.000000+00",
+        read: false,
+        deleted: false,
+        epubVersion: "2025-09-01 12:00:00.000000+00", // epubVersion == epubUpdatedAt, no download needed
+      }),
+      buildNewsletter({
+        id: 2,
+        createdAt: "2025-09-02 12:00:00.000000+00",
+        read: false,
+        deleted: false,
+        epubVersion: "2025-09-02 12:00:01.000000+00", // epubVersion != epubUpdatedAt, download needed
+      }),
+      buildNewsletter({
+        id: 3,
+        createdAt: "2025-09-03 12:00:00.000000+00",
+        read: true,
+        deleted: false,
+        epubVersion: "2025-09-03 12:00:01.000000+00", // epubVersion != epubUpdatedAt but marked read, no download needed
+      }),
+      buildNewsletter({
+        id: 4,
+        createdAt: "2025-09-04 12:00:00.000000+00",
+        read: false,
+        deleted: true,
+        epubVersion: "2025-09-04 12:00:01.000000+00", // epubVersion != epubUpdatedAt but deleted, no download needed
+      }),
     ];
     vi.mocked(library().getAllNewsletters).mockResolvedValue(newsletters);
 
@@ -291,46 +329,36 @@ describe("DownloadManager", () => {
     vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
 
     const newsletters = [
-      buildNewsletter(
-        1,
-        "2025-09-01 12:00:00.000000+00",
-        false,
-        false,
-        "2025-09-01 12:00:00.000000+00", // epubVersion == epubLastUpdatedAt, no download needed
-        null,
-        null,
-        "index/html", // html source, no pdf download needed
-      ),
-      buildNewsletter(
-        2,
-        "2025-09-01 12:00:00.000000+00",
-        false,
-        false,
-        "2025-09-01 12:00:00.000000+00", // epubVersion == epubLastUpdatedAt, no download needed
-        null,
-        null,
-        "application/pdf", // pdf source, download needed
-      ),
-      buildNewsletter(
-        3,
-        "2025-09-01 12:00:00.000000+00",
-        true,
-        false,
-        null,
-        null,
-        null,
-        "application/pdf", // pdf source but read, no download needed
-      ),
-      buildNewsletter(
-        4,
-        "2025-09-01 12:00:00.000000+00",
-        false,
-        true,
-        null,
-        null,
-        null,
-        "application/pdf", // pdf source but deleted, no download needed
-      ),
+      buildNewsletter({
+        id: 1,
+        createdAt: "2025-09-01 12:00:00.000000+00",
+        read: false,
+        deleted: false,
+        epubVersion: "2025-09-01 12:00:00.000000+00", // epubVersion == epubUpdatedAt, no download needed
+        sourceMimeType: "index/html", // html source, no pdf download needed
+      }),
+      buildNewsletter({
+        id: 2,
+        createdAt: "2025-09-01 12:00:00.000000+00",
+        read: false,
+        deleted: false,
+        epubVersion: "2025-09-01 12:00:00.000000+00", // epubVersion == epubUpdatedAt, no download needed
+        sourceMimeType: "application/pdf", // pdf source, download needed
+      }),
+      buildNewsletter({
+        id: 3,
+        createdAt: "2025-09-01 12:00:00.000000+00",
+        read: true,
+        deleted: false,
+        sourceMimeType: "application/pdf", // pdf source but read, no download needed
+      }),
+      buildNewsletter({
+        id: 4,
+        createdAt: "2025-09-01 12:00:00.000000+00",
+        read: false,
+        deleted: true,
+        sourceMimeType: "application/pdf", // pdf source but deleted, no download needed
+      }),
     ];
     vi.mocked(library().getAllNewsletters).mockResolvedValue(newsletters);
 
@@ -349,6 +377,7 @@ describe("DownloadManager", () => {
     const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
     expect(n2Update[0]).toBe(2);
     expect(n2Update[1](newsletters[1])).toEqual({
+      sourceVersion: "2025-09-01 12:00:00.000000+00",
       sourceLastAccessedAt: "2025-09-05T00:00:00.000Z",
     });
 
@@ -392,8 +421,8 @@ describe("DownloadManager", () => {
     });
 
     const newsletters = [
-      buildNewsletter(1, "2025-09-01 12:00:00.000000+00", false, false),
-      buildNewsletter(2, "2025-09-02 12:00:00.000000+00", false, false),
+      buildNewsletter({ id: 1, createdAt: "2025-09-01 12:00:00.000000+00" }),
+      buildNewsletter({ id: 2, createdAt: "2025-09-02 12:00:00.000000+00" }),
     ];
     vi.mocked(library().getAllNewsletters).mockResolvedValue(newsletters);
 
@@ -432,24 +461,26 @@ describe("DownloadManager", () => {
     vi.mocked(files().tryDeleteFile).mockResolvedValueOnce(true);
 
     const newsletters = [
-      buildNewsletter(
-        1,
-        "2025-09-01 12:00:00.000000+00",
-        false,
-        false, // deleted = false, don't delete
-        "2025-09-01 12:00:00.000000+00",
-        "2025-09-05 12:00:00.000000+00",
-        "2025-09-05 12:00:00.000000+00",
-      ),
-      buildNewsletter(
-        2,
-        "2025-09-02 12:00:00.000000+00",
-        false,
-        true, // delete = true, delete epub & source fiels
-        "2025-09-02 12:00:01.000000+00",
-        "2025-09-05 12:00:00.000000+00",
-        "2025-09-05 12:00:00.000000+00",
-      ),
+      buildNewsletter({
+        id: 1,
+        createdAt: "2025-09-01 12:00:00.000000+00",
+        read: false,
+        deleted: false, // deleted = false, don't delete
+        epubVersion: "2025-09-01 12:00:00.000000+00",
+        sourceVersion: "2025-09-01 12:00:00.000000+00",
+        epubLastAccessedAt: "2025-09-05 12:00:00.000000+00",
+        sourceLastAccessedAt: "2025-09-05 12:00:00.000000+00",
+      }),
+      buildNewsletter({
+        id: 2,
+        createdAt: "2025-09-02 12:00:00.000000+00",
+        read: false,
+        deleted: true, // delete = true, delete epub & source fiels
+        epubVersion: "2025-09-02 12:00:01.000000+00",
+        sourceVersion: "2025-09-02 12:00:01.000000+00",
+        epubLastAccessedAt: "2025-09-05 12:00:00.000000+00",
+        sourceLastAccessedAt: "2025-09-05 12:00:00.000000+00",
+      }),
     ];
     vi.mocked(library().getAllNewsletters).mockResolvedValue(newsletters);
 
@@ -470,6 +501,7 @@ describe("DownloadManager", () => {
     const n2SourceUpdate = vi.mocked(library().updateNewsletter).mock.calls[1];
     expect(n2SourceUpdate[0]).toBe(2);
     expect(n2SourceUpdate[1](newsletters[1])).toEqual({
+      sourceVersion: null,
       sourceLastAccessedAt: null,
     });
 
@@ -484,24 +516,26 @@ describe("DownloadManager", () => {
     vi.mocked(files().tryDeleteFile).mockResolvedValueOnce(true);
 
     const newsletters = [
-      buildNewsletter(
-        1,
-        "2025-09-01 12:00:00.000000+00",
-        false, // read = false, don't delete files
-        false,
-        "2025-09-01 12:00:00.000000+00",
-        "2025-09-01 12:00:00.000000+00",
-        "2025-09-01 12:00:00.000000+00",
-      ),
-      buildNewsletter(
-        2,
-        "2025-09-02 12:00:00.000000+00",
-        true, // read = true, delete epub & source files
-        false,
-        "2025-09-02 12:00:01.000000+00",
-        "2025-09-01 12:00:00.000000+00",
-        "2025-09-01 12:00:00.000000+00",
-      ),
+      buildNewsletter({
+        id: 1,
+        createdAt: "2025-09-01 12:00:00.000000+00",
+        read: false, // read = false, don't delete files
+        deleted: false,
+        epubVersion: "2025-09-01 12:00:00.000000+00",
+        sourceVersion: "2025-09-01 12:00:00.000000+00",
+        epubLastAccessedAt: "2025-09-01 12:00:00.000000+00",
+        sourceLastAccessedAt: "2025-09-01 12:00:00.000000+00",
+      }),
+      buildNewsletter({
+        id: 2,
+        createdAt: "2025-09-02 12:00:00.000000+00",
+        read: true, // read = true, delete epub & source files
+        deleted: false,
+        epubVersion: "2025-09-02 12:00:01.000000+00",
+        sourceVersion: "2025-09-02 12:00:01.000000+00",
+        epubLastAccessedAt: "2025-09-01 12:00:00.000000+00",
+        sourceLastAccessedAt: "2025-09-01 12:00:00.000000+00",
+      }),
     ];
     vi.mocked(library().getAllNewsletters).mockResolvedValue(newsletters);
 
@@ -522,6 +556,7 @@ describe("DownloadManager", () => {
     const n2SourceUpdate = vi.mocked(library().updateNewsletter).mock.calls[1];
     expect(n2SourceUpdate[0]).toBe(2);
     expect(n2SourceUpdate[1](newsletters[1])).toEqual({
+      sourceVersion: null,
       sourceLastAccessedAt: null,
     });
 
@@ -532,14 +567,12 @@ describe("DownloadManager", () => {
   });
 
   it("should touch the file and immediately respond if startDownload is called for an existing epub", async () => {
-    const newsletter = buildNewsletter(
-      1,
-      "2025-09-01 12:00:00.000000+00",
-      false,
-      false,
-      "2025-09-01 12:00:00.000000+00",
-      "2025-09-01 12:01:00.000000+00", // epub downloaded with correct version
-    );
+    const newsletter = buildNewsletter({
+      id: 1,
+      createdAt: "2025-09-01 12:00:00.000000+00",
+      epubVersion: "2025-09-01 12:00:00.000000+00", // epub downloaded with correct version
+      epubLastAccessedAt: "2025-09-01 12:01:00.000000+00",
+    });
     vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
     vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
     vi.mocked(files().fileExists).mockResolvedValueOnce(true);
@@ -572,16 +605,149 @@ describe("DownloadManager", () => {
     });
   });
 
-  it("should touch the file and immediately respond if startDownload is called for an existing source", async () => {
-    const newsletter = buildNewsletter(
-      1,
-      "2025-09-01 12:00:00.000000+00",
-      false,
-      false,
-      "2025-09-01 12:00:00.000000+00",
-      "2025-09-01 12:01:00.000000+00", // epub downloaded with correct version
-      "2025-09-01 12:02:00.000000+00", // source downloaded
+  it("should redownload an epub if it has a new version if startDownload is called", async () => {
+    const nBuffer = new ArrayBuffer(20);
+    vi.mocked(axios.get).mockResolvedValueOnce({ data: nBuffer });
+
+    const newsletter = buildNewsletter({
+      id: 1,
+      createdAt: "2025-09-01 12:00:00.000000+00",
+      epubVersion: "2025-09-01 12:01:00.000000+00", // epub downloaded with correct version
+      epubLastAccessedAt: "2025-09-01 12:01:00.000000+00",
+    });
+    vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
+    vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
+    vi.mocked(files().fileExists).mockResolvedValueOnce(true);
+    vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
+
+    await downloadManager.setAuthToken("mock-token");
+    await downloadManager.setLibraryInitialized();
+
+    await downloadManager.startDownload({
+      type: "download file",
+      fileType: "epub",
+      mime: "application/epub+zip",
+      id: 1,
+    });
+
+    expect(axios.get).toHaveBeenCalledTimes(1);
+    expectAxiosGetCall(1, "epub");
+
+    expect(files().tryWriteFile).toHaveBeenCalledTimes(1);
+    expect(files().tryWriteFile).toHaveBeenCalledWith("epub", 1, nBuffer);
+
+    expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
+    const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
+    expect(n2Update[0]).toBe(1);
+    expect(n2Update[1](newsletter)).toEqual({
+      epubLastAccessedAt: "2025-09-05T00:00:00.000Z",
+      epubVersion: "2025-09-01 12:00:00.000000+00",
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(4);
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("newsletters updated", {}),
     );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "epub",
+        status: "in progress",
+        receivedBytes: 0,
+        totalBytes: 0,
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "epub",
+        status: "done",
+        receivedBytes: 20,
+        totalBytes: 20,
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file fetched", {
+        id: 1,
+        fileType: "epub",
+      }),
+    );
+  });
+
+  it("should download an epub if startDownload is called with nothing downloaded", async () => {
+    const nBuffer = new ArrayBuffer(20);
+    vi.mocked(axios.get).mockResolvedValueOnce({ data: nBuffer });
+
+    const newsletter = buildNewsletter({
+      id: 1,
+      createdAt: "2025-09-01 12:00:00.000000+00",
+    });
+    vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
+    vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
+    vi.mocked(files().fileExists).mockResolvedValueOnce(false);
+    vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
+
+    await downloadManager.setAuthToken("mock-token");
+    await downloadManager.setLibraryInitialized();
+
+    await downloadManager.startDownload({
+      type: "download file",
+      fileType: "epub",
+      mime: "application/epub+zip",
+      id: 1,
+    });
+
+    expect(axios.get).toHaveBeenCalledTimes(1);
+    expectAxiosGetCall(1, "epub");
+
+    expect(files().tryWriteFile).toHaveBeenCalledTimes(1);
+    expect(files().tryWriteFile).toHaveBeenCalledWith("epub", 1, nBuffer);
+
+    expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
+    const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
+    expect(n2Update[0]).toBe(1);
+    expect(n2Update[1](newsletter)).toEqual({
+      epubLastAccessedAt: "2025-09-05T00:00:00.000Z",
+      epubVersion: "2025-09-01 12:00:00.000000+00",
+    });
+
+    expect(postMessage).toHaveBeenCalledTimes(4);
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("newsletters updated", {}),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "epub",
+        status: "in progress",
+        receivedBytes: 0,
+        totalBytes: 0,
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file download status", {
+        id: 1,
+        fileType: "epub",
+        status: "done",
+        receivedBytes: 20,
+        totalBytes: 20,
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      buildWorkerMessage("file fetched", {
+        id: 1,
+        fileType: "epub",
+      }),
+    );
+  });
+
+  it("should touch the file and immediately respond if startDownload is called for an existing source", async () => {
+    const newsletter = buildNewsletter({
+      id: 1,
+      createdAt: "2025-09-01 12:00:00.000000+00",
+      sourceVersion: "2025-09-01 12:00:00.000000+00", // source downloaded with correct version
+      sourceLastAccessedAt: "2025-09-01 12:02:00.000000+00",
+    });
     vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
     vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
     vi.mocked(files().fileExists).mockResolvedValueOnce(true);
@@ -609,22 +775,21 @@ describe("DownloadManager", () => {
     const nUpdate = vi.mocked(library().updateNewsletter).mock.calls[0];
     expect(nUpdate[0]).toBe(1);
     expect(nUpdate[1](newsletter)).toEqual({
+      sourceVersion: "2025-09-01 12:00:00.000000+00",
       sourceLastAccessedAt: "2025-09-05T00:00:00.000Z",
     });
   });
 
-  it("should redownload an epub if it has a new version if startDownload is called", async () => {
+  it("should redownload a source if it has a new version if startDownload is called", async () => {
     const nBuffer = new ArrayBuffer(20);
     vi.mocked(axios.get).mockResolvedValueOnce({ data: nBuffer });
 
-    const newsletter = buildNewsletter(
-      1,
-      "2025-09-01 12:00:00.000000+00",
-      false,
-      false,
-      "2025-09-01 12:01:00.000000+00",
-      "2025-09-01 12:01:00.000000+00", // epub downloaded with correct version
-    );
+    const newsletter = buildNewsletter({
+      id: 1,
+      createdAt: "2025-09-01 12:00:00.000000+00",
+      sourceVersion: "2025-09-01 12:01:00.000000+00", // source downloaded with the wrong version
+      sourceLastAccessedAt: "2025-09-01 12:01:00.000000+00",
+    });
     vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
     vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
     vi.mocked(files().fileExists).mockResolvedValueOnce(true);
@@ -635,23 +800,23 @@ describe("DownloadManager", () => {
 
     await downloadManager.startDownload({
       type: "download file",
-      fileType: "epub",
-      mime: "application/epub+zip",
+      fileType: "source",
+      mime: "index/html",
       id: 1,
     });
 
     expect(axios.get).toHaveBeenCalledTimes(1);
-    expectAxiosGetCall(1, "epub");
+    expectAxiosGetCall(1, "source");
 
     expect(files().tryWriteFile).toHaveBeenCalledTimes(1);
-    expect(files().tryWriteFile).toHaveBeenCalledWith("epub", 1, nBuffer);
+    expect(files().tryWriteFile).toHaveBeenCalledWith("source", 1, nBuffer);
 
     expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
     const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
     expect(n2Update[0]).toBe(1);
     expect(n2Update[1](newsletter)).toEqual({
-      epubLastAccessedAt: "2025-09-05T00:00:00.000Z",
-      epubVersion: "2025-09-01 12:00:00.000000+00",
+      sourceLastAccessedAt: "2025-09-05T00:00:00.000Z",
+      sourceVersion: "2025-09-01 12:00:00.000000+00",
     });
 
     expect(postMessage).toHaveBeenCalledTimes(4);
@@ -661,7 +826,7 @@ describe("DownloadManager", () => {
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("file download status", {
         id: 1,
-        fileType: "epub",
+        fileType: "source",
         status: "in progress",
         receivedBytes: 0,
         totalBytes: 0,
@@ -670,7 +835,7 @@ describe("DownloadManager", () => {
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("file download status", {
         id: 1,
-        fileType: "epub",
+        fileType: "source",
         status: "done",
         receivedBytes: 20,
         totalBytes: 20,
@@ -679,95 +844,19 @@ describe("DownloadManager", () => {
     expect(postMessage).toHaveBeenCalledWith(
       buildWorkerMessage("file fetched", {
         id: 1,
-        fileType: "epub",
+        fileType: "source",
       }),
     );
   });
 
-  it("should download an epub if startDownload is called", async () => {
+  it("should download a source if startDownload is called with nothing downloaded", async () => {
     const nBuffer = new ArrayBuffer(20);
     vi.mocked(axios.get).mockResolvedValueOnce({ data: nBuffer });
 
-    const newsletter = buildNewsletter(
-      1,
-      "2025-09-01 12:00:00.000000+00",
-      false,
-      false,
-      null,
-      null,
-    );
-    vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
-    vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
-    vi.mocked(files().fileExists).mockResolvedValueOnce(false);
-    vi.mocked(files().tryWriteFile).mockResolvedValueOnce(true);
-
-    await downloadManager.setAuthToken("mock-token");
-    await downloadManager.setLibraryInitialized();
-
-    await downloadManager.startDownload({
-      type: "download file",
-      fileType: "epub",
-      mime: "application/epub+zip",
+    const newsletter = buildNewsletter({
       id: 1,
+      createdAt: "2025-09-01 12:00:00.000000+00",
     });
-
-    expect(axios.get).toHaveBeenCalledTimes(1);
-    expectAxiosGetCall(1, "epub");
-
-    expect(files().tryWriteFile).toHaveBeenCalledTimes(1);
-    expect(files().tryWriteFile).toHaveBeenCalledWith("epub", 1, nBuffer);
-
-    expect(library().updateNewsletter).toHaveBeenCalledTimes(1);
-    const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
-    expect(n2Update[0]).toBe(1);
-    expect(n2Update[1](newsletter)).toEqual({
-      epubLastAccessedAt: "2025-09-05T00:00:00.000Z",
-      epubVersion: "2025-09-01 12:00:00.000000+00",
-    });
-
-    expect(postMessage).toHaveBeenCalledTimes(4);
-    expect(postMessage).toHaveBeenCalledWith(
-      buildWorkerMessage("newsletters updated", {}),
-    );
-    expect(postMessage).toHaveBeenCalledWith(
-      buildWorkerMessage("file download status", {
-        id: 1,
-        fileType: "epub",
-        status: "in progress",
-        receivedBytes: 0,
-        totalBytes: 0,
-      }),
-    );
-    expect(postMessage).toHaveBeenCalledWith(
-      buildWorkerMessage("file download status", {
-        id: 1,
-        fileType: "epub",
-        status: "done",
-        receivedBytes: 20,
-        totalBytes: 20,
-      }),
-    );
-    expect(postMessage).toHaveBeenCalledWith(
-      buildWorkerMessage("file fetched", {
-        id: 1,
-        fileType: "epub",
-      }),
-    );
-  });
-
-  it("should download a source if startDownload is called", async () => {
-    const nBuffer = new ArrayBuffer(20);
-    vi.mocked(axios.get).mockResolvedValueOnce({ data: nBuffer });
-
-    const newsletter = buildNewsletter(
-      1,
-      "2025-09-01 12:00:00.000000+00",
-      false,
-      false,
-      "2025-09-01 12:01:00.000000+00",
-      "2025-09-01 12:01:00.000000+00", // epub downloaded with correct version
-      null,
-    );
     vi.mocked(library().getAllNewsletters).mockResolvedValue([newsletter]);
     vi.mocked(library().getNewsletter).mockResolvedValue(newsletter);
     vi.mocked(files().fileExists).mockResolvedValueOnce(false);
@@ -793,6 +882,7 @@ describe("DownloadManager", () => {
     const n2Update = vi.mocked(library().updateNewsletter).mock.calls[0];
     expect(n2Update[0]).toBe(1);
     expect(n2Update[1](newsletter)).toEqual({
+      sourceVersion: "2025-09-01 12:00:00.000000+00",
       sourceLastAccessedAt: "2025-09-05T00:00:00.000Z",
     });
 

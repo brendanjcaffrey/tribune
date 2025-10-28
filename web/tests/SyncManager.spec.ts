@@ -9,6 +9,7 @@ import {
 } from "../src/WorkerTypes";
 import { DownloadManager } from "../src/DownloadManager";
 import { Mutex } from "async-mutex";
+import { APINewsletter } from "../src/APINewsletters";
 
 vi.mock("axios", () => ({
   default: {
@@ -133,7 +134,7 @@ function expectErrorAndSyncStatusMessage() {
   expectSyncStatusMessages();
 }
 
-const A1 = {
+const A1: APINewsletter = {
   id: 1,
   title: "t1",
   author: "a1",
@@ -144,8 +145,9 @@ const A1 = {
   created_at: "2025-01-01 06:00:01.456789+00",
   updated_at: "2025-01-02 06:00:01.456789+00",
   epub_updated_at: "2025-01-03 06:00:01.456789+00",
+  source_updated_at: "2025-01-04 06:00:01.456789+00",
 };
-const N1 = {
+const N1: Newsletter = {
   id: 1,
   title: "t1",
   author: "a1",
@@ -156,11 +158,13 @@ const N1 = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-02 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
+  sourceUpdatedAt: "2025-01-04 06:00:01.456789+00",
   epubVersion: null,
+  sourceVersion: null,
   epubLastAccessedAt: null,
   sourceLastAccessedAt: null,
 };
-const N2 = {
+const N2: Newsletter = {
   id: 2,
   title: "t2",
   author: "a2",
@@ -171,11 +175,13 @@ const N2 = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-20 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
+  sourceUpdatedAt: "2025-01-04 06:00:01.456789+00",
   epubVersion: null,
+  sourceVersion: null,
   epubLastAccessedAt: null,
   sourceLastAccessedAt: null,
 };
-const N3 = {
+const N3: Newsletter = {
   id: 3,
   title: "t3",
   author: "a3",
@@ -186,11 +192,13 @@ const N3 = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-02 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
+  sourceUpdatedAt: "2025-01-04 06:00:01.456789+00",
   epubVersion: null,
+  sourceVersion: null,
   epubLastAccessedAt: null,
   sourceLastAccessedAt: null,
 };
-const A4 = {
+const A4: APINewsletter = {
   id: 4,
   title: "t4",
   author: "a4",
@@ -201,8 +209,9 @@ const A4 = {
   created_at: "2025-01-01 06:00:01.456789+00",
   updated_at: "2025-01-25 06:00:01.456789+00",
   epub_updated_at: "2025-01-03 06:00:01.456789+00",
+  source_updated_at: "2025-01-04 06:00:01.456789+00",
 };
-const N4 = {
+const N4: Newsletter = {
   id: 4,
   title: "t4",
   author: "a4",
@@ -213,12 +222,14 @@ const N4 = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-25 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
+  sourceUpdatedAt: "2025-01-04 06:00:01.456789+00",
   epubVersion: null,
+  sourceVersion: null,
   epubLastAccessedAt: null,
   sourceLastAccessedAt: null,
 };
 
-const N5_init = {
+const N5_init: Newsletter = {
   id: 5,
   title: "t5",
   author: "a5",
@@ -229,11 +240,13 @@ const N5_init = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-25 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
+  sourceUpdatedAt: "2025-01-04 06:00:01.456789+00",
   epubVersion: "2025-01-03 06:00:01.456789+00",
+  sourceVersion: "2025-01-04 06:00:01.456789+00",
   epubLastAccessedAt: null,
   sourceLastAccessedAt: null,
 };
-const A5 = {
+const A5: APINewsletter = {
   id: 5,
   title: "t5_",
   author: "a5_",
@@ -244,8 +257,9 @@ const A5 = {
   created_at: "2025-01-01 06:00:01.456789+00",
   updated_at: "2025-01-26 06:00:01.456789+00",
   epub_updated_at: "2025-01-03 06:00:01.456789+00",
+  source_updated_at: "2025-01-04 06:00:01.456789+00",
 };
-const N5_updated = {
+const N5_updated: Newsletter = {
   id: 5,
   title: "t5_",
   author: "a5_",
@@ -256,7 +270,9 @@ const N5_updated = {
   createdAt: "2025-01-01 06:00:01.456789+00",
   updatedAt: "2025-01-26 06:00:01.456789+00",
   epubUpdatedAt: "2025-01-03 06:00:01.456789+00",
+  sourceUpdatedAt: "2025-01-04 06:00:01.456789+00",
   epubVersion: "2025-01-03 06:00:01.456789+00",
+  sourceVersion: "2025-01-04 06:00:01.456789+00",
   epubLastAccessedAt: null,
   sourceLastAccessedAt: null,
 };
@@ -326,7 +342,7 @@ describe("SyncManager", () => {
     expect(vi.mocked(downloadManager.checkForDownloads)).toHaveBeenCalledOnce();
   });
 
-  it("should overwrite updated newsletters but keep the epubVersion field", async () => {
+  it("should overwrite updated newsletters but keep the version fields", async () => {
     mockHasAnyNewslettersResolve(true);
     mockGetAllNewslettersResolve([N5_init]);
     mockGetAllNewslettersResolve([N5_updated]);

@@ -2,7 +2,7 @@ import { memoize } from "lodash";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
 const DATABASE_NAME = "library";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 export interface Newsletter {
   id: number;
@@ -15,8 +15,10 @@ export interface Newsletter {
   createdAt: string;
   updatedAt: string;
   epubUpdatedAt: string;
+  sourceUpdatedAt: string;
   // this is null if never downloaded and will match epubUpdatedAt once downloaded
   epubVersion: string | null;
+  sourceVersion: string | null;
   // these are set to the time it was first downloaded (on download) and updated whenever the file is opened
   // this is used to decide when to delete old files
   epubLastAccessedAt: string | null;
@@ -40,8 +42,28 @@ class Library {
   public constructor() {
     const setError = this.setError.bind(this);
     openDB<LibraryDB>(DATABASE_NAME, DATABASE_VERSION, {
-      upgrade(db) {
-        db.createObjectStore("newsletters", { keyPath: "id" });
+      async upgrade(db, oldVersion, _newVersion, tx) {
+        // v0 -> v1: create the store
+        if (oldVersion < 1) {
+          db.createObjectStore("newsletters", { keyPath: "id" });
+        }
+        // v1 -> v2: add source version related fields
+        if (oldVersion < 2) {
+          const store = tx.objectStore("newsletters");
+
+          let cursor = await store.openCursor();
+          while (cursor) {
+            const n = cursor.value as Newsletter;
+
+            n.sourceUpdatedAt = n.createdAt;
+            if (n.sourceLastAccessedAt != null) {
+              n.sourceVersion = n.sourceUpdatedAt ?? null;
+            }
+
+            await cursor.update(n);
+            cursor = await cursor.continue();
+          }
+        }
       },
       blocked(currentVersion, blockedVersion) {
         setError(

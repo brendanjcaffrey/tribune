@@ -93,7 +93,7 @@ export class DownloadManager {
       for (const newsletter of unreadNewsletters) {
         if (
           newsletter.sourceMimeType == "application/pdf" &&
-          newsletter.sourceLastAccessedAt == null
+          newsletter.sourceVersion != newsletter.sourceUpdatedAt
         ) {
           downloadedAny = true;
           if ((await this.downloadFile(newsletter.id, "source")) == "aborted") {
@@ -153,7 +153,7 @@ export class DownloadManager {
         if (await files().tryDeleteFile("source", newsletter.id)) {
           deletedAny = true;
           await library().updateNewsletter(newsletter.id, () => {
-            return { sourceLastAccessedAt: null };
+            return { sourceLastAccessedAt: null, sourceVersion: null };
           });
         } else {
           // logged out in the middle
@@ -191,12 +191,24 @@ export class DownloadManager {
     }
 
     let exists = await files().fileExists(msg.fileType, msg.id);
-    if (msg.fileType === "epub") {
-      const newsletter = await library().getNewsletter(msg.id);
-      if (newsletter && newsletter.epubVersion != newsletter.epubUpdatedAt) {
-        // epub version has changed, need to re-download
-        exists = false;
-      }
+    const newsletter = await library().getNewsletter(msg.id);
+    switch (msg.fileType) {
+      case "epub":
+        if (newsletter && newsletter.epubVersion != newsletter.epubUpdatedAt) {
+          // epub version has changed, need to re-download
+          exists = false;
+        }
+        break;
+
+      case "source":
+        if (
+          newsletter &&
+          newsletter.sourceVersion != newsletter.sourceUpdatedAt
+        ) {
+          // source version has changed, need to re-download
+          exists = false;
+        }
+        break;
     }
 
     if (exists) {
@@ -311,8 +323,9 @@ export class DownloadManager {
         };
       });
     } else {
-      library().updateNewsletter(id, () => {
+      library().updateNewsletter(id, (n) => {
         return {
+          sourceVersion: n.sourceUpdatedAt,
           sourceLastAccessedAt: new Date().toISOString(),
         };
       });
