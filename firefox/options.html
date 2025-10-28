@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Push to Tribune Options</title>
+    <style>
+      body {
+        font:
+          14px system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          sans-serif;
+        margin: 24px;
+      }
+      label {
+        display: block;
+        margin: 12px 0 6px;
+      }
+      input[type="text"],
+      input[type="url"],
+      input[type="password"] {
+        width: 520px;
+        padding: 8px;
+      }
+      button {
+        margin-top: 16px;
+        padding: 8px 14px;
+      }
+      .hint {
+        color: #666;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Push to Tribune Options</h1>
+
+    <label for="apiUrl">API Base URL</label>
+    <input id="apiUrl" type="url" placeholder="https://api.example.com:1847" />
+
+    <label for="apiKey">API Key</label>
+    <input id="apiKey" type="password" placeholder="JWT" />
+    <div class="hint">Generate with <code>rake user:jwt</code></div>
+
+    <div>
+      <button id="saveBtn">Save</button>
+      <span id="status" class="hint"></span>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

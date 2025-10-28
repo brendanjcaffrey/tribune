@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Push to Tribune",
+  "version": "1.0.0",
+  "description": "Uploads the current page as an article in Tribune",
+  "action": {
+    "default_title": "Push Page"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "push-to-tribune@jcaffrey.com",
+      "strict_min_version": "128.0"
+    }
+  },
+  "icons": {
+    "48": "icons/icon48.png",
+    "96": "icons/icon96.png"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "options.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}
