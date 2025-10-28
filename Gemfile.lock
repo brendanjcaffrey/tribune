@@ -1,21 +1,34 @@
 GEM
   remote: https://rubygems.org/
   specs:
+    addressable (2.8.7)
+      public_suffix (>= 2.0.2, < 7.0)
     ast (2.4.3)
     base64 (0.3.0)
+    bigdecimal (3.3.1)
     connection_pool (2.5.3)
+    crack (1.0.1)
+      bigdecimal
+      rexml
     diff-lcs (1.6.2)
     fileutils (1.7.3)
+    hashdiff (1.2.1)
     json (2.13.0)
     jwt (3.1.2)
       base64
     language_server-protocol (3.17.0.5)
     lint_roller (1.1.0)
     logger (1.7.0)
+    mini_portile2 (2.8.9)
     multi_json (1.16.0)
     mustermann (3.0.3)
       ruby2_keywords (~> 0.0.1)
     nio4r (2.7.4)
+    nokogiri (1.18.10)
+      mini_portile2 (~> 2.8.2)
+      racc (~> 1.4)
+    nokogiri (1.18.10-arm64-darwin)
+      racc (~> 1.4)
     parallel (1.27.0)
     parser (3.3.8.0)
       ast (~> 2.4.1)
@@ -24,6 +37,7 @@ GEM
       tty-color (~> 0.5)
     pg (1.5.9)
     prism (1.4.0)
+    public_suffix (6.0.2)
     puma (6.6.0)
       nio4r (~> 2.0)
     racc (1.8.1)
@@ -42,6 +56,7 @@ GEM
     rainbow (3.1.1)
     rake (13.3.0)
     regexp_parser (2.10.0)
+    rexml (3.4.4)
     rspec (3.13.1)
       rspec-core (~> 3.13.0)
       rspec-expectations (~> 3.13.0)
@@ -79,6 +94,7 @@ GEM
       rubocop (~> 1.72, >= 1.72.1)
     ruby-progressbar (1.13.0)
     ruby2_keywords (0.0.5)
+    rubyzip (3.2.1)
     sinatra (4.1.1)
       logger (>= 1.6.0)
       mustermann (~> 3.0)
@@ -101,6 +117,10 @@ GEM
     unicode-display_width (3.1.4)
       unicode-emoji (~> 4.0, >= 4.0.4)
     unicode-emoji (4.0.4)
+    webmock (3.26.0)
+      addressable (>= 2.8.0)
+      crack (>= 0.3.2)
+      hashdiff (>= 0.4.0, < 2.0.0)
 
 PLATFORMS
   arm64-darwin-23
@@ -109,6 +129,7 @@ PLATFORMS
 DEPENDENCIES
   connection_pool
   jwt (~> 3.1)
+  nokogiri (~> 1.18)
   pg
   puma
   rack-test
@@ -119,10 +140,12 @@ DEPENDENCIES
   rubocop (~> 1.78)
   rubocop-rake (~> 0.7.1)
   rubocop-rspec (~> 3.6)
+  rubyzip (~> 3.2)
   sinatra
   sinatra-contrib
   tmpdir (~> 0.3.1)
   tty-command
+  webmock (~> 3.26)
 
 BUNDLED WITH
    2.5.11

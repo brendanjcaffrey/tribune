@@ -2,6 +2,7 @@ source 'https://rubygems.org'
 
 gem 'connection_pool'
 gem 'jwt', '~> 3.1'
+gem 'nokogiri', '~> 1.18'
 gem 'pg'
 gem 'puma'
 gem 'rack-test'
@@ -12,7 +13,10 @@ gem 'rspec-temp_dir', '~> 1.1'
 gem 'rubocop', '~> 1.78'
 gem 'rubocop-rake', '~> 0.7.1'
 gem 'rubocop-rspec', '~> 3.6'
+gem 'rubyzip', '~> 3.2'
 gem 'sinatra'
 gem 'sinatra-contrib'
 gem 'tmpdir', '~> 0.3.1'
 gem 'tty-command'
+
+gem 'webmock', '~> 3.26', group: :test
