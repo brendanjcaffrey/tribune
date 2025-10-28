@@ -8,3 +8,5 @@ test_database_name: tribune-test
 secret: [something]
 server_port: 1847
 newsletters_dir: /Users/you/tribune/newsletters/
+-- optional; get from https://rapidapi.com/fivefilters/api/full-text-rss
+full_text_rss_api_key: [something]

@@ -16,7 +16,7 @@ BASE_TIME = Time.new(2025, 1, 1, 0, 0, 0.456789).utc
 HALF_MICROSECOND = Rational(1, 2_000_000)
 HALF_SECOND = Rational(1, 2)
 CREATE_TEST_USER_QUERY = 'INSERT INTO users (username, password_sha256) VALUES ($1, $2);'
-CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, source_id, source_mime_type, read, deleted, progress, created_at, updated_at, epub_updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);'
+CREATE_TEST_NEWSLETTER_QUERY = 'INSERT INTO newsletters (id, title, author, source_id, source_mime_type, read, deleted, progress, created_at, updated_at, epub_updated_at, source_updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);'
 UPDATE_TEST_NEWSLETTER_UPDATED_AT = 'UPDATE newsletters SET updated_at = $1 WHERE id = $2;'
 
 RSpec.describe 'Tribune Server' do
@@ -56,16 +56,18 @@ RSpec.describe 'Tribune Server' do
   end
 
   # newsletters
-  def create_newsletter(id:, title: nil, author: nil, source_id: nil, source_mime_type: HTML_MIME_TYPE, read: false, deleted: false, progress: '', created_at: nil, updated_at: nil, epub_updated_at: nil)
+  def create_newsletter(id:, title: nil, author: nil, source_id: nil, source_mime_type: HTML_MIME_TYPE, read: false, deleted: false, progress: '', created_at: nil, updated_at: nil, epub_updated_at: nil, source_updated_at: nil)
     title ||= "t#{id}"
     author ||= "a#{id}"
     source_id ||= "si#{id}"
     created_at ||= BASE_TIME + id
     updated_at ||= BASE_TIME + id
     epub_updated_at ||= BASE_TIME + id
+    source_updated_at ||= BASE_TIME + id
     DB_POOL.with do |conn|
       conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, source_id, source_mime_type, read, deleted, progress,
-                                               created_at.iso8601(6), updated_at.iso8601(6), epub_updated_at.iso8601(6)])
+                                               created_at.iso8601(6), updated_at.iso8601(6), epub_updated_at.iso8601(6),
+                                               source_updated_at.iso8601(6)])
     end
   end
 
@@ -209,9 +211,10 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['created_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
       expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
+      expect(Time.parse(item['source_updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
     end
 
-    it 'returns created_at in iso8601 with 6 digits of fractional seconds', :focus do
+    it 'returns created_at in iso8601 with 6 digits of fractional seconds' do
       time = Time.utc(2025, 1, 1, 0, 0, 0)
       create_newsletter(id: 2, created_at: time)
 
@@ -1175,7 +1178,7 @@ RSpec.describe 'Tribune Server' do
 
     before do
       create_user
-      create_newsletter(id: 1, source_id: 'si1', updated_at: BASE_TIME, epub_updated_at: BASE_TIME, read: true, progress: 'hi')
+      create_newsletter(id: 1, source_id: 'si1', updated_at: BASE_TIME, epub_updated_at: BASE_TIME, source_updated_at: BASE_TIME, read: true, progress: 'hi')
       CONFIG.newsletters_dir = temp_dir
     end
 
@@ -1209,7 +1212,7 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(404)
     end
 
-    it 'updates the file contents, updated_at timestamps and clears the progress', :focus do
+    it 'updates the file contents, updated_at timestamps and clears the progress' do
       put '/newsletters/si1/epub', { epub_file: epub_file }, get_auth_header
       expect(last_response).to be_ok
 
@@ -1220,15 +1223,198 @@ RSpec.describe 'Tribune Server' do
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
+      expect(Time.parse(item['source_updated_at'])).to be_within(HALF_SECOND).of(BASE_TIME)
       expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(item['progress']).to eq('')
     end
 
-    it 'returns an error if the newsletter is deleted' do
-      create_newsletter(id: 2, source_id: 'si2', updated_at: BASE_TIME, epub_updated_at: BASE_TIME, deleted: true)
+    it 'marks as unread and undeleted' do
+      create_newsletter(id: 2, source_id: 'si2', updated_at: BASE_TIME, epub_updated_at: BASE_TIME, read: true, deleted: true)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(item['id']).to eq(2)
+      expect(item['read']).to be(true)
+      expect(item['deleted']).to be(true)
+
       put '/newsletters/si2/epub', { epub_file: epub_file }, get_auth_header
-      expect(last_response.status).to eq(404)
+      expect(last_response).to be_ok
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(item['id']).to eq(2)
+      expect(item['read']).to be(false)
+      expect(item['deleted']).to be(false)
+    end
+  end
+
+  describe 'POST /newsletters/raw' do
+    include_context 'uses temp dir'
+
+    before do
+      create_user
+      CONFIG.newsletters_dir = temp_dir
+    end
+
+    let(:pdf_file_path) do
+      File.join(temp_dir, 'test_newsletter.pdf').tap do |path|
+        File.write(path, 'pdf pdf pdf')
+      end
+    end
+
+    let(:pdf_file) do
+      Rack::Test::UploadedFile.new(pdf_file_path, PDF_MIME_TYPE)
+    end
+
+    let(:html_file_path) do
+      File.join(temp_dir, 'test_newsletter.html').tap do |path|
+        File.write(path, 'html html html')
+      end
+    end
+
+    let(:html_file) do
+      Rack::Test::UploadedFile.new(html_file_path, HTML_MIME_TYPE)
+    end
+
+    let(:metadata) do
+      { 'url' => 'http://example.com/article' }
+    end
+
+    let(:metadata_file) do
+      Rack::Test::UploadedFile.new(
+        StringIO.new(JSON.generate(metadata)),
+        'application/json',
+        original_filename: 'metadata.json'
+      )
+    end
+
+    it 'returns an error if no auth header' do
+      post '/newsletters/raw'
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if expired jwt' do
+      post '/newsletters/raw', {}, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if invalid jwt' do
+      post '/newsletters/raw', {}, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if missing source file' do
+      post '/newsletters/raw', { metadata: metadata_file }, get_auth_header
+      puts last_response.inspect
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if missing metadata file' do
+      post '/newsletters/raw', { raw_source_file: html_file }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if metadata is not valid json' do
+      post '/newsletters/raw', {
+        metadata: Rack::Test::UploadedFile.new(
+          StringIO.new('{{{{{'),
+          'application/json',
+          original_filename: 'metadata.json'
+        ),
+        raw_source_file: html_file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if metadata is missing the url' do
+      metadata['url'] = nil
+      post '/newsletters/raw', {
+        metadata: metadata_file,
+        raw_source_file: html_file
+      }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'returns an error if the source file has wrong mime' do
+      post '/newsletters/raw', { metadata: metadata_file, raw_source_file: pdf_file }, get_auth_header
+      expect(last_response.status).to eq(400)
+    end
+
+    it 'cleans the html & turns it into an epub' do
+      allow(FullTextRSS).to receive(:clean_html)
+        .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
+      allow(Epub).to receive(:generate) do |_, _, _, epub_path|
+        File.write(epub_path, 'epub epub epub')
+      end
+
+      post '/newsletters/raw', { metadata: metadata_file, raw_source_file: html_file }, get_auth_header
+      expect(last_response).to be_ok
+      id = JSON.parse(last_response.body)['id']
+
+      source_path = File.join(temp_dir, "#{id}.html")
+      expect(File).to exist(source_path)
+      expect(File.read(source_path)).to eq('html html html')
+
+      epub_path = File.join(temp_dir, "#{id}.epub")
+      expect(File).to exist(epub_path)
+      expect(File.read(epub_path)).to eq('epub epub epub')
+
+      expect(FullTextRSS).to have_received(:clean_html).with('html html html', metadata['url'])
+      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(item['id']).to eq(id)
+      expect(item['title']).to eq('clean title')
+      expect(item['author']).to eq('clean author')
+      expect(item['source_mime_type']).to eq(HTML_MIME_TYPE)
+      expect(item['read']).to be(false)
+      expect(item['deleted']).to be(false)
+      expect(Time.parse(item['created_at'])).to be_within(HALF_SECOND).of(Time.now)
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+      expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+      expect(Time.parse(item['source_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+    end
+
+    it 'updates source and epub if the url exists already', :focus do
+      allow(FullTextRSS).to receive(:clean_html)
+        .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
+      allow(Epub).to receive(:generate) do |_, _, _, epub_path|
+        File.write(epub_path, 'epub epub epub')
+      end
+
+      create_newsletter(id: 1, source_id: metadata['url'], created_at: BASE_TIME, updated_at: BASE_TIME, epub_updated_at: BASE_TIME, source_updated_at: BASE_TIME, read: true, deleted: true)
+
+      post '/newsletters/raw', { metadata: metadata_file, raw_source_file: html_file }, get_auth_header
+      expect(last_response).to be_ok
+      id = JSON.parse(last_response.body)['id']
+      expect(id).to eq(1)
+
+      source_path = File.join(temp_dir, "#{id}.html")
+      expect(File).to exist(source_path)
+      expect(File.read(source_path)).to eq('html html html')
+
+      epub_path = File.join(temp_dir, "#{id}.epub")
+      expect(File).to exist(epub_path)
+      expect(File.read(epub_path)).to eq('epub epub epub')
+
+      expect(FullTextRSS).to have_received(:clean_html).with('html html html', metadata['url'])
+      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything)
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(item['id']).to eq(1)
+      expect(item['read']).to be(false)
+      expect(item['deleted']).to be(false)
+      expect(Time.parse(item['created_at'])).to be_within(HALF_SECOND).of(BASE_TIME)
+      expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+      expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+      expect(Time.parse(item['source_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
     end
   end
 end

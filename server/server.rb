@@ -7,6 +7,8 @@ require 'json'
 require 'pg'
 require_relative 'config'
 require_relative 'jwt'
+require_relative 'full_text_rss'
+require_relative 'epub'
 
 ANY_USERS_EXIST_QUERY = 'SELECT EXISTS(SELECT 1 FROM users);'
 VALID_USERNAME_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1);'
@@ -14,7 +16,7 @@ VALID_USERNAME_AND_PASSWORD_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE use
 
 # keeping swift and javascript happy with the date format
 DATE_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS.US'
-GET_NEWSLETTERS_QUERY_START = "SELECT id, title, author, source_mime_type, read, deleted, progress, to_char(created_at, '#{DATE_FORMAT}') || 'Z' as created_at, updated_at, epub_updated_at FROM newsletters".freeze
+GET_NEWSLETTERS_QUERY_START = "SELECT id, title, author, source_mime_type, read, deleted, progress, to_char(created_at, '#{DATE_FORMAT}') || 'Z' as created_at, updated_at, epub_updated_at, source_updated_at FROM newsletters".freeze
 GET_NEWSLETTERS_QUERY_END = 'ORDER BY updated_at DESC, id DESC LIMIT 100;'
 GET_NEWSLETTERS_QUERY = "#{GET_NEWSLETTERS_QUERY_START} #{GET_NEWSLETTERS_QUERY_END}".freeze
 GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) > ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
@@ -22,7 +24,8 @@ GET_NEWSLETTERS_BEFORE_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at
 
 CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, source_id, source_mime_type) VALUES ($1, $2, $3, $4) RETURNING id;'
 CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, source_id, source_mime_type, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING id;'
-NEWSLETTER_EXISTS_QUERY = 'SELECT EXISTS(SELECT 1 FROM newsletters WHERE id = $1 AND deleted = FALSE);'
+NEWSLETTER_ID_EXISTS_QUERY = 'SELECT EXISTS(SELECT 1 FROM newsletters WHERE id = $1 AND deleted = FALSE);'
+NEWSLETTER_SOURCE_ID_EXISTS_QUERY = 'SELECT EXISTS(SELECT 1 FROM newsletters WHERE source_id = $1);'
 NEWSLETTER_SOURCE_MIME_TYPE_QUERY = 'SELECT source_mime_type FROM newsletters WHERE id = $1 AND deleted = FALSE;'
 
 MARK_NEWSLETTER_READ_QUERY = <<~SQL
@@ -63,9 +66,24 @@ EPUB_UPDATED_NEWSLETTER_QUERY = <<-SQL
   SET
       updated_at = CURRENT_TIMESTAMP,
       epub_updated_at = CURRENT_TIMESTAMP,
-      progress = ''
+      progress = '',
+      read = FALSE,
+      deleted = FALSE
   WHERE source_id = $1
-      AND deleted = FALSE
+  RETURNING id;
+SQL
+SOURCE_UPDATED_NEWSLETTER_QUERY = <<-SQL
+  UPDATE newsletters
+  SET
+      title = $1,
+      author = $2,
+      updated_at = CURRENT_TIMESTAMP,
+      epub_updated_at = CURRENT_TIMESTAMP,
+      source_updated_at = CURRENT_TIMESTAMP,
+      progress = '',
+      read = FALSE,
+      deleted = FALSE
+  WHERE source_id = $3 and source_mime_type = $4
   RETURNING id;
 SQL
 
@@ -73,6 +91,7 @@ EPUB_MIME_TYPE = 'application/epub+zip'
 PDF_MIME_TYPE = 'application/pdf'
 HTML_MIME_TYPE = 'text/html'
 MIME_TYPES = { PDF_MIME_TYPE => 'pdf', HTML_MIME_TYPE => 'html' }.freeze
+RAW_MIME_TYPES = { HTML_MIME_TYPE => 'html' }.freeze
 
 CONFIG = Config.load
 DB_POOL = ConnectionPool.new(size: 5, timeout: 5) do
@@ -269,6 +288,45 @@ class Server < Sinatra::Base
     end
   end
 
+  post '/newsletters/raw' do
+    halt 401, 'Unauthorized' unless authed?
+    halt 400, 'Missing raw source file' if !params[:raw_source_file] || !(raw_source_tempfile = params[:raw_source_file][:tempfile])
+    halt 400, 'Invalid raw source mime type' unless RAW_MIME_TYPES.key?(params[:raw_source_file][:type])
+    halt 400, 'Missing metadata' if !params[:metadata] || params[:metadata].empty?
+    halt 400, 'Invalid metadata mime type' unless params[:metadata][:type] == 'application/json'
+
+    json = File.read(params[:metadata][:tempfile])
+    begin
+      metadata = JSON.parse(json)
+    rescue JSON::ParserError => e
+      halt 400, "Invalid JSON: #{e.message}"
+    end
+
+    url = metadata['url']
+    halt 400, 'Missing url in metadata' if url.nil? || url.empty?
+
+    source_mime_type = params[:raw_source_file][:type]
+    result = FullTextRSS.clean_html(File.read(raw_source_tempfile.path), url)
+    epub_tempfile = Tempfile.new('newsletter_epub')
+    Epub.generate(result.title, result.author, result.content, epub_tempfile.path)
+
+    exists = query(NEWSLETTER_SOURCE_ID_EXISTS_QUERY, [url])[0]['exists'] == 't'
+    result = if exists
+               # NB: this query will fail intentionally if the source_mime_type is different
+               query(SOURCE_UPDATED_NEWSLETTER_QUERY, [result.title, result.author, url, source_mime_type])
+             else
+               query(CREATE_NEWSLETTER_QUERY, [result.title, result.author, url, source_mime_type])
+             end
+
+    if (id = result[0]['id'])
+      FileUtils.move(raw_source_tempfile.path, source_path(id, source_mime_type))
+      FileUtils.move(epub_tempfile.path, epub_path(id))
+      json({ id: id.to_i })
+    else
+      halt 500, 'Failed to create newsletter'
+    end
+  end
+
   get '/newsletters/:id/source' do
     halt 401, 'Unauthorized' unless authed?
     halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
@@ -292,7 +350,7 @@ class Server < Sinatra::Base
   get '/newsletters/:id/epub' do
     halt 401, 'Unauthorized' unless authed?
     halt 400, 'Invalid ID' if params[:id].nil? || params[:id].to_i <= 0
-    exists = query(NEWSLETTER_EXISTS_QUERY, [params[:id]])[0]['exists'] == 't'
+    exists = query(NEWSLETTER_ID_EXISTS_QUERY, [params[:id]])[0]['exists'] == 't'
     halt 404, 'Newsletter not found' unless exists
 
     file_path = epub_path(params[:id].to_i)
