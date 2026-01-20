@@ -8,7 +8,14 @@ import {
 import { useWindowSize } from "@react-hook/window-size";
 import { Theme, useTheme } from "@mui/material/styles";
 import { Newsletter } from "./Library";
-import { Epub, SpineItem } from "./Epub";
+import {
+  Epub,
+  SpineItem,
+  Cfi,
+  COLUMN_GAP,
+  TouchStart,
+  EpubInteraction,
+} from "./Epub";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 
@@ -54,9 +61,7 @@ const TWO_COLUMN_MIN_WIDTH = 800;
 const VERTICAL_PADDING = 20;
 const HORIZONTAL_PADDING = 40;
 const PROGRESS_HEIGHT = 20;
-const COLUMN_GAP = 40;
 const SPACER_ID = "__blank_epub_column";
-const SWIPE_THRESHOLD = 50;
 
 function CalculateColumnWidth(windowWidth: number): number {
   if (windowWidth > TWO_COLUMN_MIN_WIDTH) {
@@ -73,80 +78,6 @@ type EpubReaderProps = {
   closeNewsletter: () => void;
 };
 
-function GetElementCfiPath(element: Element | null): string {
-  if (!element || element.tagName.toLowerCase() === "html") {
-    return "/4";
-  }
-  if (element.tagName.toLowerCase() === "body") {
-    return "/4";
-  }
-
-  let path = "";
-  let current: Element | null = element;
-
-  while (current && current.tagName.toLowerCase() !== "body") {
-    if (!current.parentElement) {
-      break;
-    }
-    const siblingIndex = Array.from(current.parentElement.children).indexOf(
-      current,
-    );
-    const cfiIndex = (siblingIndex + 1) * 2;
-    path = `/${cfiIndex}${path}`;
-    current = current.parentElement;
-  }
-
-  return "/4" + path;
-}
-
-function GetElementByCfiPath(doc: Document, cfiPath: string): Element | null {
-  // remove the initial 4/ which corresponds to the <body> element in our CFI generation
-  const cleanPath = cfiPath.startsWith("4/") ? cfiPath.substring(2) : cfiPath;
-  const parts = cleanPath.split("/").filter(Boolean);
-  let currentElement: Element | null = doc.body;
-
-  for (const part of parts) {
-    if (!currentElement || !currentElement.children) {
-      return null;
-    }
-    const index = parseInt(part, 10);
-    if (isNaN(index)) {
-      return null;
-    }
-
-    const children: Element[] = Array.from(currentElement.children);
-    const childIndex = index / 2 - 1;
-
-    if (childIndex >= 0 && childIndex < children.length) {
-      currentElement = children[childIndex];
-    } else {
-      return null;
-    }
-  }
-  return currentElement;
-}
-
-function ScrollPage(
-  iframe: HTMLIFrameElement | null,
-  direction: "forward" | "backward",
-) {
-  if (iframe?.contentWindow) {
-    const scrollAmount = iframe.clientWidth + COLUMN_GAP;
-    if (direction === "forward") {
-      iframe.contentWindow.scrollBy({
-        left: scrollAmount,
-        behavior: "instant",
-      });
-    }
-    if (direction === "backward") {
-      iframe.contentWindow.scrollBy({
-        left: -scrollAmount,
-        behavior: "instant",
-      });
-    }
-  }
-}
-
 const EpubReader: React.FC<EpubReaderProps> = ({
   newsletter,
   file,
@@ -159,140 +90,53 @@ const EpubReader: React.FC<EpubReaderProps> = ({
   const [readingProgress, setReadingProgress] = useState(0);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const touchStartRef = useRef<{
-    x: number;
-    y: number;
-    targetIsNavAnchor: boolean;
-  } | null>(null);
+  const touchStartRef = useRef<TouchStart>(null);
   const setOffsetOnNextLoad = useRef<number | string | null>(null);
 
   // event handlers
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
-      const tag = (event.target as HTMLElement)?.tagName?.toLowerCase();
-      if (
-        tag === "input" ||
-        tag === "textarea" ||
-        (event.target as HTMLElement)?.isContentEditable
-      ) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        closeNewsletter();
-        return;
-      }
-
-      if (event.key === "ArrowRight") {
-        ScrollPage(iframeRef.current, "forward");
-      } else if (event.key === "ArrowLeft") {
-        ScrollPage(iframeRef.current, "backward");
-      }
+      EpubInteraction.handleKeyDown(iframeRef, event, closeNewsletter);
     },
     [closeNewsletter],
   );
 
   const handleTouchStart = useCallback((event: TouchEvent) => {
-    if (event.touches.length === 1) {
-      touchStartRef.current = {
-        x: event.touches[0].clientX,
-        y: event.touches[0].clientY,
-        targetIsNavAnchor:
-          (event.target as HTMLElement).tagName.toLowerCase() === "a" &&
-          (event.target as HTMLElement).hasAttribute("epub_type"),
-      };
-    }
+    EpubInteraction.handleTouchStart(touchStartRef, event);
   }, []);
 
   const handleTouchEnd = useCallback((event: TouchEvent) => {
-    if (touchStartRef.current && event.changedTouches.length === 1) {
-      const touchEndX = event.changedTouches[0].clientX;
-      const touchStartX = touchStartRef.current.x;
-      const deltaX = touchEndX - touchStartX;
-
-      if (Math.abs(deltaX) >= SWIPE_THRESHOLD) {
-        ScrollPage(iframeRef.current, deltaX < 0 ? "forward" : "backward");
-      } else {
-        if (touchStartRef.current.targetIsNavAnchor) {
-          // nop, let the link work normally
-        } else if (iframeRef.current?.contentWindow) {
-          const screenWidth = iframeRef.current.clientWidth;
-          ScrollPage(
-            iframeRef.current,
-            touchEndX < screenWidth / 2 ? "backward" : "forward",
-          );
-        }
-      }
-      touchStartRef.current = null;
-    }
+    EpubInteraction.handleTouchEnd(iframeRef, touchStartRef, event);
   }, []);
 
   const handleScrollToHref = useCallback((e: Event) => {
-    const id = (e as CustomEvent).detail.href.substring(1);
-    const { current: iframe } = iframeRef;
-    if (iframe?.contentDocument && iframe?.contentWindow) {
-      const element = iframe.contentDocument.getElementById(id);
-      if (element) {
-        const elementLeft = element.getBoundingClientRect().left;
-        const currentScroll = iframe.contentWindow.scrollX;
-        const absoluteLeft = elementLeft + currentScroll;
-        const page = Math.floor(
-          absoluteLeft / (iframe.clientWidth + COLUMN_GAP),
-        );
-        const scrollLeft = page * (iframe.clientWidth + COLUMN_GAP);
-        iframe.contentWindow.scrollTo({
-          left: scrollLeft,
-          behavior: "instant",
-        });
-      }
-    }
+    EpubInteraction.handleScrollToHref(iframeRef, e);
   }, []);
 
   const updateReadingProgress = useCallback(() => {
-    const { current: iframe } = iframeRef;
-    if (iframe && iframe.contentWindow && iframe.contentDocument) {
-      const scrollWidth = iframe.contentDocument.body.scrollWidth;
-      const clientWidth = iframe.clientWidth;
-      const scrollLeft = iframe.contentWindow.scrollX;
-
-      if (scrollWidth > clientWidth) {
-        const progress = (scrollLeft / scrollWidth) * 100;
-        setReadingProgress(Math.round(progress));
-      } else {
-        setReadingProgress(100); // if content fits in one screen, it's 100% read
-      }
-
-      // check if scrolled to the end
-      // a small buffer is added to account for potential floating point inaccuracies
-      if (scrollLeft + clientWidth >= scrollWidth - 5) {
-        WorkerInstance.postMessage(
-          buildMainMessage("mark newsletter as read", {
-            id: newsletter.id,
-          }),
-        );
-      }
+    const progress = EpubInteraction.calculateReadingProgress(iframeRef);
+    setReadingProgress(progress.progress);
+    if (progress.atEnd) {
+      WorkerInstance.postMessage(
+        buildMainMessage("mark newsletter as read", {
+          id: newsletter.id,
+        }),
+      );
     }
   }, [newsletter.id]);
 
   const saveProgress = useCallback(() => {
-    const iframe = iframeRef.current;
-    if (iframe && iframe.contentWindow && iframe.contentDocument) {
-      const range = iframe.contentDocument.caretPositionFromPoint(1, 1);
-      const node = range ? range.offsetNode : null;
-      const element =
-        node && node.nodeType === 3 ? node.parentElement : (node as Element);
-      const path = GetElementCfiPath(element);
-      const cfi = `epubcfi(/6/2!${path})`;
-
+    const fullCfi = Cfi.calculateCurrentCfi(iframeRef);
+    if (fullCfi) {
       WorkerInstance.postMessage(
         buildMainMessage("update newsletter progress", {
           id: newsletter.id,
-          progress: cfi,
+          progress: fullCfi,
         }),
       );
-
-      updateReadingProgress();
     }
+
+    updateReadingProgress();
   }, [newsletter.id, updateReadingProgress]);
 
   useEffect(() => {
@@ -320,7 +164,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     const epub = new Epub(file);
     epub.parse().then(async () => {
       if (epub.spine.length > 0) {
-        setBookContent(await epub.getSpineItem(0));
+        setBookContent(await epub.getSpineItem(0, "target _blank"));
         if (newsletter.progress) {
           setOffsetOnNextLoad.current = newsletter.progress;
         }
@@ -334,46 +178,12 @@ const EpubReader: React.FC<EpubReaderProps> = ({
       setIframeContent("");
     }
 
-    const styledContent = `
-          <html>
-            <head>
-              <style>
-                html {
-                  height: 100%;
-                  overflow: hidden;
-                  scroll-snap-type: x mandatory;
-                }
-                body {
-                  height: 100%;
-                  margin: 0;
-                  padding: 0;
-                  box-sizing: border-box;
-
-                  column-width: ${CalculateColumnWidth(windowWidth)}px;
-                  column-gap: ${COLUMN_GAP}px;
-
-                  text-align: justify;
-                }
-                img {
-                  max-width: 100%;
-                  height: auto;
-                }
-                #__blank_epub_column {
-                  display: inline-block;
-                  height: 1px;
-                  /* make sure it doesn't visibly affect layout other than occupying a column */
-                  break-inside: avoid;
-                }
-                ${getMuiStyles(theme)}
-                ${bookContent?.headContent}
-              </style>
-            </head>
-            <body>
-              ${bookContent?.bodyContent}
-            </body>
-          </html>
-        `;
-    setIframeContent(styledContent);
+    const content = Epub.buildIframeContent(
+      CalculateColumnWidth(windowWidth),
+      getMuiStyles(theme),
+      bookContent,
+    );
+    setIframeContent(content);
   }, [bookContent, windowWidth, windowHeight, theme]);
 
   useEffect(() => {
@@ -459,30 +269,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
           typeof setOffsetOnNextLoad.current === "string" &&
           setOffsetOnNextLoad.current.startsWith("epubcfi")
         ) {
-          const cfiString = setOffsetOnNextLoad.current;
-          // extract the path part, e.g., epubcfi(/6/2!/4/2/2/2/2/1:0 -> /4/2/2/2/2/1
-          const cfiPathMatch = cfiString.match(/!\/(.*?)(?::|$)/);
-          if (cfiPathMatch && iframe.contentDocument) {
-            const cfiPath = cfiPathMatch[1];
-            const targetElement = GetElementByCfiPath(
-              iframe.contentDocument,
-              cfiPath,
-            );
-
-            if (targetElement) {
-              const elementLeft = targetElement.getBoundingClientRect().left;
-              const currentScroll = iframe.contentWindow.scrollX;
-              const absoluteLeft = elementLeft + currentScroll;
-              const pageWidth = iframe.clientWidth + COLUMN_GAP;
-              const page = Math.floor(absoluteLeft / pageWidth);
-              const scrollLeft = page * pageWidth;
-
-              iframe.contentWindow.scrollTo({
-                left: scrollLeft,
-                behavior: "instant",
-              });
-            }
-          }
+          Cfi.scrollToCfi(iframeRef, setOffsetOnNextLoad.current);
         } else if (typeof setOffsetOnNextLoad.current === "number") {
           iframe.contentWindow.scrollTo({
             left: setOffsetOnNextLoad.current,

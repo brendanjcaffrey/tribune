@@ -10,7 +10,6 @@
 		C633CFA42E9AB709007F8C2D /* Reachability in Frameworks */ = {isa = PBXBuildFile; productRef = C633CFA32E9AB709007F8C2D /* Reachability */; };
 		C66CADD22E9345C8002FA0F5 /* AlertToast in Frameworks */ = {isa = PBXBuildFile; productRef = C66CADD12E9345C8002FA0F5 /* AlertToast */; };
 		C66EEE002E94BA7D00AC6E7B /* TextBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = C66EEDFF2E94BA7D00AC6E7B /* TextBuilder */; };
-		C6AB99892E93078900874657 /* Config.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = C6AB99882E93078900874657 /* Config.xcconfig */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -207,7 +206,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
-				LastUpgradeCheck = 2600;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					C61648E82E8D703B004B9FA4 = {
 						CreatedOnToolsVersion = 26.0.1;
@@ -253,7 +252,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C6AB99892E93078900874657 /* Config.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -372,6 +370,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -431,6 +430,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};

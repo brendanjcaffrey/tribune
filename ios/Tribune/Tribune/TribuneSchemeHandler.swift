@@ -1,7 +1,31 @@
 import WebKit
 import UniformTypeIdentifiers
 
+struct LocalFile {
+    let name: String
+    let ext: String
+    let mimeType: String
+
+    func fileID() -> String {
+        return "\(name).\(ext)"
+    }
+
+    func getContents() throws -> Data {
+        // uncomment this to make development easier, run a server with rake ios:dev_server
+        //let url = URL(string: "http://192.168.1.92:5173/\(name).\(ext)")!
+        //return try Data(contentsOf: url)
+
+        return try Data(contentsOf: Bundle.main.url(forResource: self.name, withExtension: self.ext)!)
+    }
+}
+
 final class TribuneSchemeHandler: NSObject, WKURLSchemeHandler {
+    static let localFiles = [
+        LocalFile(name: "index", ext: "html", mimeType: "text/html"),
+        LocalFile(name: "bundle", ext: "js", mimeType: "text/javascript"),
+        LocalFile(name: "reader", ext: "js", mimeType: "text/javascript"),
+    ]
+
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url,
               url.scheme == "tribune" else {
@@ -13,15 +37,9 @@ final class TribuneSchemeHandler: NSObject, WKURLSchemeHandler {
         var data: Data?
         var contentType: String?
         do {
-            if fileID == "index.html" {
-                data = try Data(contentsOf: Bundle.main.url(forResource: "index", withExtension: "html")!)
-                contentType = "text/html"
-            } else if fileID == "epubjs.min.js" {
-                data = try Data(contentsOf: Bundle.main.url(forResource: "epubjs.min", withExtension: "js")!)
-                contentType = "text/javascript"
-            } else if fileID == "jszip.min.js" {
-                data = try Data(contentsOf: Bundle.main.url(forResource: "jszip.min", withExtension: "js")!)
-                contentType = "text/javascript"
+            if let localFile = Self.localFiles.first(where: { $0.fileID() == fileID }) {
+                data = try localFile.getContents()
+                contentType = localFile.mimeType
             } else if let id = Int(fileID), Files.fileExists(type: .epub, id: id) {
                 data = try Data(contentsOf: Files.getFile(type: .epub, id: id), options: .mappedIfSafe)
                 contentType = "application/epub+zip"

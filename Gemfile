@@ -18,5 +18,6 @@ gem 'sinatra'
 gem 'sinatra-contrib'
 gem 'tmpdir', '~> 0.3.1'
 gem 'tty-command'
+gem 'webrick'
 
 gem 'webmock', '~> 3.26', group: :test

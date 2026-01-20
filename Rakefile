@@ -4,6 +4,7 @@ require 'io/console'
 require 'pg'
 require 'rspec/core/rake_task'
 require 'shellwords'
+require 'webrick'
 require 'tty/command'
 require_relative 'server/config'
 require_relative 'server/jwt'
@@ -164,6 +165,31 @@ namespace :ios do
   task :format_check do
     Dir.chdir('web') do
       command.run('npm run ios_format:check')
+    end
+  end
+
+  desc 'Update the bundled JavaScript for the iOS app'
+  task :update_bundle do
+    Dir.chdir('web') do
+      command.run('./node_modules/.bin/esbuild src/Epub.ts --bundle --minify --format=iife --platform=browser --global-name=Bundle --outfile=../ios/Tribune/Tribune/bundle.js')
+    end
+  end
+
+  desc 'Run a web server for the iOS app to use'
+  task :dev_server do
+    machine_ip = `ipconfig getifaddr en0`.strip
+    puts "Starting iOS dev web server at http://#{machine_ip}:5173"
+    puts 'To use, in Xcode:'
+    puts "  1) go to Info.plist, and under 'App Transport Security Settings', set 'Allow Arbitrary Loads' to TRUE"
+    puts '  2) in TribuneSchemeHandler.swift, look for LocalFile.getContents and uncomment the code there'
+    puts 'Remember to run rake ios:update_bundle if you change any typescript code.'
+    puts 'You can debug the webview through Safari > Develop and use the refresh button there to reload updated code.'
+    puts
+
+    Dir.chdir('ios/Tribune/Tribune/') do
+      server = WEBrick::HTTPServer.new(Port: 5173, DocumentRoot: Dir.pwd)
+      trap('INT') { server.shutdown }
+      server.start
     end
   end
 end

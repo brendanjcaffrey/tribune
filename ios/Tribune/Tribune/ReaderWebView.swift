@@ -20,8 +20,8 @@ struct ReaderWebView: UIViewRepresentable {
         config.setURLSchemeHandler(TribuneSchemeHandler(), forURLScheme: "tribune")
 
         let webView = WKWebView(frame: .zero, configuration: config)
-        webView.isInspectable = true
         webView.scrollView.isScrollEnabled = false
+        webView.isInspectable = true
 
         let url = URL(string: "tribune://host/index.html")!
         webView.load(URLRequest(url: url))
@@ -53,6 +53,10 @@ struct ReaderWebView: UIViewRepresentable {
                     Task { try? await l.updateNewsletterProgress(n, progress: cfi) }
                 } else if type == "at end" && !n.read {
                     Task { try? await l.markNewsletterRead(n) }
+                } else if type == "footnote", let href = obj["href"] as? String {
+                    webView?.evaluateJavaScript("scrollToHref('\(href)')", completionHandler: nil)
+                } else if type == "external link", let href = obj["href"] as? String, let url = URL(string: href) {
+                    UIApplication.shared.open(url)
                 }
             }
         }
