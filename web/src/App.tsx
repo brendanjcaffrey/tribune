@@ -48,6 +48,7 @@ function App() {
           <Notifier />
           <TopBar
             newsletterShown={newsletterShown}
+            displayedNewsletter={displayedNewsletter}
             closeNewsletter={closeNewsletter}
           />
           <AuthWrapper>

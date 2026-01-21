@@ -21,6 +21,7 @@ import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
+import { Newsletter } from "./Library";
 
 const Search = styled("div")(({ theme }) => ({
   position: "relative",
@@ -64,11 +65,13 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
 
 interface TopBarProps {
   newsletterShown: boolean;
+  displayedNewsletter: Newsletter | null;
   closeNewsletter: () => void;
 }
 
 export default function TopBar({
   newsletterShown,
+  displayedNewsletter,
   closeNewsletter,
 }: TopBarProps) {
   const [search, setSearch] = useAtom(searchAtom);
@@ -126,13 +129,10 @@ export default function TopBar({
     <Box sx={{ flexGrow: 1 }}>
       <AppBar position="static">
         <Toolbar>
-          <Typography
-            variant="h6"
-            noWrap
-            component="div"
-            sx={{ display: { xs: "none", sm: "block" } }}
-          >
-            Tribune
+          <Typography variant="h6" noWrap component="div">
+            {newsletterShown && displayedNewsletter
+              ? displayedNewsletter.title
+              : "Tribune"}
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
           {authVerified && !newsletterShown && (
@@ -194,7 +194,7 @@ export default function TopBar({
             </>
           )}
           {authVerified && newsletterShown && (
-            <Box sx={{ display: { xs: "none", md: "flex" } }}>
+            <Box sx={{ display: { md: "flex" } }}>
               <IconButton
                 size="large"
                 color="inherit"
