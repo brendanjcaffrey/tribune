@@ -269,3 +269,26 @@ namespace :user do
     puts build_jwt(username, config.server_secret)
   end
 end
+
+namespace :logo do
+  desc 'Update the web icons from logos/logo-web.png'
+  task :web do
+    command.run('magick logos/logo-web.png -resize 192x192 web/public/favicon/android-chrome-192x192.png')
+    command.run('magick logos/logo-web.png -resize 512x512 web/public/favicon/android-chrome-512x512.png')
+    command.run('magick logos/logo-web.png -resize 180x180 web/public/favicon/apple-touch-icon.png')
+    command.run('magick logos/logo-web.png -resize 32x32 web/public/favicon/favicon-32x32.png')
+    command.run('magick logos/logo-web.png -resize 16x16 web/public/favicon/favicon-16x16.png')
+    command.run('magick logos/logo-web.png -resize 16x16 web/public/favicon/favicon.ico')
+  end
+
+  desc 'Update the firefox extension icons from logos/logo-firefox.png'
+  task :firefox do
+    command.run('magick logos/logo-firefox.png -resize 96x96 firefox/icons/icon96.png')
+    command.run('magick logos/logo-firefox.png -resize 48x48 firefox/icons/icon48.png')
+  end
+
+  desc 'Update the ios app icons from logos/logo-ios.png'
+  task :ios do
+    command.run('magick logos/logo-ios.png -resize 1024x1024 ios/Tribune/Tribune/Assets.xcassets/AppIcon.appiconset/logo-1024.png')
+  end
+end
