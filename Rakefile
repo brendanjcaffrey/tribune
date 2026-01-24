@@ -89,6 +89,8 @@ namespace :server do
 
   desc 'Lint the ruby code'
   task :lint do
+    # ensure ~/.rubocop.yml exists to avoid RuboCop complaining
+    FileUtils.touch(File.expand_path('~/.rubocop.yml'))
     command.run('bundle exec rubocop Rakefile server/')
   end
 
