@@ -15,7 +15,7 @@ interface ManifestItem {
 export interface TouchStart {
   x: number;
   y: number;
-  targetIsAnchor: boolean;
+  targetIsAnchorOrButton: boolean;
 }
 
 export interface ReadingProgress {
@@ -434,7 +434,9 @@ export class EpubInteraction {
       touchStartRef.current = {
         x: event.touches[0].clientX,
         y: event.touches[0].clientY,
-        targetIsAnchor: (event.target as HTMLElement).closest("a") != null,
+        targetIsAnchorOrButton:
+          (event.target as HTMLElement).closest("a") != null ||
+          (event.target as HTMLElement).closest("button") != null,
       };
     }
   }
@@ -454,8 +456,9 @@ export class EpubInteraction {
           iframeRef,
           deltaX < 0 ? "forward" : "backward",
         );
+        event.preventDefault();
       } else {
-        if (touchStartRef.current.targetIsAnchor) {
+        if (touchStartRef.current.targetIsAnchorOrButton) {
           // nop, let the link work normally
         } else if (iframeRef.current?.contentWindow) {
           const screenWidth = iframeRef.current.clientWidth;
@@ -463,6 +466,7 @@ export class EpubInteraction {
             iframeRef,
             touchEndX < screenWidth / 2 ? "backward" : "forward",
           );
+          event.preventDefault();
         }
       }
       touchStartRef.current = null;

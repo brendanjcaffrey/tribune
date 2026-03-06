@@ -38,6 +38,11 @@ function getMuiStyles(theme) {
       color: ${theme.palette.primary.main} !important;
       text-decoration: none;
     }
+    a[epub_type] {
+      padding: 10px;
+      margin: -10px;
+      display: inline-block;
+    }
     p {
       margin-bottom: 16px;
     }
@@ -107,6 +112,9 @@ function setContent(spineItem) {
                   border: none;
                   background-color: transparent;
                   font-size: 20px;
+                  padding: 10px;
+                  margin: -10px;
+                  display: inline-block;
                 }
                 iframe {
                   width: 100%;
