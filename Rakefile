@@ -5,6 +5,7 @@ require 'pg'
 require 'rspec/core/rake_task'
 require 'shellwords'
 require 'webrick'
+require 'pastel'
 require 'tty/command'
 require_relative 'server/config'
 require_relative 'server/jwt'
@@ -41,6 +42,17 @@ namespace :db do
   desc 'Drop the main database'
   task :drop do
     config = Config.load
+    pastel = Pastel.new
+
+    puts pastel.red.bold("\nWARNING: You are about to drop the main database '#{config.database_name}'.")
+    puts pastel.red.bold('This action is irreversible and will destroy all data.')
+    print pastel.yellow('Are you sure you want to proceed? [y/N] ')
+
+    unless %w[y yes].include?($stdin.gets.strip.downcase)
+      puts pastel.green('Database drop cancelled.')
+      exit 1
+    end
+
     command = TTY::Command.new
     command.run("dropdb #{db_args(config)} #{config.database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })

@@ -131,6 +131,7 @@ DEPENDENCIES
   connection_pool
   jwt (~> 3.1)
   nokogiri (~> 1.18)
+  pastel (~> 0.8.0)
   pg
   puma
   rack-test
