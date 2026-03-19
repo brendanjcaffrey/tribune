@@ -353,6 +353,7 @@ export class Epub {
     columnWidth: number,
     muiStyles: string,
     bookContent: SpineItem | null,
+    maxImageSize: number,
   ): string {
     return `
           <html>
@@ -375,8 +376,9 @@ export class Epub {
                   text-align: justify;
                 }
                 img {
-                  max-width: 100%;
-                  height: auto;
+                  max-width: ${maxImageSize}%;
+                  max-height: ${maxImageSize}vh;
+                  object-fit: contain;
                 }
                 #__blank_epub_column {
                   display: inline-block;

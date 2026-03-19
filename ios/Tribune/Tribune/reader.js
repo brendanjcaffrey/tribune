@@ -83,6 +83,7 @@ function setContent(spineItem) {
     calculateColumnWidth(window.innerWidth),
     getMuiStyles(theme),
     spineItem,
+    100,
   );
   const iframeContentBlob = new Blob([iframeContent], { type: "text/html" });
   const iframeBlobUrl = URL.createObjectURL(iframeContentBlob);

@@ -182,6 +182,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
       CalculateColumnWidth(windowWidth),
       getMuiStyles(theme),
       bookContent,
+      80,
     );
     setIframeContent(content);
   }, [bookContent, windowWidth, windowHeight, theme]);
