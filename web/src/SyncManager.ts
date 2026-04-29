@@ -61,6 +61,7 @@ export class SyncManager {
       this.timerId = null;
     }
 
+    let succeeded = false;
     try {
       postMessage(buildWorkerMessage("sync status", { running: true }));
       this.abortController = new AbortController();
@@ -70,13 +71,21 @@ export class SyncManager {
         await this.fetchInitial();
       }
       this.downloadManager.checkForDownloads();
+      succeeded = true;
     } catch (error) {
       if (!this.abortController?.signal.aborted) {
         console.error(error);
-        if (error instanceof Error) {
-          postMessage(buildWorkerMessage("error", { error: error.message }));
-        } else {
-          postMessage(buildWorkerMessage("error", { error: "unknown error" }));
+        // only surface sync failures the user explicitly asked for. background
+        // syncs (window focus, auth-set, scheduled refresh) failing while
+        // offline / VPN-down would otherwise spam the snackbar.
+        if (sendNotifications) {
+          if (error instanceof Error) {
+            postMessage(buildWorkerMessage("error", { error: error.message }));
+          } else {
+            postMessage(
+              buildWorkerMessage("error", { error: "unknown error" }),
+            );
+          }
         }
       }
     } finally {
@@ -85,7 +94,7 @@ export class SyncManager {
         this.timerId = setTimeout(() => this.syncLibrary(), REFRESH_MILLIS);
       }
       postMessage(buildWorkerMessage("sync status", { running: false }));
-      if (sendNotifications) {
+      if (sendNotifications && succeeded) {
         postMessage(
           buildWorkerMessage("success", { success: "Sync succeeded" }),
         );

@@ -18,19 +18,23 @@ final class Session: ObservableObject {
     }
 
     func restore() {
-        if !APIClient.hasToken() {
+        guard APIClient.hasToken() else {
             state = .unauthenticated
             return
         }
 
-        state = .authenticating
+        // if there's a cached token, assume the user is logged in for offline mode
+        state = .authenticated(jwt: "")
         Task {
             do {
                 let jwt = try await APIClient.renewAuth()
                 self.state = .authenticated(jwt: jwt)
-            } catch {
-                self.errorMessage = error.localizedDescription
+            } catch APIError.badStatus(401), APIError.badStatus(403) {
+                self.errorMessage = "Session expired"
                 self.state = .unauthenticated
+            } catch {
+                // ignore a potential network hiccup
+                print("renewAuth deferred: \(error.localizedDescription)")
             }
         }
     }

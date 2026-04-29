@@ -13,6 +13,7 @@ enum APIClient {
     private static let progressPath = "/progress"
     private static let keychainService = "com.jcaffrey.tribune.auth"
     private static let keychainAccount = "jwt"
+    private static let defaultTimeoutInterval = 2.5
 
     private static func getToken() throws -> String? {
         return try Keychain.readJWT(service: keychainService, account: keychainAccount)
@@ -30,7 +31,7 @@ enum APIClient {
     // POST /auth
     static func signIn(username: String, password: String) async throws -> String {
         let url = AppConfig.baseURL.appending(path: authPath)
-        var req = URLRequest(url: url)
+        var req = URLRequest(url: url, timeoutInterval: Self.defaultTimeoutInterval)
         req.httpMethod = "POST"
         req.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
         req.httpBody = formURLEncoded([
@@ -53,14 +54,17 @@ enum APIClient {
             throw APIError.notAuthorized
         }
         let url = AppConfig.baseURL.appending(path: authPath)
-        var req = URLRequest(url: url)
+        var req = URLRequest(url: url, timeoutInterval: Self.defaultTimeoutInterval)
         req.httpMethod = "PUT"
         req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
 
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
         guard (200..<300).contains(code) else {
-            try? Keychain.deleteJWT(service: keychainService, account: keychainAccount)
+            // only drop the cached token if the server explicitly rejected it
+            if code == 401 || code == 403 {
+                try? Keychain.deleteJWT(service: keychainService, account: keychainAccount)
+            }
             throw APIError.badStatus(code)
         }
 
@@ -79,7 +83,7 @@ enum APIClient {
             throw APIError.notAuthorized
         }
         let url = AppConfig.baseURL.appending(path: newslettersPath)
-        var req = URLRequest(url: url)
+        var req = URLRequest(url: url, timeoutInterval: Self.defaultTimeoutInterval)
         req.httpMethod = "GET"
         req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
 
@@ -116,7 +120,7 @@ enum APIClient {
         components.percentEncodedQuery = components.percentEncodedQuery?
             .replacingOccurrences(of: "+", with: "%2B")
 
-        var req = URLRequest(url: components.url!)
+        var req = URLRequest(url: components.url!, timeoutInterval: Self.defaultTimeoutInterval)
         req.httpMethod = "GET"
         req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
 
@@ -135,7 +139,7 @@ enum APIClient {
             throw APIError.notAuthorized
         }
         let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "/\(id)/\(type)")
-        var req = URLRequest(url: url)
+        var req = URLRequest(url: url, timeoutInterval: Self.defaultTimeoutInterval)
         req.httpMethod = "GET"
         req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
 
@@ -155,7 +159,7 @@ enum APIClient {
         }
         let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "\(id)")
             .appending(path: readPath)
-        var req = URLRequest(url: url)
+        var req = URLRequest(url: url, timeoutInterval: Self.defaultTimeoutInterval)
         req.httpMethod = "PUT"
         req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
 
@@ -173,7 +177,7 @@ enum APIClient {
         }
         let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "\(id)")
             .appending(path: unreadPath)
-        var req = URLRequest(url: url)
+        var req = URLRequest(url: url, timeoutInterval: Self.defaultTimeoutInterval)
         req.httpMethod = "PUT"
         req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
 
@@ -190,7 +194,7 @@ enum APIClient {
             throw APIError.notAuthorized
         }
         let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "\(id)")
-        var req = URLRequest(url: url)
+        var req = URLRequest(url: url, timeoutInterval: Self.defaultTimeoutInterval)
         req.httpMethod = "DELETE"
         req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
 
@@ -207,7 +211,7 @@ enum APIClient {
             throw APIError.notAuthorized
         }
         let url = AppConfig.baseURL.appending(path: newslettersPath).appending(path: "\(id)").appending(path: "progress")
-        var req = URLRequest(url: url)
+        var req = URLRequest(url: url, timeoutInterval: Self.defaultTimeoutInterval)
         req.httpMethod = "PUT"
         req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
         req.setValue(

@@ -378,15 +378,34 @@ describe("SyncManager", () => {
     expect(vi.mocked(downloadManager.checkForDownloads)).toHaveBeenCalledOnce();
   });
 
-  it("should post an error when the sync request fails", async () => {
+  it("should post an error when a user-initiated sync fails", async () => {
     mockHasAnyNewslettersResolve(false);
     mockAxiosGetError();
 
     await syncManager.setLibraryInitialized();
     await syncManager.setAuthToken("test-token");
-    expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
+    // drop the background-sync messages from setLibraryInitialized /
+    // setAuthToken so we only assert on the user-initiated sync below
+    vi.mocked(postMessage).mockClear();
+    mockAxiosGetError();
+
+    await syncManager.syncLibrary(/*sendNotifications=*/ true);
+
     expectErrorAndSyncStatusMessage();
     expect(vi.mocked(downloadManager.checkForDownloads)).not.toHaveBeenCalled();
+  });
+
+  it("should not spam errors for background syncs that fail (e.g. VPN down)", async () => {
+    mockHasAnyNewslettersResolve(false);
+    mockAxiosGetError();
+
+    await syncManager.setLibraryInitialized();
+    await syncManager.setAuthToken("test-token");
+
+    expectAxiosGetCalls([{ path: "/newsletters", params: {} }]);
+    expect(postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "error" }),
+    );
   });
 
   it("should cancel pending requests if the auth token is cleared", async () => {

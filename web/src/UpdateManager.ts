@@ -1,11 +1,11 @@
 import axios from "axios";
 import qs from "qs";
-import { get, set } from "idb-keyval";
+import { del, get, set } from "idb-keyval";
 import { buildWorkerMessage } from "./WorkerTypes";
 import library from "./Library";
 
 export const DB_KEY = "updates";
-const RETRY_MILLIS = 30000;
+const RETRY_MILLIS = 30_000;
 
 type MarkReadUpdate = {
   type: "read";
@@ -39,8 +39,8 @@ export class UpdateManager {
   private authToken: string | null = null;
   private pendingUpdatesFetched: boolean = false;
   private pendingUpdates: Update[] = [];
-  private attemptingBulkUpdates: boolean = false;
-  private timerHandler: NodeJS.Timeout | undefined = undefined;
+  private flushing: boolean = false;
+  private timerHandler: ReturnType<typeof setTimeout> | undefined = undefined;
 
   constructor() {
     get(DB_KEY).then((stored) => {
@@ -48,10 +48,17 @@ export class UpdateManager {
       this.pendingUpdatesFetched = true;
       this.attemptUpdates();
     });
+
+    if (typeof self !== "undefined" && "addEventListener" in self) {
+      // offline -> online transitions retry the queue without waiting for the 30s timer.
+      self.addEventListener("online", () => {
+        this.attemptUpdates();
+      });
+    }
   }
 
   public isAttemptingBulkUpdates() {
-    return this.attemptingBulkUpdates;
+    return this.flushing;
   }
 
   public getPendingUpdatesFetched(): boolean {
@@ -170,26 +177,9 @@ export class UpdateManager {
   }
 
   private async handleUpdate(update: Update) {
-    if (
-      this.libraryInitialized &&
-      this.authToken &&
-      !this.attemptingBulkUpdates
-    ) {
-      try {
-        await this.attemptUpdate(update);
-      } catch (e) {
-        console.error(`unable to handle ${update.type} update`, e);
-        await this.addPendingUpdate(update);
-      }
-    } else {
-      await this.addPendingUpdate(update);
-    }
-  }
-
-  private async addPendingUpdate(update: Update) {
     this.pendingUpdates.push(update);
     await this.persistUpdates();
-    this.setTimer();
+    await this.attemptUpdates();
   }
 
   private async attemptUpdate(update: Update) {
@@ -243,37 +233,61 @@ export class UpdateManager {
       !this.authToken ||
       !this.libraryInitialized ||
       !this.pendingUpdatesFetched ||
-      this.attemptingBulkUpdates ||
+      this.flushing ||
       this.pendingUpdates.length === 0
     ) {
       return;
     }
 
-    this.attemptingBulkUpdates = true;
-    let updateIndex = 0;
-    while (updateIndex < this.pendingUpdates.length) {
-      try {
-        const update = this.pendingUpdates[updateIndex];
-        await this.attemptUpdate(update);
-        this.pendingUpdates.splice(updateIndex, 1);
-      } catch (e) {
-        console.error(
-          "unable to send update",
-          this.pendingUpdates[updateIndex],
-          e,
-        );
-        updateIndex++;
+    this.flushing = true;
+    try {
+      while (this.pendingUpdates.length > 0) {
+        const update = this.pendingUpdates[0];
+        try {
+          await this.attemptUpdate(update);
+          this.pendingUpdates.shift();
+          await this.persistUpdates();
+        } catch (e) {
+          if (this.isPermanent(e)) {
+            console.error("dropping update due to permanent error:", update, e);
+            this.pendingUpdates.shift();
+            await this.persistUpdates();
+            continue;
+          }
+          // transient (network down, 5xx, 401 mid-renewal): stop the loop and rely on retry later
+          console.error("unable to send update", update, e);
+          break;
+        }
       }
-      this.persistUpdates();
+    } finally {
+      this.flushing = false;
+      this.setTimer();
     }
+  }
 
-    this.attemptingBulkUpdates = false;
-    this.setTimer();
+  // permanent: a 4xx that won't get better with retries. skip 401 (might be
+  // a transient mid-renewal failure) and 408 (literal timeout). read the
+  // status off the response shape directly so we don't depend on axios's
+  // `isAxiosError` helper, which is awkward under the test auto-mock.
+  private isPermanent(error: unknown): boolean {
+    const status = (error as { response?: { status?: number } })?.response
+      ?.status;
+    return (
+      typeof status === "number" &&
+      status >= 400 &&
+      status < 500 &&
+      status !== 401 &&
+      status !== 408
+    );
   }
 
   async persistUpdates() {
     try {
-      await set(DB_KEY, this.pendingUpdates);
+      if (this.pendingUpdates.length === 0) {
+        await del(DB_KEY);
+      } else {
+        await set(DB_KEY, this.pendingUpdates);
+      }
     } catch (error) {
       console.error("Failed to persist updates:", error);
     }

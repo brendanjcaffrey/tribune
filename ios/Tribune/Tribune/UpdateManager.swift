@@ -1,72 +1,101 @@
 import Foundation
+import Reachability
 
+/// persists user actions (read/unread/delete/progress) and replays them to the
+/// server in order. designed to survive offline periods, app suspension, and
+/// transient server failures.
 @MainActor
-class UpdateManager {
-    private(set) var pendingUpdatesFetched = false
-    private(set) var pendingUpdates: [Update] = []
-    private(set) var attemptingBulkUpdates = false
-
-    private let retryMillis: UInt64 = 30_000 // 30 seconds
-    private let storageKey = "updates"
-
-    private var retryTask: Task<Void, Never>? = nil
-
+final class UpdateManager {
     static let shared = UpdateManager()
 
+    private let storageKey = "updates"
+    private let retrySeconds: UInt64 = 30
+
+    private var pendingUpdates: [Update] = []
+    private var flushTask: Task<Void, Never>?
+    private var retryTask: Task<Void, Never>?
+    private var reachability: Reachability?
+
     private init() {
-        if let data = UserDefaults.standard.data(forKey: storageKey) {
-            do {
-                pendingUpdates = try JSONDecoder().decode([Update].self, from: data)
-            } catch {
-                pendingUpdates = []
-            }
-        }
-        pendingUpdatesFetched = true
-
-        // Try to flush on startup
-        Task { await attemptUpdates() }
+        loadPending()
+        setupReachability()
+        flushPending()
     }
 
-    func getPendingUpdatesFetched() -> Bool { pendingUpdatesFetched }
-    func getPendingUpdates() -> [Update] { pendingUpdates }
-    func isAttemptingBulkUpdates() -> Bool { attemptingBulkUpdates }
+    // MARK: - Public API
 
-    func markNewsletterAsRead(_ newsletterId: Int) async {
-        await handleUpdate(.read(newsletterId: newsletterId))
+    func markNewsletterAsRead(_ id: Int) async {
+        await enqueue(.read(newsletterId: id))
     }
 
-    func markNewsletterAsUnread(_ newsletterId: Int) async {
-        await handleUpdate(.unread(newsletterId: newsletterId))
+    func markNewsletterAsUnread(_ id: Int) async {
+        await enqueue(.unread(newsletterId: id))
     }
 
-    func markNewsletterAsDeleted(_ newsletterId: Int) async {
-        await handleUpdate(.delete(newsletterId: newsletterId))
+    func markNewsletterAsDeleted(_ id: Int) async {
+        await enqueue(.delete(newsletterId: id))
     }
 
-    func updateNewsletterProgress(_ newsletterId: Int, progress: String) async {
-        await handleUpdate(.progress(newsletterId: newsletterId, progress: progress))
+    func updateNewsletterProgress(_ id: Int, progress: String) async {
+        await enqueue(.progress(newsletterId: id, progress: progress))
     }
 
-    private func handleUpdate(_ update: Update) async {
-        if !pendingUpdates.isEmpty {
-            await addPendingUpdate(update)
+    /// trigger a flush attempt without awaiting it, safe to call from app
+    /// foreground hooks, after sync, etc
+    func flushPending() {
+        Task { await flush() }
+    }
+
+    var pendingCount: Int { pendingUpdates.count }
+
+    // MARK: - Internal
+
+    private func enqueue(_ update: Update) async {
+        pendingUpdates.append(update)
+        persist()
+        await flush()
+    }
+
+    /// drain `pendingUpdates` in order. stops at the first transient failure
+    /// and schedules a retry. concurrent callers join the in-flight flush
+    /// rather than starting a parallel one.
+    private func flush() async {
+        if let existing = flushTask {
+            await existing.value
             return
         }
 
-        do {
-            try await attemptUpdate(update)
-        } catch {
-            await addPendingUpdate(update)
+        retryTask?.cancel()
+        retryTask = nil
+
+        let task = Task<Void, Never> { @MainActor [weak self] in
+            guard let self else { return }
+            while let next = self.pendingUpdates.first {
+                do {
+                    try await self.send(next)
+                    self.dropFirst()
+                } catch let error where Self.isPermanent(error) {
+                    print("dropping update due to permanent error \(error): \(next)")
+                    self.dropFirst()
+                } catch {
+                    self.scheduleRetry()
+                    return
+                }
+            }
         }
+
+        flushTask = task
+        await task.value
+        flushTask = nil
     }
 
-    private func addPendingUpdate(_ update: Update) async {
-        pendingUpdates.append(update)
-        persistUpdates()
-        scheduleRetry()
+    private func dropFirst() {
+        guard !pendingUpdates.isEmpty else { return }
+        pendingUpdates.removeFirst()
+        persist()
     }
 
-    private func attemptUpdate(_ update: Update) async throws {
+    private func send(_ update: Update) async throws {
         do {
             switch update {
             case .read(let id):
@@ -78,57 +107,59 @@ class UpdateManager {
             case .progress(let id, let progress):
                 try await APIClient.newsletterProgress(id: id, progress: progress)
             }
-        } catch {
-            if case APIError.badStatus(404) = error {
-                // silently ignore
-            } else {
-                throw error
-            }
+        } catch APIError.badStatus(404) {
+            // should only happen when a newsletter is deleted already, so drop the update
         }
     }
 
-    private func attemptUpdates() async {
+    /// a failure is permanent if it will always fail - so drop the update
+    /// 401/408 are also retried — 401 in case the session is being renewed,
+    /// 408 because it's literally a timeout
+    private static func isPermanent(_ error: Error) -> Bool {
+        if let api = error as? APIError {
+            switch api {
+            case .badStatus(let code):
+                return (400..<500).contains(code) && code != 401 && code != 408
+            case .notAuthorized:
+                return false
+            }
+        }
+        return false
+    }
+
+    private func scheduleRetry() {
         retryTask?.cancel()
-        retryTask = nil
-
-        guard pendingUpdatesFetched,
-              !attemptingBulkUpdates,
-              !pendingUpdates.isEmpty else {
-            return
+        retryTask = Task { @MainActor [weak self, retrySeconds] in
+            try? await Task.sleep(nanoseconds: retrySeconds * 1_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            // clear the ref before flushing so a future scheduleRetry from the flush itself can replace us cleanly.
+            self.retryTask = nil
+            await self.flush()
         }
-
-        attemptingBulkUpdates = true
-        var idx = 0
-        while idx < pendingUpdates.count {
-            let update = pendingUpdates[idx]
-            do {
-                try await attemptUpdate(update)
-                pendingUpdates.remove(at: idx)
-            } catch {
-                // Could not send this one; keep it and move to the next.
-                idx += 1
-            }
-            persistUpdates()
-        }
-        attemptingBulkUpdates = false
-
-        scheduleRetry()
     }
 
-    private func persistUpdates() {
+    private func setupReachability() {
+        guard let r = try? Reachability() else { return }
+        r.whenReachable = { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.flushPending()
+            }
+        }
+        try? r.startNotifier()
+        reachability = r
+    }
+
+    private func persist() {
         do {
             let data = try JSONEncoder().encode(pendingUpdates)
             UserDefaults.standard.set(data, forKey: storageKey)
         } catch {
-            print("Persist error: \(error)")
+            print("UpdateManager persist error: \(error)")
         }
     }
 
-    private func scheduleRetry() {
-        guard retryTask == nil, !pendingUpdates.isEmpty else { return }
-        retryTask = Task { [retryMillis] in
-            try? await Task.sleep(nanoseconds: retryMillis * 1_000_000)
-            await attemptUpdates()
-        }
+    private func loadPending() {
+        guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
+        pendingUpdates = (try? JSONDecoder().decode([Update].self, from: data)) ?? []
     }
 }

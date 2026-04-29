@@ -55,9 +55,15 @@ struct MainView: View {
                 makeDownloadToast(message: lastDownloadError)
             }
         )
-        .onAppear { triggerBackgroundSync() }
+        .onAppear {
+            triggerBackgroundSync()
+            UpdateManager.shared.flushPending()
+        }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active { triggerBackgroundSync() }
+            if newPhase == .active {
+                triggerBackgroundSync()
+                UpdateManager.shared.flushPending()
+            }
         }
     }
 
@@ -143,12 +149,7 @@ extension MainView {
     }
 
     private func doBackgroundSync() async {
-        lastSyncStatus = await syncManager.syncLibrary()
-        if let status = lastSyncStatus, case .success = status {
-            showSyncToast = false
-        } else {
-            showSyncToast = true
-        }
+        _ = await syncManager.syncLibrary()
     }
 
     @MainActor

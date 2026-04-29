@@ -190,29 +190,27 @@ export class DownloadManager {
       return;
     }
 
-    let exists = await files().fileExists(msg.fileType, msg.id);
+    const fileExistsOnDisk = await files().fileExists(msg.fileType, msg.id);
     const newsletter = await library().getNewsletter(msg.id);
-    switch (msg.fileType) {
-      case "epub":
-        if (newsletter && newsletter.epubVersion != newsletter.epubUpdatedAt) {
-          // epub version has changed, need to re-download
-          exists = false;
-        }
-        break;
+    let needsDownload = !fileExistsOnDisk;
 
-      case "source":
-        if (
-          newsletter &&
-          newsletter.sourceVersion != newsletter.sourceUpdatedAt
-        ) {
-          // source version has changed, need to re-download
-          exists = false;
-        }
-        break;
+    // if we have a copy of the file on disk, only redownload if it's changed since we last downloaded it
+    if (newsletter && fileExistsOnDisk) {
+      switch (msg.fileType) {
+        case "epub":
+          if (newsletter.epubVersion != newsletter.epubUpdatedAt) {
+            needsDownload = true;
+          }
+          break;
+        case "source":
+          if (newsletter.sourceVersion != newsletter.sourceUpdatedAt) {
+            needsDownload = true;
+          }
+          break;
+      }
     }
 
-    if (exists) {
-      // file already exists, no need to download again
+    if (!needsDownload) {
       postMessage(
         buildWorkerMessage("file fetched", {
           id: msg.id,
@@ -223,14 +221,28 @@ export class DownloadManager {
       return;
     }
 
-    switch (await this.downloadFile(msg.id, msg.fileType)) {
+    const result = await this.downloadFile(msg.id, msg.fileType);
+    switch (result) {
       case "succeeded":
         postMessage(buildWorkerMessage("newsletters updated", {}));
         break;
       case "failed":
-        postMessage(
-          buildWorkerMessage("error", { error: "failed to download file" }),
-        );
+        // if the server is unreachable (network down, vpn off, server down),
+        // but we have a cached copy on disk, open that instead of leaving the
+        // user staring at a download error
+        if (fileExistsOnDisk) {
+          postMessage(
+            buildWorkerMessage("file fetched", {
+              id: msg.id,
+              fileType: msg.fileType,
+            }),
+          );
+          await this.touchFile(msg.id, msg.fileType);
+        } else {
+          postMessage(
+            buildWorkerMessage("error", { error: "failed to download file" }),
+          );
+        }
         break;
       case "aborted":
         break; // nop
