@@ -103,19 +103,8 @@ function setContent(spineItem) {
                 #footer {
                   height: ${PROGRESS_HEIGHT}px;
                   width: ${window.innerWidth - HORIZONTAL_PADDING * 2}px;
-                  textAlign: right;
                   padding: 0px ${HORIZONTAL_PADDING}px ${VERTICAL_PADDING}px;
-                  display: flex;
-                  justify-content: space-between;
-                  align-items: center;
-                }
-                #dismiss {
-                  border: none;
-                  background-color: transparent;
-                  font-size: 20px;
-                  padding: 10px;
-                  margin: -10px;
-                  display: inline-block;
+                  text-align: left;
                 }
                 iframe {
                   width: 100%;
@@ -131,7 +120,6 @@ function setContent(spineItem) {
               </div>
               <div id="footer">
                 <span id="progress">&nbsp;</span>
-                <button id="dismiss" onclick="dismiss()">X</button>
               </div>
             </body>
           </html>
@@ -139,10 +127,6 @@ function setContent(spineItem) {
   document.open();
   document.write(styledContent);
   document.close();
-}
-
-function dismiss() {
-  window.webkit.messageHandlers.readerEvent.postMessage({ type: "dismiss" });
 }
 
 function handleKeyDown(event) {
