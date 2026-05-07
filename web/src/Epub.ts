@@ -374,6 +374,16 @@ export class Epub {
                   column-gap: ${COLUMN_GAP}px;
 
                   text-align: justify;
+
+                  overflow-wrap: anywhere;
+                  word-break: break-word;
+                }
+                pre, code {
+                  white-space: pre-wrap;
+                  overflow-wrap: anywhere;
+                }
+                table, svg, video, iframe {
+                  max-width: 100%;
                 }
                 img {
                   max-width: ${maxImageSize}%;
