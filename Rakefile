@@ -20,6 +20,11 @@ end
 
 command = TTY::Command.new
 
+ROOT = __dir__
+# default simulator for the ios test tasks. override with SIMULATOR=... if it
+# isn't installed (`xcrun simctl list devices available` to see options).
+SIMULATOR = 'iPhone 17 Pro'.freeze
+
 namespace :db do
   desc 'Create the main database and apply the schema'
   task :create do
@@ -212,6 +217,90 @@ namespace :ios do
       trap('INT') { server.shutdown }
       server.start
     end
+  end
+
+  desc 'List the available xcode schemes'
+  task :list_schemas do
+    sh "xcodebuild -project #{ROOT}/ios/Tribune/Tribune.xcodeproj -list"
+  end
+
+  desc 'Build the iOS app for the simulator'
+  task :build do
+    sh "xcodebuild -project #{ROOT}/ios/Tribune/Tribune.xcodeproj " \
+       '-scheme Tribune ' \
+       "-destination 'generic/platform=iOS Simulator' " \
+       '-configuration Debug ' \
+       'build'
+  end
+
+  # `xcodebuild test` needs a concrete, bootable simulator (unlike :build's
+  # generic destination). override the device with SIMULATOR=... if the default
+  # isn't installed (`xcrun simctl list devices available` to see options).
+  desc 'Run the iOS unit tests (override the sim with SIMULATOR=...)'
+  task :test do
+    simulator = ENV.fetch('SIMULATOR', SIMULATOR)
+    sh "xcodebuild test -project #{ROOT}/ios/Tribune/Tribune.xcodeproj " \
+       '-scheme Tribune ' \
+       "-destination 'platform=iOS Simulator,name=#{simulator}' " \
+       '-only-testing:TribuneTests'
+  end
+
+  # UI tests launch the app in the simulator and drive it, so they're slower
+  # than the unit tests and kept as a separate task.
+  desc 'Run the iOS UI tests (override the sim with SIMULATOR=...)'
+  task :uitest do
+    simulator = ENV.fetch('SIMULATOR', SIMULATOR)
+    sh "xcodebuild test -project #{ROOT}/ios/Tribune/Tribune.xcodeproj " \
+       '-scheme Tribune ' \
+       "-destination 'platform=iOS Simulator,name=#{simulator}' " \
+       '-only-testing:TribuneUITests'
+  end
+
+  # archive the app and upload it to testflight (internal testers). runs on the
+  # host, not in a container (no xcode in the build image), same as :build.
+  #
+  # requires an app store connect api key. generate one at
+  # appstoreconnect.apple.com -> users and access -> integrations -> app store
+  # connect api, drop the .p8 at
+  # ~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8, and export the ids:
+  #   ASC_KEY_ID=... ASC_ISSUER_ID=... rake ios:testflight
+  desc 'Archive the iOS app and upload to testflight (internal testers)'
+  task :testflight do
+    key_id    = ENV['ASC_KEY_ID'].to_s
+    issuer_id = ENV['ASC_ISSUER_ID'].to_s
+    abort 'set ASC_KEY_ID and ASC_ISSUER_ID in the environment first' if key_id.empty? || issuer_id.empty?
+
+    archive = "#{ROOT}/ios/build/Tribune.xcarchive"
+    export  = "#{ROOT}/ios/build/export"
+    opts    = "#{ROOT}/ios/ExportOptions.plist"
+
+    # unlock the login keychain so codesign can read the signing key
+    # (otherwise the archive fails with errSecInternalComponent)
+    pw = $stdin.getpass('login keychain password: ')
+    sh 'security', 'unlock-keychain', '-p', pw,
+       "#{Dir.home}/Library/Keychains/login.keychain-db", verbose: false
+
+    # derive a fresh build number from the unix timestamp so testflight accepts
+    # a new upload. passed as a build-setting override so the pbxproj is never
+    # mutated (no git diff), and unique per run even between commits.
+    build_no = Time.now.to_i
+
+    sh 'xcodebuild archive ' \
+       "-project #{ROOT}/ios/Tribune/Tribune.xcodeproj " \
+       '-scheme Tribune -configuration Release ' \
+       "-destination 'generic/platform=iOS' " \
+       "-archivePath #{archive} " \
+       "CURRENT_PROJECT_VERSION=#{build_no} " \
+       '-allowProvisioningUpdates'
+
+    sh 'xcodebuild -exportArchive ' \
+       "-archivePath #{archive} " \
+       "-exportPath #{export} " \
+       "-exportOptionsPlist #{opts} " \
+       '-allowProvisioningUpdates'
+
+    sh "xcrun altool --upload-app -f #{export}/Tribune.ipa --type ios " \
+       "--apiKey #{key_id} --apiIssuer #{issuer_id}"
   end
 end
 

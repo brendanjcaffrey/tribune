@@ -4,6 +4,7 @@
 /config.yaml
 /public
 /tribune-dev.conf
+/ios/build/
 /ios/tribune/Config.xcconfig
 /ios/Tribune/Tribune.xcodeproj/xcuserdata/
 /ios/Tribune/Tribune.xcodeproj/project.xcworkspace/xcuserdata/

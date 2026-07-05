@@ -9,8 +9,10 @@ server {
     server_name [TAILSCALE DOMAIN HERE];
 
     # SSL certificate and key paths
-    ssl_certificate      /Users/[USERNAME HERE]/Library/Containers/io.tailscale.ipn.macos/Data/[TAILSCALE DOMAIN HERE].crt;
-    ssl_certificate_key  /Users/[USERNAME HERE]/Library/Containers/io.tailscale.ipn.macos/Data/[TAILSCALE DOMAIN HERE].key;
+    # copying the files out of /Users/[USERNAME HERE]/Library/Containers/io.tailscale.ipn.macos/Data/ will prevent
+    # macOS from showing a "Nginx wants to access data from other apps" popup every time you start nginx
+    ssl_certificate      /Users/[USERNAME HERE]/[TAILSCALE DOMAIN HERE].crt;
+    ssl_certificate_key  /Users/[USERNAME HERE]/[TAILSCALE DOMAIN HERE].key;
 
     # Additional SSL options for security
     ssl_protocols TLSv1.2 TLSv1.3;
