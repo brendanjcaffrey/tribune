@@ -2,13 +2,12 @@ import { isObject } from "lodash";
 import { useState } from "react";
 import axios from "axios";
 
-import Alert from "@mui/material/Alert";
-import CircularProgress from "@mui/material/CircularProgress";
-import Button from "@mui/material/Button";
-import TextField from "@mui/material/TextField";
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
-import Container from "@mui/material/Container";
+import Alert from "react-bootstrap/Alert";
+import Button from "react-bootstrap/Button";
+import Container from "react-bootstrap/Container";
+import Form from "react-bootstrap/Form";
+import FloatingLabel from "react-bootstrap/FloatingLabel";
+import Spinner from "react-bootstrap/Spinner";
 
 import DelayedElement from "./DelayedElement";
 
@@ -48,64 +47,48 @@ function AuthForm({ setAuthToken }: AuthFormProps) {
   };
 
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
-        sx={{
-          paddingTop: "40px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-        }}
-      >
-        <Typography component="h1" variant="h5" color="textPrimary">
-          Tribune
-        </Typography>
-        <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
-          {error && <Alert severity="error">{error}</Alert>}
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            label="Username"
+    <Container
+      style={{ maxWidth: "400px", paddingTop: "40px" }}
+      className="d-flex flex-column align-items-center"
+    >
+      <h1 className="h4 mb-3">Tribune</h1>
+      <Form onSubmit={handleSubmit} noValidate className="w-100">
+        {error && <Alert variant="danger">{error}</Alert>}
+        <FloatingLabel controlId="username" label="Username" className="mb-3">
+          <Form.Control
+            type="text"
             name="username"
+            placeholder="Username"
+            required
             value={username}
             onChange={(event) => setUsername(event.target.value)}
           />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            label="Password"
-            name="password"
+        </FloatingLabel>
+        <FloatingLabel controlId="password" label="Password" className="mb-3">
+          <Form.Control
             type="password"
+            name="password"
+            placeholder="Password"
+            required
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{ mt: 3, mb: 2 }}
-            disabled={inflight}
-          >
-            Sign In
-            {inflight && (
-              <DelayedElement>
-                <Box
-                  sx={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%, -50%)",
-                  }}
-                >
-                  <CircularProgress size={37} />
-                </Box>
-              </DelayedElement>
-            )}
-          </Button>
-        </Box>
-      </Box>
+        </FloatingLabel>
+        <Button
+          type="submit"
+          className="w-100 position-relative"
+          disabled={inflight}
+        >
+          Sign In
+          {inflight && (
+            <DelayedElement>
+              <span className="position-absolute top-50 start-50 translate-middle">
+                <Spinner animation="border" size="sm" />
+              </span>
+            </DelayedElement>
+          )}
+        </Button>
+      </Form>
     </Container>
   );
 }

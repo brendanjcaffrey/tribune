@@ -1,8 +1,5 @@
 import { useState } from "react";
 import { Provider as JotaiProvider } from "jotai";
-import { SnackbarProvider } from "notistack";
-
-import { createTheme, ThemeProvider } from "@mui/material/styles";
 
 import { BackgroundWrapper } from "./BackgroundWrapper";
 import AuthWrapper from "./AuthWrapper";
@@ -14,14 +11,9 @@ import { store } from "./State";
 import EpubReader from "./EpubReader";
 import { Newsletter } from "./Library";
 import Notifier from "./Notifier";
+import Toaster from "./Toaster";
 import SettingsRecorder from "./SettingsRecorder";
 import "./index.css";
-
-const theme = createTheme({
-  colorSchemes: {
-    dark: true,
-  },
-});
 
 function App() {
   files(); // start initializing now
@@ -42,32 +34,30 @@ function App() {
 
   return (
     <JotaiProvider store={store}>
-      <ThemeProvider theme={theme}>
-        <BackgroundWrapper>
-          <SnackbarProvider maxSnack={3} />
-          <Notifier />
-          <TopBar
-            newsletterShown={newsletterShown}
-            displayedNewsletter={displayedNewsletter}
-            closeNewsletter={closeNewsletter}
-          />
-          <AuthWrapper>
-            <LibraryWrapper>
-              {!newsletterShown && (
-                <NewsletterList setNewsletterData={setNewsletterData} />
-              )}
-              {newsletterShown && (
-                <EpubReader
-                  newsletter={displayedNewsletter}
-                  file={epubContents}
-                  closeNewsletter={closeNewsletter}
-                />
-              )}
-            </LibraryWrapper>
-          </AuthWrapper>
-          <SettingsRecorder />
-        </BackgroundWrapper>
-      </ThemeProvider>
+      <BackgroundWrapper>
+        <Toaster />
+        <Notifier />
+        <TopBar
+          newsletterShown={newsletterShown}
+          displayedNewsletter={displayedNewsletter}
+          closeNewsletter={closeNewsletter}
+        />
+        <AuthWrapper>
+          <LibraryWrapper>
+            {!newsletterShown && (
+              <NewsletterList setNewsletterData={setNewsletterData} />
+            )}
+            {newsletterShown && (
+              <EpubReader
+                newsletter={displayedNewsletter}
+                file={epubContents}
+                closeNewsletter={closeNewsletter}
+              />
+            )}
+          </LibraryWrapper>
+        </AuthWrapper>
+        <SettingsRecorder />
+      </BackgroundWrapper>
     </JotaiProvider>
   );
 }

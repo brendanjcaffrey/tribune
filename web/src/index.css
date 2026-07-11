@@ -1,10 +1,22 @@
 body {
   font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 14px;
   margin: 0;
   padding: 0;
 }
 
 .is-read {
   color: gray;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.spin {
+  animation: spin 2s linear infinite;
 }

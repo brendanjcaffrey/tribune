@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowSize } from "@react-hook/window-size";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useTheme } from "@mui/material/styles";
-import Book from "@mui/icons-material/Book";
-import Source from "@mui/icons-material/Source";
-import { enqueueSnackbar } from "notistack";
+import { Book, FileEarmarkText } from "react-bootstrap-icons";
+import Spinner from "react-bootstrap/Spinner";
+import { enqueueToast } from "./Toasts";
+import { useColorScheme } from "./useColorScheme";
+import { readThemeColors } from "./Theme";
 import { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
 import {
   ModuleRegistry,
   AllCommunityModule,
   type GridOptions,
-  themeMaterial,
+  themeQuartz,
   type CellContextMenuEvent,
 } from "ag-grid-community";
 
@@ -31,7 +32,6 @@ import {
   NewsletterContextMenu,
   NewsletterContextMenuData,
 } from "./NewsletterContextMenu";
-import CircularProgress from "@mui/material/CircularProgress";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -61,6 +61,9 @@ const gridOptions: GridOptions = {
         hasSource: p.data.sourceLastAccessedAt !== null,
         isDownloading: p.data.downloadInProgress,
       }),
+      // the value is an object for the cell renderer, so tell the quick filter
+      // to index the title string instead of "[object Object]"
+      getQuickFilterText: (p) => p.value?.title ?? "",
       equals: (a, b) =>
         a?.title === b?.title &&
         a?.hasEpub === b?.hasEpub &&
@@ -72,26 +75,27 @@ const gridOptions: GridOptions = {
             {params.value.title}
             {params.value.hasEpub && (
               <Book
-                fontSize="small"
-                sx={{
-                  verticalAlign: "middle",
-                  paddingLeft: "2px",
-                  transform: "scale(0.75)",
-                }}
+                size={13}
+                style={{ verticalAlign: "middle", marginLeft: "3px" }}
               />
             )}
             {params.value.hasSource && (
-              <Source
-                fontSize="small"
-                sx={{
-                  verticalAlign: "middle",
-                  paddingLeft: "2px",
-                  transform: "scale(0.75)",
-                }}
+              <FileEarmarkText
+                size={13}
+                style={{ verticalAlign: "middle", marginLeft: "3px" }}
               />
             )}
             {params.value.isDownloading && (
-              <CircularProgress size={12} sx={{ marginLeft: "4px" }} />
+              <Spinner
+                animation="border"
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderWidth: 2,
+                  marginLeft: 4,
+                  verticalAlign: "middle",
+                }}
+              />
             )}
           </>
         );
@@ -165,15 +169,21 @@ function NewsletterList({
     showNewsletterContextMenuCallbackAtom,
   );
 
-  const muiTheme = useTheme();
-  const agTheme = themeMaterial.withParams({
-    backgroundColor: muiTheme.palette.background.default,
-    foregroundColor: muiTheme.palette.text.primary,
-    headerTextColor: muiTheme.palette.text.primary,
-    headerBackgroundColor: muiTheme.palette.background.default,
-    oddRowBackgroundColor: muiTheme.palette.action.selected,
-    headerColumnResizeHandleColor: muiTheme.palette.info.main,
-  });
+  // recompute when the os color scheme flips so the grid tracks bootstrap's
+  // light/dark css variables
+  const colorScheme = useColorScheme();
+  const agTheme = useMemo(() => {
+    const colors = readThemeColors();
+    return themeQuartz.withParams({
+      backgroundColor: colors.bodyBg,
+      foregroundColor: colors.bodyColor,
+      headerTextColor: colors.bodyColor,
+      headerBackgroundColor: colors.bodyBg,
+      oddRowBackgroundColor: colors.secondaryBg,
+      headerColumnResizeHandleColor: colors.primary,
+    });
+    // colorScheme drives the re-read of the dom css vars, which the linter can't see
+  }, [colorScheme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateNewsletterDownloadStatus = useCallback(
     (id: number) => {
@@ -273,7 +283,7 @@ function NewsletterList({
             if (url !== null) {
               const handle = window.open(url, "_blank");
               if (handle === null) {
-                enqueueSnackbar(
+                enqueueToast(
                   "Failed to open source, check popup blocker settings",
                   { variant: "error" },
                 );

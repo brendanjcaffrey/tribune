@@ -1,12 +1,14 @@
 import {
   useEffect,
+  useMemo,
   useState,
   useRef,
   useLayoutEffect,
   useCallback,
 } from "react";
 import { useWindowSize } from "@react-hook/window-size";
-import { Theme, useTheme } from "@mui/material/styles";
+import { useColorScheme } from "./useColorScheme";
+import { readThemeColors, type ThemeColors } from "./Theme";
 import { Newsletter } from "./Library";
 import {
   Epub,
@@ -19,39 +21,43 @@ import {
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 
-function getMuiStyles(theme: Theme): string {
+const READER_FONT_FAMILY = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+
+// bootstrap has no js-readable typography scale, so define one for the epub
+// iframe. colors come from the active bootstrap theme's css variables.
+function getReaderStyles(colors: ThemeColors): string {
   return `
     body {
-      background: ${theme.palette.background.default} !important;
-      color: ${theme.palette.text.primary} !important;
-      font-family: ${theme.typography.body1.fontFamily} !important;
-      font-size: ${theme.typography.body1.fontSize} !important;
-      line-height: ${theme.typography.body1.lineHeight} !important;
+      background: ${colors.bodyBg} !important;
+      color: ${colors.bodyColor} !important;
+      font-family: ${READER_FONT_FAMILY} !important;
+      font-size: 1rem !important;
+      line-height: 1.5 !important;
     }
     h1 {
-      font-family: ${theme.typography.h3.fontFamily} !important;
-      font-size: ${theme.typography.h3.fontSize} !important;
-      font-weight: ${theme.typography.h3.fontWeight} !important;
-      line-height: ${theme.typography.h3.lineHeight} !important;
+      font-family: ${READER_FONT_FAMILY} !important;
+      font-size: 2.5rem !important;
+      font-weight: 400 !important;
+      line-height: 1.2 !important;
     }
     h2 {
-      font-family: ${theme.typography.h4.fontFamily} !important;
-      font-size: ${theme.typography.h4.fontSize} !important;
-      font-weight: ${theme.typography.h4.fontWeight} !important;
-      line-height: ${theme.typography.h4.lineHeight} !important;
+      font-family: ${READER_FONT_FAMILY} !important;
+      font-size: 2rem !important;
+      font-weight: 400 !important;
+      line-height: 1.2 !important;
     }
     h3 {
-      font-family: ${theme.typography.h5.fontFamily} !important;
-      font-size: ${theme.typography.h5.fontSize} !important;
-      font-weight: ${theme.typography.h5.fontWeight} !important;
-      line-height: ${theme.typography.h5.lineHeight} !important;
+      font-family: ${READER_FONT_FAMILY} !important;
+      font-size: 1.5rem !important;
+      font-weight: 400 !important;
+      line-height: 1.3 !important;
     }
     a {
-      color: ${theme.palette.primary.main} !important;
+      color: ${colors.primary} !important;
       text-decoration: none;
     }
     p {
-      margin-bottom: ${theme.spacing(2)};
+      margin-bottom: 1rem;
     }
   `;
 }
@@ -83,7 +89,9 @@ const EpubReader: React.FC<EpubReaderProps> = ({
   file,
   closeNewsletter,
 }) => {
-  const theme = useTheme();
+  const colorScheme = useColorScheme();
+  // colorScheme drives the re-read of the dom css vars, which the linter can't see
+  const colors = useMemo(() => readThemeColors(), [colorScheme]); // eslint-disable-line react-hooks/exhaustive-deps
   const [windowWidth, windowHeight] = useWindowSize();
   const [bookContent, setBookContent] = useState<SpineItem | null>(null);
   const [iframeContent, setIframeContent] = useState("");
@@ -180,12 +188,12 @@ const EpubReader: React.FC<EpubReaderProps> = ({
 
     const content = Epub.buildIframeContent(
       CalculateColumnWidth(windowWidth),
-      getMuiStyles(theme),
+      getReaderStyles(colors),
       bookContent,
       80,
     );
     setIframeContent(content);
-  }, [bookContent, windowWidth, windowHeight, theme]);
+  }, [bookContent, windowWidth, windowHeight, colors]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -323,6 +331,9 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     <>
       <div
         style={{
+          // content-box so the width excludes padding, which the column-count
+          // math relies on; bootstrap's reboot sets border-box globally
+          boxSizing: "content-box",
           height: `${windowHeight - FRAME_TITLEBAR_HEIGHT - VERTICAL_PADDING * 2 - PROGRESS_HEIGHT}px`,
           width: `${windowWidth - HORIZONTAL_PADDING * 2}px`,
           overflow: "hidden",
@@ -339,15 +350,16 @@ const EpubReader: React.FC<EpubReaderProps> = ({
       </div>
       <div
         style={{
+          boxSizing: "content-box",
           height: `${PROGRESS_HEIGHT}px`,
           width: `${windowWidth - HORIZONTAL_PADDING * 2}px`,
           textAlign: "right",
           padding: `0px ${HORIZONTAL_PADDING}px 0px`,
-          background: `${theme.palette.background.default} !important`,
-          color: `${theme.palette.text.primary} !important`,
-          fontFamily: `${theme.typography.body1.fontFamily} !important`,
-          fontSize: `${theme.typography.body1.fontSize} !important`,
-          lineHeight: `${theme.typography.body1.lineHeight} !important`,
+          background: colors.bodyBg,
+          color: colors.bodyColor,
+          fontFamily: READER_FONT_FAMILY,
+          fontSize: "1rem",
+          lineHeight: 1.5,
         }}
       >
         {readingProgress}%

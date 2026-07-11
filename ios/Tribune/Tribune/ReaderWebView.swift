@@ -22,6 +22,14 @@ struct ReaderWebView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.isInspectable = true
 
+        // draw a themed backing instead of the default white. an opaque webview
+        // flashes white while document.write() rewrites the reader document,
+        // before any of our css exists to cover it. systembackground adapts to
+        // light/dark, so the gap shows black in dark mode instead of white.
+        webView.isOpaque = false
+        webView.backgroundColor = .systemBackground
+        webView.scrollView.backgroundColor = .systemBackground
+
         let url = URL(string: "tribune://host/index.html")!
         webView.load(URLRequest(url: url))
         webView.navigationDelegate = context.coordinator

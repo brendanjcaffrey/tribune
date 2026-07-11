@@ -1,20 +1,40 @@
-import { useState, useEffect } from "react";
-import { enqueueSnackbar } from "notistack";
+import { useState, useEffect, type ReactNode } from "react";
+import { enqueueToast } from "./Toasts";
 import { formatBytes } from "./Util";
 import LogOutButton from "./LogOutButton";
 import { useAtom } from "jotai";
 import { downloadModeAtom, downloadPDFsAtom } from "./Settings";
 
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import Popover from "@mui/material/Popover";
-import Tooltip from "@mui/material/Tooltip";
-import Grid from "@mui/material/Grid";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import Switch from "@mui/material/Switch";
-import IconButton from "@mui/material/IconButton";
-import HelpOutlineRounded from "@mui/icons-material/HelpOutlineRounded";
+import Modal from "react-bootstrap/Modal";
+import Form from "react-bootstrap/Form";
+import Button from "react-bootstrap/Button";
+import OverlayTrigger from "react-bootstrap/OverlayTrigger";
+import Tooltip from "react-bootstrap/Tooltip";
+import Popover from "react-bootstrap/Popover";
+import { QuestionCircle } from "react-bootstrap-icons";
+
+interface HelpButtonProps {
+  children: ReactNode;
+}
+
+function HelpButton({ children }: HelpButtonProps) {
+  return (
+    <OverlayTrigger
+      trigger="click"
+      rootClose
+      placement="bottom"
+      overlay={
+        <Popover>
+          <Popover.Body style={{ maxWidth: "300px" }}>{children}</Popover.Body>
+        </Popover>
+      }
+    >
+      <Button variant="link" className="p-0 text-secondary" aria-label="help">
+        <QuestionCircle />
+      </Button>
+    </OverlayTrigger>
+  );
+}
 
 interface SettingsPanelProps {
   showSettings: boolean;
@@ -26,10 +46,8 @@ function SettingsPanel({
   toggleShowSettings,
 }: SettingsPanelProps) {
   const [persisted, setPersisted] = useState(false);
-
-  const [persistStorageHelpAnchorEl, setPersistStorageHelpAnchorEl] =
-    useState<HTMLButtonElement | null>(null);
-  const persistStorageHelpOpen = Boolean(persistStorageHelpAnchorEl);
+  const [downloadMode, setDownloadMode] = useAtom(downloadModeAtom);
+  const [downloadPDFs, setDownloadPDFs] = useAtom(downloadPDFsAtom);
 
   const handlePersistStorageChange = (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -41,27 +59,12 @@ function SettingsPanel({
       if (granted) {
         setPersisted(true);
       } else {
-        enqueueSnackbar("Persistent storage was not granted.", {
+        enqueueToast("Persistent storage was not granted.", {
           variant: "error",
         });
       }
     });
   };
-
-  const openPersistStorageHelp = (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
-    setPersistStorageHelpAnchorEl(event.currentTarget);
-  };
-
-  const closePersistStorageHelp = () => {
-    setPersistStorageHelpAnchorEl(null);
-  };
-
-  const [downloadMode, setDownloadMode] = useAtom(downloadModeAtom);
-  const [downloadModeHelpAnchorEl, setDownloadModeHelpAnchorEl] =
-    useState<HTMLButtonElement | null>(null);
-  const downloadModeHelpOpen = Boolean(downloadModeHelpAnchorEl);
 
   const handleDownloadModeChange = (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -75,19 +78,6 @@ function SettingsPanel({
     }
   };
 
-  const openDownloadModeHelp = (event: React.MouseEvent<HTMLButtonElement>) => {
-    setDownloadModeHelpAnchorEl(event.currentTarget);
-  };
-
-  const closeDownloadModeHelp = () => {
-    setDownloadModeHelpAnchorEl(null);
-  };
-
-  const [downloadPDFs, setDownloadPDFs] = useAtom(downloadPDFsAtom);
-  const [downloadPDFsHelpAnchorEl, setDownloadPDFsHelpAnchorEl] =
-    useState<HTMLButtonElement | null>(null);
-  const downloadPDFsHelpOpen = Boolean(downloadPDFsHelpAnchorEl);
-
   const handleDownloadPDFsChange = (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -95,14 +85,6 @@ function SettingsPanel({
       return;
     }
     setDownloadPDFs(event.target.checked);
-  };
-
-  const openDownloadPDFsHelp = (event: React.MouseEvent<HTMLButtonElement>) => {
-    setDownloadPDFsHelpAnchorEl(event.currentTarget);
-  };
-
-  const closeDownloadPDFsHelp = () => {
-    setDownloadPDFsHelpAnchorEl(null);
   };
 
   const [usage, setUsage] = useState(0);
@@ -131,119 +113,73 @@ function SettingsPanel({
   }, []);
 
   return (
-    <Dialog open={showSettings} onClose={toggleShowSettings}>
-      <DialogTitle>Settings</DialogTitle>
-      <DialogContent>
-        <Grid container spacing={0} sx={{ width: "300px" }}>
-          <Grid size={10}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={persisted}
-                  disabled={persisted}
-                  onChange={handlePersistStorageChange}
-                />
-              }
+    <Modal show={showSettings} onHide={toggleShowSettings} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Settings</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <div style={{ width: "300px" }}>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <Form.Check
+              type="switch"
+              id="persist-storage"
               label="Persist Storage"
+              checked={persisted}
+              disabled={persisted}
+              onChange={handlePersistStorageChange}
             />
-          </Grid>
-          <Grid size={2}>
-            <IconButton onClick={openPersistStorageHelp}>
-              <HelpOutlineRounded sx={{ float: "right" }} />
-            </IconButton>
-          </Grid>
-          <Grid size={10}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={downloadMode}
-                  onChange={handleDownloadModeChange}
-                  disabled={!persisted}
-                />
-              }
+            <HelpButton>
+              Request that the browser allow this app to store data persistently
+              and give it a larger quota. Firefox will prompt you to allow this,
+              but Chrome may not allow this until you use the app more. Once
+              granted, it is not possible to revoke this permission.
+            </HelpButton>
+          </div>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <Form.Check
+              type="switch"
+              id="download-mode"
               label="Download Mode"
+              checked={downloadMode}
+              disabled={!persisted}
+              onChange={handleDownloadModeChange}
             />
-          </Grid>
-          <Grid size={2}>
-            <IconButton onClick={openDownloadModeHelp}>
-              <HelpOutlineRounded />
-            </IconButton>
-          </Grid>
-          <Grid size={10}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={downloadPDFs}
-                  onChange={handleDownloadPDFsChange}
-                  disabled={!downloadMode}
-                />
-              }
+            <HelpButton>
+              Download mode will aggressively download all ePub files at page
+              load so you can read them all without having an internet
+              connection. This mode is only available if storage persistence is
+              enabled.
+            </HelpButton>
+          </div>
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <Form.Check
+              type="switch"
+              id="download-pdfs"
               label="Download PDF Sources"
+              checked={downloadPDFs}
+              disabled={!downloadMode}
+              onChange={handleDownloadPDFsChange}
             />
-          </Grid>
-          <Grid size={2}>
-            <IconButton onClick={openDownloadPDFsHelp}>
-              <HelpOutlineRounded />
-            </IconButton>
-          </Grid>
-          <Grid container spacing={0} sx={{ width: "300px" }}>
-            <Grid size={12}>
-              <Tooltip title={`${formatBytes(usage)} / ${formatBytes(quota)}`}>
-                <p>Storage Used: {percentageUsed}%</p>
+            <HelpButton>
+              Download mode only downloads ePub files by default. With this
+              option on, it will also download any PDF source files.
+            </HelpButton>
+          </div>
+          <OverlayTrigger
+            overlay={
+              <Tooltip>
+                {formatBytes(usage)} / {formatBytes(quota)}
               </Tooltip>
-            </Grid>
-            <Grid size={12}>
-              <LogOutButton />
-            </Grid>
-          </Grid>
-        </Grid>
-        <Popover
-          open={persistStorageHelpOpen}
-          anchorEl={persistStorageHelpAnchorEl}
-          onClose={closePersistStorageHelp}
-          anchorOrigin={{
-            vertical: "bottom",
-            horizontal: "left",
-          }}
-        >
-          <div style={{ padding: "10px", maxWidth: "300px" }}>
-            Request that the browser allow this app to store data persistently
-            and give it a larger quota. Firefox will prompt you to allow this,
-            but Chrome may not allow this until you use the app more. Once
-            granted, it is not possible to revoke this permission.
+            }
+          >
+            <p className="mb-2">Storage Used: {percentageUsed}%</p>
+          </OverlayTrigger>
+          <div>
+            <LogOutButton />
           </div>
-        </Popover>
-        <Popover
-          open={downloadModeHelpOpen}
-          anchorEl={downloadModeHelpAnchorEl}
-          onClose={closeDownloadModeHelp}
-          anchorOrigin={{
-            vertical: "bottom",
-            horizontal: "left",
-          }}
-        >
-          <div style={{ padding: "10px", maxWidth: "300px" }}>
-            Download mode will aggressively download all ePub files at page load
-            so you can read them all without having an internet connection. This
-            mode is only available if storage persistence is enabled.
-          </div>
-        </Popover>
-        <Popover
-          open={downloadPDFsHelpOpen}
-          anchorEl={downloadPDFsHelpAnchorEl}
-          onClose={closeDownloadPDFsHelp}
-          anchorOrigin={{
-            vertical: "bottom",
-            horizontal: "left",
-          }}
-        >
-          <div style={{ padding: "10px", maxWidth: "300px" }}>
-            Download mode only downloads ePub files by default. With this option
-            on, it will also download any PDF source files.
-          </div>
-        </Popover>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </Modal.Body>
+    </Modal>
   );
 }
 

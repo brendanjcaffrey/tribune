@@ -4,15 +4,10 @@ import { formatBytes, formatTimestamp } from "./Util";
 import { FileDownloadStatusMessage } from "./WorkerTypes";
 import { WorkerInstance } from "./WorkerInstance";
 
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogContentText from "@mui/material/DialogContentText";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableRow from "@mui/material/TableRow";
-import TableCell from "@mui/material/TableCell";
-import Tooltip from "@mui/material/Tooltip";
+import Modal from "react-bootstrap/Modal";
+import Table from "react-bootstrap/Table";
+import OverlayTrigger from "react-bootstrap/OverlayTrigger";
+import Tooltip from "react-bootstrap/Tooltip";
 
 function DownloadStatusToDisplay(download: Download): JSX.Element {
   switch (download.status) {
@@ -21,7 +16,7 @@ function DownloadStatusToDisplay(download: Download): JSX.Element {
     case "done":
       return <span>done</span>;
     case "error":
-      return <span color="red">error</span>;
+      return <span className="text-danger">error</span>;
     case "canceled":
       return <span>canceled</span>;
   }
@@ -76,35 +71,43 @@ function DownloadsPanel({
   }, [handleFileDownloadStatusMessage]);
 
   return (
-    <Dialog open={showDownloads} onClose={toggleShowDownloads} maxWidth="xl">
-      <DialogTitle>Downloads</DialogTitle>
-      <DialogContent>
+    <Modal show={showDownloads} onHide={toggleShowDownloads} size="lg" centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Downloads</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
         {downloads.length === 0 && (
-          <DialogContentText>No downloads yet</DialogContentText>
+          <p className="text-muted">No downloads yet</p>
         )}
-        <Table>
-          <TableBody>
-            {downloads.map((d) => (
-              <TableRow key={`${d.id}-${d.fileType}`}>
-                <TableCell>
-                  <Tooltip title={`newsletter id: ${d.id}`}>
-                    <span>{d.trackDesc}</span>
-                  </Tooltip>
-                </TableCell>
-                <TableCell>
-                  <Tooltip title={`newsletter id: ${d.id}`}>
-                    <span>{d.fileType}</span>
-                  </Tooltip>
-                </TableCell>
-                <TableCell>{DownloadStatusToDisplay(d)}</TableCell>
-                <TableCell>{SizeDisplay(d)}</TableCell>
-                <TableCell>{formatTimestamp(d.lastUpdate)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </DialogContent>
-    </Dialog>
+        {downloads.length > 0 && (
+          <Table hover size="sm">
+            <tbody>
+              {downloads.map((d) => (
+                <tr key={`${d.id}-${d.fileType}`}>
+                  <td>
+                    <OverlayTrigger
+                      overlay={<Tooltip>newsletter id: {d.id}</Tooltip>}
+                    >
+                      <span>{d.trackDesc}</span>
+                    </OverlayTrigger>
+                  </td>
+                  <td>
+                    <OverlayTrigger
+                      overlay={<Tooltip>newsletter id: {d.id}</Tooltip>}
+                    >
+                      <span>{d.fileType}</span>
+                    </OverlayTrigger>
+                  </td>
+                  <td>{DownloadStatusToDisplay(d)}</td>
+                  <td>{SizeDisplay(d)}</td>
+                  <td>{formatTimestamp(d.lastUpdate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </Modal.Body>
+    </Modal>
   );
 }
 

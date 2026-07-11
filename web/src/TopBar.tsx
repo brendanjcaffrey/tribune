@@ -5,63 +5,23 @@ import DownloadsPanel from "./DownloadsPanel";
 import SettingsPanel from "./SettingsPanel";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
+import { useColorScheme } from "./useColorScheme";
 
-import { styled, alpha } from "@mui/material/styles";
-import AppBar from "@mui/material/AppBar";
-import Badge from "@mui/material/Badge";
-import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
-import InputBase from "@mui/material/InputBase";
-import Toolbar from "@mui/material/Toolbar";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
+import Navbar from "react-bootstrap/Navbar";
+import Button from "react-bootstrap/Button";
+import Form from "react-bootstrap/Form";
+import InputGroup from "react-bootstrap/InputGroup";
+import OverlayTrigger from "react-bootstrap/OverlayTrigger";
+import Tooltip from "react-bootstrap/Tooltip";
 
-import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
-import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
-import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
-import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
-import SyncRoundedIcon from "@mui/icons-material/SyncRounded";
+import {
+  ArrowRepeat,
+  Download,
+  Gear,
+  Search,
+  XLg,
+} from "react-bootstrap-icons";
 import { Newsletter } from "./Library";
-
-const Search = styled("div")(({ theme }) => ({
-  position: "relative",
-  borderRadius: theme.shape.borderRadius,
-  backgroundColor: alpha(theme.palette.common.white, 0.15),
-  "&:hover": {
-    backgroundColor: alpha(theme.palette.common.white, 0.25),
-  },
-  marginRight: theme.spacing(2),
-  marginLeft: 0,
-  width: "100%",
-  [theme.breakpoints.up("sm")]: {
-    marginLeft: theme.spacing(3),
-    width: "auto",
-  },
-}));
-
-const SearchIconWrapper = styled("div")(({ theme }) => ({
-  padding: theme.spacing(0, 2),
-  height: "100%",
-  position: "absolute",
-  pointerEvents: "none",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-}));
-
-const StyledInputBase = styled(InputBase)(({ theme }) => ({
-  color: "inherit",
-  "& .MuiInputBase-input": {
-    padding: theme.spacing(1, 1, 1, 0),
-    // vertical padding + font size from searchIcon
-    paddingLeft: `calc(1em + ${theme.spacing(4)})`,
-    transition: theme.transitions.create("width"),
-    width: "100%",
-    [theme.breakpoints.up("md")]: {
-      width: "20ch",
-    },
-  },
-}));
 
 interface TopBarProps {
   newsletterShown: boolean;
@@ -80,6 +40,7 @@ export default function TopBar({
   const [showSettings, setShowSettings] = useState(false);
   const [syncRunning, setSyncRunning] = useState(false);
   const authVerified = useAtomValue(authVerifiedAtom);
+  const colorScheme = useColorScheme();
 
   const toggleShowDownloads = () => {
     setShowDownloads((prev) => !prev);
@@ -126,86 +87,84 @@ export default function TopBar({
   }, [authVerified]);
 
   return (
-    <Box sx={{ flexGrow: 1 }}>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" noWrap component="div">
-            {newsletterShown && displayedNewsletter
-              ? displayedNewsletter.title
-              : "Tribune"}
-          </Typography>
-          <Box sx={{ flexGrow: 1 }} />
-          {authVerified && !newsletterShown && (
-            <>
-              <Search>
-                <SearchIconWrapper>
-                  <SearchRoundedIcon />
-                </SearchIconWrapper>
-                <StyledInputBase
-                  placeholder="Search…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  inputProps={{ "aria-label": "search" }}
-                />
-              </Search>
-              <Box sx={{ display: { xs: "none", md: "flex" } }}>
-                <IconButton size="large" color="inherit" onClick={startSync}>
-                  {syncRunning ? (
-                    <SyncRoundedIcon
-                      sx={{
-                        animation: "spin 2s linear infinite",
-                        "@keyframes spin": {
-                          "0%": {
-                            transform: "rotate(360deg)",
-                          },
-                          "100%": {
-                            transform: "rotate(0deg)",
-                          },
-                        },
-                      }}
-                    />
-                  ) : (
-                    <SyncRoundedIcon />
-                  )}
-                </IconButton>
-                <Tooltip title="Download Status">
-                  <IconButton
-                    size="large"
-                    color="inherit"
-                    onClick={toggleShowDownloads}
-                  >
-                    <Badge
-                      color="error"
-                      variant="dot"
-                      invisible={!anyDownloadErrors}
-                    >
-                      <DownloadRoundedIcon />
-                    </Badge>
-                  </IconButton>
-                </Tooltip>
-                <IconButton
-                  size="large"
-                  color="inherit"
-                  onClick={toggleShowSettings}
-                >
-                  <SettingsRoundedIcon />
-                </IconButton>
-              </Box>
-            </>
-          )}
-          {authVerified && newsletterShown && (
-            <Box sx={{ display: { md: "flex" } }}>
-              <IconButton
-                size="large"
-                color="inherit"
-                onClick={closeNewsletter}
+    <>
+      <Navbar
+        bg={colorScheme === "dark" ? "dark" : "primary"}
+        data-bs-theme="dark"
+        className="px-3"
+      >
+        <Navbar.Brand className="text-truncate">
+          {newsletterShown && displayedNewsletter
+            ? displayedNewsletter.title
+            : "Tribune"}
+        </Navbar.Brand>
+        <div className="flex-grow-1" />
+        {authVerified && !newsletterShown && (
+          <div className="d-flex align-items-center gap-2">
+            <InputGroup
+              size="sm"
+              style={{ width: "auto" }}
+              data-bs-theme={colorScheme}
+            >
+              <InputGroup.Text>
+                <Search />
+              </InputGroup.Text>
+              <Form.Control
+                placeholder="Search…"
+                aria-label="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </InputGroup>
+            <div className="d-none d-md-flex align-items-center gap-1">
+              <Button
+                variant="link"
+                className="text-white p-1"
+                onClick={startSync}
+                aria-label="sync"
               >
-                <CloseRoundedIcon />
-              </IconButton>
-            </Box>
-          )}
-        </Toolbar>
-      </AppBar>
+                <ArrowRepeat size={22} className={syncRunning ? "spin" : ""} />
+              </Button>
+              <OverlayTrigger
+                placement="bottom"
+                overlay={<Tooltip>Download Status</Tooltip>}
+              >
+                <Button
+                  variant="link"
+                  className="text-white p-1 position-relative"
+                  onClick={toggleShowDownloads}
+                  aria-label="download status"
+                >
+                  <Download size={22} />
+                  {anyDownloadErrors && (
+                    <span className="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle">
+                      <span className="visually-hidden">download errors</span>
+                    </span>
+                  )}
+                </Button>
+              </OverlayTrigger>
+              <Button
+                variant="link"
+                className="text-white p-1"
+                onClick={toggleShowSettings}
+                aria-label="settings"
+              >
+                <Gear size={22} />
+              </Button>
+            </div>
+          </div>
+        )}
+        {authVerified && newsletterShown && (
+          <Button
+            variant="link"
+            className="text-white p-1"
+            onClick={closeNewsletter}
+            aria-label="close"
+          >
+            <XLg size={22} />
+          </Button>
+        )}
+      </Navbar>
       <DownloadsPanel
         showDownloads={showDownloads}
         toggleShowDownloads={toggleShowDownloads}
@@ -214,6 +173,6 @@ export default function TopBar({
         showSettings={showSettings}
         toggleShowSettings={toggleShowSettings}
       />
-    </Box>
+    </>
   );
 }

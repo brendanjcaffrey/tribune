@@ -1,21 +1,21 @@
 import { useEffect } from "react";
 import { WorkerInstance } from "./WorkerInstance";
-import { enqueueSnackbar } from "notistack";
+import { enqueueToast } from "./Toasts";
 
 function Notifier() {
   useEffect(() => {
     const listener = WorkerInstance.addMessageListener(async (message) => {
       if (message.type == "info") {
-        enqueueSnackbar(`${message.info}`, {
+        enqueueToast(`${message.info}`, {
           variant: "info",
           autoHideDuration: 1500,
         });
       } else if (message.type == "error") {
-        enqueueSnackbar(`worker error: ${message.error}`, {
+        enqueueToast(`worker error: ${message.error}`, {
           variant: "error",
         });
       } else if (message.type == "success") {
-        enqueueSnackbar(message.success, {
+        enqueueToast(message.success, {
           variant: "success",
         });
       }

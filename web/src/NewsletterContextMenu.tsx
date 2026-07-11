@@ -1,19 +1,17 @@
 import { SortableNewsletter } from "./SortableNewsletter";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 import { useAtomValue } from "jotai";
 import { showNewsletterFileCallbackAtom } from "./State";
 
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import MarkEmailUnread from "@mui/icons-material/MarkEmailUnread";
-import MarkEmailRead from "@mui/icons-material/MarkEmailRead";
-import Book from "@mui/icons-material/Book";
-import Source from "@mui/icons-material/Source";
-import Delete from "@mui/icons-material/Delete";
+import {
+  Book,
+  Envelope,
+  EnvelopeOpen,
+  FileEarmarkText,
+  Trash,
+} from "react-bootstrap-icons";
 
 export interface NewsletterContextMenuData {
   newsletter: SortableNewsletter;
@@ -33,6 +31,7 @@ export function NewsletterContextMenu({
   const showNewsletterFileCallback = useAtomValue(
     showNewsletterFileCallbackAtom,
   );
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const showEpub = () => {
     if (!data) {
@@ -56,6 +55,29 @@ export function NewsletterContextMenu({
       setIsRead(data.newsletter.read);
     }
   }, [data]);
+
+  // close on click outside or escape, mirroring the old mui menu backdrop
+  useEffect(() => {
+    if (data === null) {
+      return;
+    }
+    const onPointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        handleClose();
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        handleClose();
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [data, handleClose]);
 
   const markAsRead = () => {
     if (!data) {
@@ -93,56 +115,41 @@ export function NewsletterContextMenu({
     handleClose();
   };
 
+  if (data === null) {
+    return null;
+  }
+
+  const itemClass = "dropdown-item d-flex align-items-center gap-2";
+
   return (
-    <>
-      <Menu
-        open={data !== null}
-        onClose={handleClose}
-        anchorReference="anchorPosition"
-        anchorPosition={
-          data !== null ? { top: data.mouseY, left: data.mouseX } : undefined
-        }
-        variant="menu"
-        autoFocus={false}
-        slotProps={{
-          list: { dense: true },
-        }}
-      >
-        {isRead && (
-          <MenuItem onClick={markAsUnread}>
-            <ListItemIcon>
-              <MarkEmailUnread fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Mark as Unread</ListItemText>
-          </MenuItem>
-        )}
-        {!isRead && (
-          <MenuItem onClick={markAsRead}>
-            <ListItemIcon>
-              <MarkEmailRead fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Mark as Read</ListItemText>
-          </MenuItem>
-        )}
-        <MenuItem onClick={showEpub}>
-          <ListItemIcon>
-            <Book fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Open ePub</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={showSource}>
-          <ListItemIcon>
-            <Source fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Open Source</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={markDeleted}>
-          <ListItemIcon>
-            <Delete fontSize="small" color="error" />
-          </ListItemIcon>
-          <ListItemText>Delete</ListItemText>
-        </MenuItem>
-      </Menu>
-    </>
+    <div
+      ref={menuRef}
+      className="dropdown-menu show"
+      style={{
+        position: "fixed",
+        top: data.mouseY,
+        left: data.mouseX,
+        zIndex: 1080,
+      }}
+    >
+      {isRead ? (
+        <button className={itemClass} onClick={markAsUnread}>
+          <Envelope /> Mark as Unread
+        </button>
+      ) : (
+        <button className={itemClass} onClick={markAsRead}>
+          <EnvelopeOpen /> Mark as Read
+        </button>
+      )}
+      <button className={itemClass} onClick={showEpub}>
+        <Book /> Open in Reader
+      </button>
+      <button className={itemClass} onClick={showSource}>
+        <FileEarmarkText /> Open Source
+      </button>
+      <button className={`${itemClass} text-danger`} onClick={markDeleted}>
+        <Trash /> Delete
+      </button>
+    </div>
   );
 }

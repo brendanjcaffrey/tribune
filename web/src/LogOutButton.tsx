@@ -1,6 +1,5 @@
 import { useAtomValue } from "jotai";
-import Button, { ButtonOwnProps } from "@mui/material/Button";
-import LogoutIcon from "@mui/icons-material/Logout";
+import Button from "react-bootstrap/Button";
 import { clearAuthFnAtom, clearSettingsFnAtom } from "./State";
 import library from "./Library";
 import downloadsStore from "./Library";
@@ -8,12 +7,7 @@ import { files } from "./Files";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 
-interface LogOutButtonProps {
-  size?: ButtonOwnProps["size"];
-  sx?: ButtonOwnProps["sx"];
-}
-
-function LogOutButton({ size, sx }: LogOutButtonProps) {
+function LogOutButton() {
   const clearAuthFn = useAtomValue(clearAuthFnAtom);
   const clearSettingsFn = useAtomValue(clearSettingsFnAtom);
 
@@ -27,14 +21,7 @@ function LogOutButton({ size, sx }: LogOutButtonProps) {
   }
 
   return (
-    <Button
-      color="primary"
-      variant="text"
-      size={size}
-      sx={sx}
-      startIcon={<LogoutIcon />}
-      onClick={clearAllState}
-    >
+    <Button variant="danger" onClick={clearAllState}>
       Log Out
     </Button>
   );
