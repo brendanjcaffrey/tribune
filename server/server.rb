@@ -7,7 +7,7 @@ require 'json'
 require 'pg'
 require_relative 'config'
 require_relative 'jwt'
-require_relative 'full_text_rss'
+require_relative 'article_extractor'
 require_relative 'epub'
 
 ANY_USERS_EXIST_QUERY = 'SELECT EXISTS(SELECT 1 FROM users);'
@@ -306,7 +306,7 @@ class Server < Sinatra::Base
     halt 400, 'Missing url in metadata' if url.nil? || url.empty?
 
     source_mime_type = params[:raw_source_file][:type]
-    result = FullTextRSS.clean_html(File.read(raw_source_tempfile.path), url)
+    result = ArticleExtractor.clean_html(File.read(raw_source_tempfile.path), url)
     epub_tempfile = Tempfile.new('newsletter_epub')
     Epub.generate(result.title, result.author, result.content, epub_tempfile.path)
 

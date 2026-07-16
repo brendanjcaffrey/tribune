@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'cgi'
+require 'net/http'
 require 'nokogiri'
 require 'open3'
 require 'securerandom'
@@ -84,7 +85,8 @@ USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36
 class Epub
   def self.generate(title, author, clean_html, epub_path)
     uuid = SecureRandom.uuid
-    format_vars = { uuid: uuid, title: CGI.escapeHTML(title), author: CGI.escapeHTML(author) }
+    # extraction can legitimately come up empty, especially for author
+    format_vars = { uuid: uuid, title: CGI.escapeHTML(title.to_s), author: CGI.escapeHTML(author.to_s) }
     Zip::File.open(epub_path, create: true) do |zipfile|
       zipfile.get_output_stream('mimetype') { |f| f.write(EPUB_MIME) }
       zipfile.get_output_stream('META-INF/container.xml') { |f| f.write(CONTAINER_XML) }

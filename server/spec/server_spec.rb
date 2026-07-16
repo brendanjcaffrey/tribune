@@ -1344,7 +1344,7 @@ RSpec.describe 'Tribune Server' do
     end
 
     it 'cleans the html & turns it into an epub' do
-      allow(FullTextRSS).to receive(:clean_html)
+      allow(ArticleExtractor).to receive(:clean_html)
         .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
       allow(Epub).to receive(:generate) do |_, _, _, epub_path|
         File.write(epub_path, 'epub epub epub')
@@ -1362,7 +1362,7 @@ RSpec.describe 'Tribune Server' do
       expect(File).to exist(epub_path)
       expect(File.read(epub_path)).to eq('epub epub epub')
 
-      expect(FullTextRSS).to have_received(:clean_html).with('html html html', metadata['url'])
+      expect(ArticleExtractor).to have_received(:clean_html).with('html html html', metadata['url'])
       expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything)
 
       get '/newsletters', {}, get_auth_header
@@ -1381,7 +1381,7 @@ RSpec.describe 'Tribune Server' do
     end
 
     it 'updates source and epub if the url exists already', :focus do
-      allow(FullTextRSS).to receive(:clean_html)
+      allow(ArticleExtractor).to receive(:clean_html)
         .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
       allow(Epub).to receive(:generate) do |_, _, _, epub_path|
         File.write(epub_path, 'epub epub epub')
@@ -1402,7 +1402,7 @@ RSpec.describe 'Tribune Server' do
       expect(File).to exist(epub_path)
       expect(File.read(epub_path)).to eq('epub epub epub')
 
-      expect(FullTextRSS).to have_received(:clean_html).with('html html html', metadata['url'])
+      expect(ArticleExtractor).to have_received(:clean_html).with('html html html', metadata['url'])
       expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything)
 
       get '/newsletters', {}, get_auth_header

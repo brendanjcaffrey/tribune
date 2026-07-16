@@ -40,6 +40,18 @@ RSpec.describe 'Epub.generate' do
     end
   end
 
+  # readability returns a nil author for plenty of real pages
+  it 'generates an epub when the title & author are nil' do
+    file = File.join(temp_dir, 'out.epub')
+    uuid = Epub.generate(nil, nil, '<p>interesting content</p>', file)
+
+    Zip::File.open(file) do |zip|
+      format_vars = { uuid: uuid, title: '', author: '', manifest: '' }
+      expect(zip.read('OEBPS/Content.opf')).to eq(CONTENT_OPF % format_vars)
+      expect(zip.read('OEBPS/article.html')).to include('<p>interesting content</p>')
+    end
+  end
+
   it 'includes gif, jpg and png images as is' do
     stub_request(:get, 'www.example.com/img.png')
       .to_return(body: 'this is a png', status: 200,
