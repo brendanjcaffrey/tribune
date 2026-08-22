@@ -8,6 +8,12 @@ You'll need to install ruby and node first, then run `rake install`. Create a `c
 
 Start the server with `rake server:run`.
 
+### Running background jobs
+
+Epub extraction jobs run via [que](https://github.com/que-rb/que), which stores its queue in Postgres. Start a worker with `rake que:work` (set `QUE_WORKER_COUNT` to change the pool size, default 6).
+
+Que keeps its own tables out of `schema.sql` and manages them with its own migrations. `rake db:create` and `rake db:init` apply them; `rake db:que_migrate` (and `rake testdb:que_migrate`) apply them on their own, which is what you want after upgrading the gem.
+
 ### Running the web UI
 
 Start the UI in development mode with `rake web:vite`. The website should be available at `http://localhost:1848`.

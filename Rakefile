@@ -2,12 +2,14 @@ require 'rake'
 require 'digest'
 require 'io/console'
 require 'pg'
+require 'que'
 require 'rspec/core/rake_task'
 require 'shellwords'
 require 'webrick'
 require 'pastel'
 require 'tty/command'
 require_relative 'server/config'
+require_relative 'server/db'
 require_relative 'server/jwt'
 
 def db_args(config)
@@ -16,6 +18,14 @@ def db_args(config)
   else # want to connect over UDS
     "-h #{config.database_host.shellescape} -U #{config.database_username.shellescape}"
   end
+end
+
+# que ships its own schema as ruby-side migrations, so it stays out of
+# schema.sql. this is idempotent: it no-ops once the db is up to date
+def que_migrate(config, dbname)
+  Que.connection = Db.pool(config, size: 1, dbname: dbname)
+  Que.migrate!(version: Que::Migrations::CURRENT_VERSION)
+  puts "que schema in #{dbname} is at version #{Que.db_version}"
 end
 
 command = TTY::Command.new
@@ -34,6 +44,7 @@ namespace :db do
                 env: { 'PGPASSWORD' => config.database_password })
     command.run("cat schema.sql | psql -d #{config.database_name.shellescape} #{db_args(config)}",
                 env: { 'PGPASSWORD' => config.database_password })
+    que_migrate(config, config.database_name)
   end
 
   desc 'Apply the schema to the database'
@@ -42,6 +53,7 @@ namespace :db do
     command = TTY::Command.new
     command.run("cat schema.sql | psql #{db_args(config)} -d #{config.database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })
+    que_migrate(config, config.database_name)
   end
 
   desc 'Drop the main database'
@@ -63,6 +75,12 @@ namespace :db do
                 env: { 'PGPASSWORD' => config.database_password })
   end
 
+  desc 'Apply the que job schema to the main database'
+  task :que_migrate do
+    config = Config.load
+    que_migrate(config, config.database_name)
+  end
+
   desc 'Drop & recreate the main database'
   task reset: %i[db:drop db:create]
 end
@@ -76,6 +94,7 @@ namespace :testdb do
                 env: { 'PGPASSWORD' => config.database_password })
     command.run("cat schema.sql | psql #{db_args(config)} -d #{config.test_database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })
+    que_migrate(config, config.test_database_name)
   end
 
   desc 'Apply the schema to the test database'
@@ -84,6 +103,7 @@ namespace :testdb do
     command = TTY::Command.new
     command.run("cat schema.sql | psql #{db_args(config)} -d #{config.test_database_name.shellescape}",
                 env: { 'PGPASSWORD' => config.database_password })
+    que_migrate(config, config.test_database_name)
   end
 
   desc 'Drop the test database'
@@ -94,8 +114,23 @@ namespace :testdb do
                 env: { 'PGPASSWORD' => config.database_password })
   end
 
+  desc 'Apply the que job schema to the test database'
+  task :que_migrate do
+    config = Config.load
+    que_migrate(config, config.test_database_name)
+  end
+
   desc 'Drop & recreate the test database'
   task reset: %i[testdb:drop testdb:create]
+end
+
+namespace :que do
+  desc 'Run the que worker against the main database'
+  task :work do
+    worker_count = ENV.fetch('QUE_WORKER_COUNT', '6')
+    exec({ 'QUE_WORKER_COUNT' => worker_count },
+         'bundle', 'exec', 'que', '--worker-count', worker_count, './server/que_setup.rb')
+  end
 end
 
 namespace :server do

@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 require 'connection_pool'
+require 'que'
 require 'sinatra'
 require 'sinatra/contrib'
 require 'json'
 require 'pg'
 require_relative 'config'
+require_relative 'db'
 require_relative 'jwt'
 require_relative 'article_extractor'
 require_relative 'epub'
@@ -94,17 +96,11 @@ MIME_TYPES = { PDF_MIME_TYPE => 'pdf', HTML_MIME_TYPE => 'html' }.freeze
 RAW_MIME_TYPES = { HTML_MIME_TYPE => 'html' }.freeze
 
 CONFIG = Config.load
-DB_POOL = ConnectionPool.new(size: 5, timeout: 5) do
-  PG.connect(
-    dbname: ENV['RACK_ENV'] == 'test' ? CONFIG.test_database_name : CONFIG.database_name,
-    user: CONFIG.database_username,
-    password: CONFIG.database_password,
-    host: CONFIG.database_host,
-    port: CONFIG.database_port
-  ).tap do |conn|
-    conn.exec("SET TIME ZONE 'UTC'")
-  end
-end
+DB_POOL = Db.pool(CONFIG, size: 5)
+
+# enqueueing from a request reuses the request's connection, so a job queued
+# inside a transaction only becomes visible if that transaction commits
+Que.connection = DB_POOL
 
 class Server < Sinatra::Base
   helpers do
