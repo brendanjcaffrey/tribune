@@ -164,6 +164,36 @@ RSpec.describe 'Tribune Server' do
     end
   end
 
+  describe 'GET /auth' do
+    before do
+      create_user
+    end
+
+    it 'returns an error if no auth header' do
+      get '/auth'
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if expired jwt' do
+      get '/auth', {}, get_expired_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns an error if invalid jwt' do
+      get '/auth', {}, get_invalid_auth_header
+      expect(last_response.status).to eq(401)
+    end
+
+    it 'returns the username if valid jwt' do
+      auth_header = get_auth_header
+      get '/auth', {}, auth_header
+      expect(last_response).to be_ok
+
+      body = JSON.parse(last_response.body)
+      expect(body['username']).to eq('testuser')
+    end
+  end
+
   describe 'GET /newsletters' do
     before do
       create_user

@@ -52,6 +52,26 @@ ext.menus.onClicked.addListener((info) => {
   }
 });
 
+async function checkAuth(apiUrl, apiKey) {
+  const resp = await fetch(`${apiUrl}/auth`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(
+      `Auth check failed (${resp.status}): ${text || resp.statusText}`,
+    );
+  }
+
+  const body = await resp.json().catch(() => ({}));
+  if (!body.username) {
+    throw new Error("Auth check failed: no username in response");
+  }
+
+  console.log(`Authenticated as ${body.username}`);
+}
+
 // fetched from the background rather than the page so cross-origin images
 // aren't blocked by the page's CORS rules. cookies are included & the http cache
 // is preferred so we get the same bytes the page just rendered, which is the
@@ -96,6 +116,7 @@ ext.action.onClicked.addListener(async (tab) => {
 
     setBadge(tab.id, "…", "working");
     ext.action.setTitle({ tabId: tab.id, title: "Pushing to Tribune…" });
+    await checkAuth(apiUrl, apiKey);
 
     // Inject the content script into the active tab
     const [{ result }] = await ext.scripting.executeScript({

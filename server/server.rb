@@ -212,6 +212,13 @@ class Server < Sinatra::Base
     json({ jwt: build_jwt(username, CONFIG.server_secret) })
   end
 
+  get '/auth' do
+    username = get_validated_username
+    halt 401, 'Unauthorized' if username.nil?
+
+    json({ username: username })
+  end
+
   get '/newsletters' do
     halt 401, 'Unauthorized' unless authed?
 
