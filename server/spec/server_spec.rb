@@ -12,6 +12,8 @@ SHA256 = {
   testpassword: '9f735e0df9a1ddc702bf0a1a7b83033f9f7153a00c29de82cedadc9957289b05'
 }.freeze
 
+EXTENSION_ORIGIN = 'moz-extension://11112222-3333-4444-5555-666677778888'
+
 BASE_TIME = Time.new(2025, 1, 1, 0, 0, 0.456789).utc
 HALF_MICROSECOND = Rational(1, 2_000_000)
 HALF_SECOND = Rational(1, 2)
@@ -68,6 +70,68 @@ RSpec.describe 'Tribune Server' do
       conn.exec(CREATE_TEST_NEWSLETTER_QUERY, [id, title, author, source_id, source_mime_type, read, deleted, progress,
                                                created_at.iso8601(6), updated_at.iso8601(6), epub_updated_at.iso8601(6),
                                                source_updated_at.iso8601(6)])
+    end
+  end
+
+  describe 'cors' do
+    def extension_origin_header(origin = EXTENSION_ORIGIN)
+      { 'HTTP_ORIGIN' => origin }
+    end
+
+    it 'allows an extension origin on a normal request' do
+      get '/users', {}, extension_origin_header
+      expect(last_response).to be_ok
+      expect(last_response.headers['Access-Control-Allow-Origin']).to eq(EXTENSION_ORIGIN)
+      expect(last_response.headers['Vary']).to eq('Origin')
+    end
+
+    it 'allows a chrome extension origin too' do
+      origin = 'chrome-extension://abcdefghijklmnop'
+      get '/users', {}, extension_origin_header(origin)
+      expect(last_response.headers['Access-Control-Allow-Origin']).to eq(origin)
+    end
+
+    it 'does not allow a web page origin' do
+      get '/users', {}, extension_origin_header('https://evil.example.com')
+      expect(last_response).to be_ok
+      expect(last_response.headers['Access-Control-Allow-Origin']).to be_nil
+    end
+
+    it 'sends no cors headers without an origin' do
+      get '/users'
+      expect(last_response.headers['Access-Control-Allow-Origin']).to be_nil
+    end
+
+    # the halt happens after the before filter, so the browser still sees the
+    # headers it needs to hand the 401 back to the extension instead of a cors error
+    it 'allows an extension origin on an unauthorized response' do
+      get '/auth', {}, extension_origin_header
+      expect(last_response.status).to eq(401)
+      expect(last_response.headers['Access-Control-Allow-Origin']).to eq(EXTENSION_ORIGIN)
+    end
+
+    it 'answers a preflight for an extension origin' do
+      options '/auth', {}, extension_origin_header.merge(
+        'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'GET',
+        'HTTP_ACCESS_CONTROL_REQUEST_HEADERS' => 'authorization'
+      )
+      expect(last_response.status).to eq(204)
+      expect(last_response.headers['Access-Control-Allow-Origin']).to eq(EXTENSION_ORIGIN)
+      expect(last_response.headers['Access-Control-Allow-Methods']).to include('POST')
+      expect(last_response.headers['Access-Control-Allow-Headers']).to include('Authorization')
+      expect(last_response.headers['Access-Control-Max-Age']).to eq('86400')
+    end
+
+    it 'answers a preflight for an upload' do
+      options '/newsletters/raw', {}, extension_origin_header
+      expect(last_response.status).to eq(204)
+      expect(last_response.headers['Access-Control-Allow-Headers']).to include('Content-Type')
+    end
+
+    it 'does not answer a preflight for a web page origin' do
+      options '/auth', {}, extension_origin_header('https://evil.example.com')
+      expect(last_response.status).to eq(404)
+      expect(last_response.headers['Access-Control-Allow-Origin']).to be_nil
     end
   end
 

@@ -90,6 +90,14 @@ MIME_TYPES = { PDF_MIME_TYPE => 'pdf', HTML_MIME_TYPE => 'html' }.freeze
 RAW_MIME_TYPES = { HTML_MIME_TYPE => 'html' }.freeze
 IMAGE_FIELD_PATTERN = /\Aimage_\d+\z/
 
+# the browser extensions call this api from their own origin, so they need cors
+# headers. host permissions used to let an extension skip cors entirely, but
+# firefox only grants those when the user opts in, so it isn't something to rely on.
+EXTENSION_ORIGIN_PATTERN = %r{\A(?:moz|chrome)-extension://[a-zA-Z0-9._-]+\z}
+CORS_ALLOWED_METHODS = 'GET, POST, PUT, DELETE, OPTIONS'
+CORS_ALLOWED_HEADERS = 'Authorization, Content-Type'
+CORS_MAX_AGE = '86400'
+
 CONFIG = Config.load
 DB_POOL = Db.pool(CONFIG, size: 5)
 
@@ -138,6 +146,15 @@ class Server < Sinatra::Base
 
     def authed?
       !get_validated_username.nil?
+    end
+
+    # only the extensions are cross-origin. the web app is served through vite's
+    # proxy, so it's same-origin and never sends an Origin header we care about.
+    def extension_origin
+      origin = request.env['HTTP_ORIGIN']
+      return nil if origin.nil? || !origin.match?(EXTENSION_ORIGIN_PATTERN)
+
+      origin
     end
 
     def source_path(id, mime_type)
@@ -204,6 +221,26 @@ class Server < Sinatra::Base
   set :environment, ENV['RACK_ENV'] == 'test' ? 'test' : CONFIG.server_environment
   set :port, CONFIG.server_port if CONFIG.server_port
   set :bind, CONFIG.server_bind if CONFIG.server_bind
+
+  before do
+    origin = extension_origin
+    next if origin.nil?
+
+    headers['Access-Control-Allow-Origin'] = origin
+    headers['Vary'] = 'Origin'
+  end
+
+  # the extension sends an Authorization header, which makes every one of its
+  # requests non-simple, so the browser preflights each one before sending it.
+  options '/*' do
+    halt 404 if extension_origin.nil?
+
+    headers['Access-Control-Allow-Methods'] = CORS_ALLOWED_METHODS
+    headers['Access-Control-Allow-Headers'] = CORS_ALLOWED_HEADERS
+    headers['Access-Control-Max-Age'] = CORS_MAX_AGE
+    status 204
+    body ''
+  end
 
   get '/users' do
     result = query(ANY_USERS_EXIST_QUERY)
