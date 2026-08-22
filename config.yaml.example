@@ -8,6 +8,6 @@ test_database_name: tribune-test
 secret: [something]
 server_port: 1847
 newsletters_dir: /Users/you/tribune/newsletters/
--- `git clone git@github.com:fivefilters/ftr-site-config.git` (make sure to update every so often)
+-- `git clone git@github.com:fivefilters/ftr-site-config.git`
 -- can leave blank to rely only on readability
 ftr_site_config_dir: /Users/you/ftr-site-config/

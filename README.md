@@ -16,11 +16,15 @@ Epub extraction jobs run via [que](https://github.com/que-rb/que), which stores 
 
 A job that fails is retried three times and then left alone; the newsletter keeps its url as a title and has no epub to download. Look in the worker's output for what went wrong, or at `last_error_message` in the `que_jobs` table.
 
-Que keeps its own tables out of `schema.sql` and manages them with its own migrations. `rake db:create` and `rake db:init` apply them; `rake db:que_migrate` (and `rake testdb:que_migrate`) apply them on their own, which is what you want after upgrading the gem.
+Que and que-scheduler keep their own tables out of `schema.sql` and manage them with their own migrations. `rake db:create` and `rake db:init` apply them; `rake db:que_migrate` (and `rake testdb:que_migrate`) apply them on their own, which is what you want after upgrading either gem.
+
+Recurring jobs are scheduled by [que-scheduler](https://github.com/hlascelles/que-scheduler), which is a que job itself: it wakes up, enqueues whatever is due and re-enqueues itself, so it needs no process of its own. The schedule is `server/que_schedule.yml`, in crontab syntax and in UTC. Nothing recurring runs until a worker is running either.
 
 ### Site configs
 
 `ftr_site_config_dir` in the config should point to a clone of [ftr-site-config](https://github.com/fivefilters/ftr-site-config). In that repo, there's one `<host>.txt` per site saying, where that site keeps its article and what to throw away, which beats readability inferring it from text density. If you set the key to a blank string, the server will only use readability.
+
+A que worker runs `git pull` in that clone once a day, so it doesn't go stale. If `ftr_site_config_dir` is blank or missing, the job says so and does nothing.
 
 ### Running the web UI
 

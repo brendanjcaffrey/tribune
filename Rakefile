@@ -9,6 +9,7 @@ require 'webrick'
 require 'pastel'
 require 'tty/command'
 require_relative 'server/config'
+require_relative 'server/que_schedule'
 require_relative 'server/db'
 require_relative 'server/jwt'
 
@@ -20,12 +21,19 @@ def db_args(config)
   end
 end
 
-# que ships its own schema as ruby-side migrations, so it stays out of
-# schema.sql. this is idempotent: it no-ops once the db is up to date
+# que & que-scheduler both ship their schema as ruby-side migrations, so they
+# stay out of schema.sql. this is idempotent: it no-ops once the db is up to
+# date, and re-enqueues the scheduler job only if it isn't in the queue already
 def que_migrate(config, dbname)
   Que.connection = Db.pool(config, size: 1, dbname: dbname)
   Que.migrate!(version: Que::Migrations::CURRENT_VERSION)
   puts "que schema in #{dbname} is at version #{Que.db_version}"
+
+  # que-scheduler numbers its migrations separately from the gem version, and
+  # migrating to the latest applies whichever of the earlier ones are missing
+  Que::Scheduler::Migrations.migrate!(version: Que::Scheduler::Migrations::MAX_VERSION)
+  Que::Scheduler::Migrations.reenqueue_scheduler_if_missing
+  puts "que-scheduler schema in #{dbname} is at version #{Que::Scheduler::Migrations.db_version}"
 end
 
 command = TTY::Command.new

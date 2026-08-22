@@ -1,0 +1,2 @@
+UpdateSiteConfigsJob:
+  cron: "0 4 * * *"

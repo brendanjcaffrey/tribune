@@ -18,3 +18,5 @@ Que.logger = Logger.new($stdout)
 Que.connection = Db.pool(Config.load, size: QUE_WORKER_COUNT + 1)
 
 Dir[File.join(__dir__, 'jobs', '*.rb')].each { |job| require job }
+
+require_relative 'que_schedule'
