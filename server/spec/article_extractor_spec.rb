@@ -47,8 +47,14 @@ RSpec.describe 'ArticleExtractor.clean_html' do
     expect(ArticleExtractor.clean_html(html, url).author).to eq('Jane Author')
   end
 
-  it 'returns a nil author when the page has none' do
-    expect(ArticleExtractor.clean_html(page, url).author).to be_nil
+  # the title & author columns are not null, so a page missing either can't return nil
+  it 'returns an empty author when the page has none' do
+    expect(ArticleExtractor.clean_html(page, url).author).to eq('')
+  end
+
+  it 'returns an empty title when the page has none' do
+    html = "<html><body><div class=\"article\">#{body}</div></body></html>"
+    expect(ArticleExtractor.clean_html(html, url).title).to eq('')
   end
 
   it 'keeps the article body & drops the boilerplate' do

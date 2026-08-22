@@ -83,7 +83,9 @@ SKIP_MIMES = Set.new(['text/html'])
 USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'
 
 class Epub
-  def self.generate(title, author, clean_html, epub_path)
+  # images maps an img src to { path:, type: } for bytes that were uploaded with
+  # the page, so anything in there doesn't have to be downloaded again
+  def self.generate(title, author, clean_html, epub_path, images = {})
     uuid = SecureRandom.uuid
     # extraction can legitimately come up empty, especially for author
     format_vars = { uuid: uuid, title: CGI.escapeHTML(title.to_s), author: CGI.escapeHTML(author.to_s) }
@@ -98,7 +100,7 @@ class Epub
       doc = Nokogiri::XML(base_html)
 
       doc.css('img').each do |img|
-        get_image(zipfile, img, manifest, img_idx)
+        get_image(zipfile, img, manifest, img_idx, images)
         img_idx += 1
       rescue StandardError => e
         puts "discarding image #{img}: #{e.full_message}"
@@ -113,15 +115,11 @@ class Epub
     uuid
   end
 
-  def self.get_image(zipfile, img, manifest, img_idx)
+  def self.get_image(zipfile, img, manifest, img_idx, images = {})
     src = img['src']
     raise "Invalid img src #{src}" unless src&.start_with?('http://', 'https://')
 
-    uri = URI.parse(src)
-    res = fetch(uri)
-    img_content = res.body
-    content_type = res['Content-Type'].split(';').first
-    suffix = File.extname(uri.path)
+    img_content, content_type, suffix = load_image(src, images[src])
     img_id = "img_#{img_idx}"
 
     raise "#{src} has type #{content_type}, skipping" if SKIP_MIMES.include?(content_type)
@@ -150,6 +148,22 @@ class Epub
 
     manifest << %(<item id="#{img_id}" href="#{new_path}" media-type="#{content_type}" />)
     puts "#{new_path} <= #{src} (#{content_type})"
+  end
+
+  # an uploaded image came from a browser that already rendered the page, so it
+  # beats downloading, which loses out on cookies, referrers & hotlink allowances
+  def self.load_image(src, upload)
+    uri = URI.parse(src)
+    if upload
+      puts "using uploaded image for #{src}"
+      content_type = upload[:type].to_s.split(';').first
+      # let the mime detection below sort out an upload that arrived unlabelled
+      content_type = 'application/octet-stream' if content_type.nil? || content_type.empty?
+      return [File.binread(upload[:path]), content_type, File.extname(uri.path)]
+    end
+
+    res = fetch(uri)
+    [res.body, res['Content-Type'].split(';').first, File.extname(uri.path)]
   end
 
   def self.fetch(uri, limit = 10)

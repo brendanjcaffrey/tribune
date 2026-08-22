@@ -1291,6 +1291,14 @@ RSpec.describe 'Tribune Server' do
       )
     end
 
+    let(:png_file) do
+      Rack::Test::UploadedFile.new(
+        StringIO.new('this is a png'),
+        'image/png',
+        original_filename: 'image_0'
+      )
+    end
+
     it 'returns an error if no auth header' do
       post '/newsletters/raw'
       expect(last_response.status).to eq(401)
@@ -1363,7 +1371,7 @@ RSpec.describe 'Tribune Server' do
       expect(File.read(epub_path)).to eq('epub epub epub')
 
       expect(ArticleExtractor).to have_received(:clean_html).with('html html html', metadata['url'])
-      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything)
+      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything, {})
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
@@ -1403,7 +1411,7 @@ RSpec.describe 'Tribune Server' do
       expect(File.read(epub_path)).to eq('epub epub epub')
 
       expect(ArticleExtractor).to have_received(:clean_html).with('html html html', metadata['url'])
-      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything)
+      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything, {})
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
@@ -1415,6 +1423,46 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(Time.parse(item['source_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
+    end
+
+    it 'passes the uploaded images to the epub' do
+      metadata['images'] = [{ 'field' => 'image_0', 'src' => 'http://example.com/img.png' }]
+      allow(ArticleExtractor).to receive(:clean_html)
+        .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
+      allow(Epub).to receive(:generate) do |_, _, _, epub_path, images|
+        expect(File.read(images['http://example.com/img.png'][:path])).to eq('this is a png')
+        File.write(epub_path, 'epub epub epub')
+      end
+
+      post '/newsletters/raw', {
+        'metadata' => metadata_file,
+        'raw_source_file' => html_file,
+        'image_0' => png_file
+      }, get_auth_header
+      expect(last_response).to be_ok
+
+      expect(Epub).to have_received(:generate).with(
+        'clean title', 'clean author', 'clean html', anything,
+        { 'http://example.com/img.png' => { path: anything, type: 'image/png' } }
+      )
+    end
+
+    it 'ignores image entries that have no matching upload' do
+      metadata['images'] = [
+        { 'field' => 'image_0', 'src' => 'http://example.com/missing.png' },
+        { 'field' => 'metadata', 'src' => 'http://example.com/notanimage.png' },
+        { 'field' => 'image_1' },
+        'nonsense'
+      ]
+      allow(ArticleExtractor).to receive(:clean_html)
+        .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
+      allow(Epub).to receive(:generate) do |_, _, _, epub_path|
+        File.write(epub_path, 'epub epub epub')
+      end
+
+      post '/newsletters/raw', { metadata: metadata_file, raw_source_file: html_file }, get_auth_header
+      expect(last_response).to be_ok
+      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything, {})
     end
   end
 end

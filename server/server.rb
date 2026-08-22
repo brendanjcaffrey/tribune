@@ -94,6 +94,7 @@ PDF_MIME_TYPE = 'application/pdf'
 HTML_MIME_TYPE = 'text/html'
 MIME_TYPES = { PDF_MIME_TYPE => 'pdf', HTML_MIME_TYPE => 'html' }.freeze
 RAW_MIME_TYPES = { HTML_MIME_TYPE => 'html' }.freeze
+IMAGE_FIELD_PATTERN = /\Aimage_\d+\z/
 
 CONFIG = Config.load
 DB_POOL = Db.pool(CONFIG, size: 5)
@@ -159,6 +160,28 @@ class Server < Sinatra::Base
 
     def epub_filename(id)
       "#{id}.epub"
+    end
+
+    # the uploader sends the images it found on the page alongside the html, each
+    # in its own form field, and metadata['images'] pairs those fields back up
+    # with the src they had in the page. anything missing or unusable is just left
+    # out, and the epub falls back to downloading it.
+    def uploaded_images(metadata)
+      entries = metadata['images']
+      return {} unless entries.is_a?(Array)
+
+      entries.each_with_object({}) do |entry, images|
+        next unless entry.is_a?(Hash)
+
+        src = entry['src']
+        field = entry['field']
+        next if src.nil? || src.empty? || !field.is_a?(String) || !field.match?(IMAGE_FIELD_PATTERN)
+
+        upload = params[field]
+        next unless upload.is_a?(Hash) && upload[:tempfile]
+
+        images[src] = { path: upload[:tempfile].path, type: upload[:type] }
+      end
     end
   end
 
@@ -304,7 +327,7 @@ class Server < Sinatra::Base
     source_mime_type = params[:raw_source_file][:type]
     result = ArticleExtractor.clean_html(File.read(raw_source_tempfile.path), url)
     epub_tempfile = Tempfile.new('newsletter_epub')
-    Epub.generate(result.title, result.author, result.content, epub_tempfile.path)
+    Epub.generate(result.title, result.author, result.content, epub_tempfile.path, uploaded_images(metadata))
 
     exists = query(NEWSLETTER_SOURCE_ID_EXISTS_QUERY, [url])[0]['exists'] == 't'
     result = if exists

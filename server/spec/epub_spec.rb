@@ -281,4 +281,99 @@ RSpec.describe 'Epub.generate' do
       expect(zip.read('OEBPS/0.png')).to eq('this is a png')
     end
   end
+
+  it 'uses uploaded images instead of downloading them' do
+    upload_path = File.join(temp_dir, 'upload.png')
+    File.write(upload_path, 'this is an uploaded png')
+    stub_request(:get, 'www.example.com/img.gif')
+      .to_return(body: 'this is a gif', status: 200,
+                 headers: { 'Content-Length' => 13, 'Content-Type' => 'image/gif' })
+
+    content = <<~HTML
+      <div>
+        <img src="http://www.example.com/img.png" />
+        <img src="http://www.example.com/img.gif" />
+      </div>
+    HTML
+
+    images = { 'http://www.example.com/img.png' => { path: upload_path, type: 'image/png' } }
+    file = File.join(temp_dir, 'out.epub')
+    Epub.generate('Test Title', 'Test Author', content, file, images)
+
+    expect(a_request(:get, 'www.example.com/img.png')).not_to have_been_made
+
+    Zip::File.open(file) do |zip|
+      article_html = zip.read('OEBPS/article.html')
+      expect(article_html).to include('<img src="0.png"/>')
+      expect(article_html).to include('<img src="1.gif"/>')
+
+      opf = zip.read('OEBPS/Content.opf')
+      expect(opf).to include('<item id="img_0" href="0.png" media-type="image/png" />')
+      expect(opf).to include('<item id="img_1" href="1.gif" media-type="image/gif" />')
+
+      expect(zip.read('OEBPS/0.png')).to eq('this is an uploaded png')
+      expect(zip.read('OEBPS/1.gif')).to eq('this is a gif')
+    end
+  end
+
+  it 'converts and detects the mime of uploaded images' do
+    webp_path = File.join(temp_dir, 'upload.webp')
+    File.write(webp_path, 'this is a webp')
+    unlabelled_path = File.join(temp_dir, 'upload.bin')
+    File.write(unlabelled_path, 'this is a png')
+
+    status_double = instance_double(Process::Status, success?: true)
+    allow(Open3).to receive(:capture3)
+      .and_return(
+        ['this is converted jpg', '', status_double],
+        ['image/png; charset=binary', '', status_double]
+      )
+
+    content = <<~HTML
+      <div>
+        <img src="http://www.example.com/img.webp" />
+        <img src="http://www.example.com/img.png" />
+      </div>
+    HTML
+
+    images = {
+      'http://www.example.com/img.webp' => { path: webp_path, type: 'image/webp' },
+      'http://www.example.com/img.png' => { path: unlabelled_path, type: nil }
+    }
+    file = File.join(temp_dir, 'out.epub')
+    Epub.generate('Test Title', 'Test Author', content, file, images)
+
+    expect(Open3).to have_received(:capture3)
+      .with('convert', '-', 'JPG:-', stdin_data: 'this is a webp', binmode: true).ordered
+    expect(Open3).to have_received(:capture3)
+      .with('file', '--mime', '-b', '-', stdin_data: 'this is a png', binmode: true).ordered
+
+    Zip::File.open(file) do |zip|
+      article_html = zip.read('OEBPS/article.html')
+      expect(article_html).to include('<img src="0.jpg"/>')
+      expect(article_html).to include('<img src="1.png"/>')
+
+      opf = zip.read('OEBPS/Content.opf')
+      expect(opf).to include('<item id="img_0" href="0.jpg" media-type="image/jpeg" />')
+      expect(opf).to include('<item id="img_1" href="1.png" media-type="image/png" />')
+
+      expect(zip.read('OEBPS/0.jpg')).to eq('this is converted jpg')
+      expect(zip.read('OEBPS/1.png')).to eq('this is a png')
+    end
+  end
+
+  # a src the uploader never managed to fetch still has to come down the old way
+  it 'downloads images that were not uploaded' do
+    stub_request(:get, 'www.example.com/img.png')
+      .to_return(body: 'this is a png', status: 200,
+                 headers: { 'Content-Length' => 13, 'Content-Type' => 'image/png' })
+
+    content = '<div><img src="http://www.example.com/img.png" /></div>'
+    file = File.join(temp_dir, 'out.epub')
+    Epub.generate('Test Title', 'Test Author', content, file, {})
+
+    Zip::File.open(file) do |zip|
+      expect(zip.read('OEBPS/0.png')).to eq('this is a png')
+    end
+  end
 end

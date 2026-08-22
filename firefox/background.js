@@ -6,6 +6,11 @@ const BADGE_COLORS = {
   error: "#c62828",
 };
 
+// the server falls back to downloading anything we don't send, so these caps
+// only trade upload size against how much work the server has to redo
+const MAX_IMAGES = 100;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
 async function getSettings() {
   return await ext.storage.local.get();
 }
@@ -47,10 +52,47 @@ ext.menus.onClicked.addListener((info) => {
   }
 });
 
+// fetched from the background rather than the page so cross-origin images
+// aren't blocked by the page's CORS rules. cookies are included & the http cache
+// is preferred so we get the same bytes the page just rendered, which is the
+// whole point of sending these instead of letting the server download them.
+async function fetchImages(images) {
+  const settled = await Promise.allSettled(
+    images.slice(0, MAX_IMAGES).map(async ({ src, fetchSrc }) => {
+      const resp = await fetch(fetchSrc, {
+        credentials: "include",
+        cache: "force-cache",
+      });
+      if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+
+      const blob = await resp.blob();
+      if (!blob.size || blob.size > MAX_IMAGE_BYTES) {
+        throw new Error(`unusable size ${blob.size}`);
+      }
+      return { src, blob };
+    }),
+  );
+
+  const fetched = [];
+  settled.forEach((outcome, i) => {
+    if (outcome.status === "fulfilled") {
+      fetched.push(outcome.value);
+    } else {
+      console.warn(`skipping image ${images[i].fetchSrc}:`, outcome.reason);
+    }
+  });
+  return fetched;
+}
+
 // when the toolbar button is clicked, inject the content script, collect HTML+metadata, then upload.
 ext.action.onClicked.addListener(async (tab) => {
   try {
     if (!tab.id) throw new Error("No active tab");
+
+    const { apiUrl, apiKey } = await getSettings();
+    if (!apiUrl || !apiKey) {
+      throw new Error("Set the API URL and key in the extension options first");
+    }
 
     setBadge(tab.id, "…", "working");
     ext.action.setTitle({ tabId: tab.id, title: "Pushing to Tribune…" });
@@ -68,25 +110,53 @@ ext.action.onClicked.addListener(async (tab) => {
           : "";
         const html = dt + "\n" + d.documentElement.outerHTML;
 
+        // src is what ends up in the html we upload, so the server keys off it.
+        // currentSrc is what the browser actually loaded (i.e. the srcset pick),
+        // so it's the one worth fetching & the one most likely to still be cached.
+        const seen = new Set();
+        const images = [];
+        for (const img of d.images) {
+          const attr = img.getAttribute("src");
+          if (!attr) continue;
+
+          let src;
+          try {
+            src = new URL(attr, d.location.href).href;
+          } catch {
+            continue;
+          }
+          if (!/^https?:/.test(src) || seen.has(src)) continue;
+
+          seen.add(src);
+          const fetchSrc = /^https?:/.test(img.currentSrc || "")
+            ? img.currentSrc
+            : src;
+          images.push({ src, fetchSrc });
+        }
+
         return {
           url: d.location.href,
           html,
+          images,
         };
       },
     });
-
-    // post to API as multipart/form-data from the background (to bypass page CORS)
-    const { apiUrl, apiKey } = await getSettings();
-    if (!apiUrl || !apiKey) {
-      throw new Error("Set the API URL and key in the extension options first");
-    }
 
     const filename = "source.html";
     const form = new FormData();
     const htmlBlob = new Blob([result.html], { type: "text/html" });
     form.append("raw_source_file", htmlBlob, filename);
 
-    const metadata = { url: result.url };
+    // the field names are how the server pairs each upload back up with the
+    // src it should replace in the html
+    const images = await fetchImages(result.images || []);
+    const imageMetadata = images.map(({ src, blob }, i) => {
+      const field = `image_${i}`;
+      form.append(field, blob, field);
+      return { field, src };
+    });
+
+    const metadata = { url: result.url, images: imageMetadata };
     const jsonBlob = new Blob([JSON.stringify(metadata)], {
       type: "application/json",
     });

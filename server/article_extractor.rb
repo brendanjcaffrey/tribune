@@ -15,9 +15,11 @@ class ArticleExtractor
   # remove_empty_nodes defaults to true, which drops <p> tags containing only an image
   READABILITY_OPTIONS = { tags: CONTENT_TAGS, attributes: CONTENT_ATTRIBUTES, remove_empty_nodes: false }.freeze
 
+  # readability returns nil for a title or author it can't find, but both columns
+  # are not null, so they're squashed to empty strings here
   def self.clean_html(raw_html, url)
     doc = Readability::Document.new(raw_html, READABILITY_OPTIONS)
-    CleanedHTML.new(doc.title, doc.author, absolutize_images(doc.content, url))
+    CleanedHTML.new(doc.title.to_s, doc.author.to_s, absolutize_images(doc.content, url))
   end
 
   # readability leaves img srcs relative, but epub.rb silently discards any src that isn't http(s)
