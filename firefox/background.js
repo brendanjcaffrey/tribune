@@ -29,6 +29,24 @@ function notify(title, message) {
   });
 }
 
+const SETTINGS_MENU_ID = "open-settings";
+
+// add a "settings" entry to the context menu on the toolbar button.
+// removeAll() first so we don't get a duplicate-id error when the event page wakes up again.
+ext.menus.removeAll().then(() => {
+  ext.menus.create({
+    id: SETTINGS_MENU_ID,
+    title: "Settings",
+    contexts: ["action"],
+  });
+});
+
+ext.menus.onClicked.addListener((info) => {
+  if (info.menuItemId === SETTINGS_MENU_ID) {
+    ext.runtime.openOptionsPage();
+  }
+});
+
 // when the toolbar button is clicked, inject the content script, collect HTML+metadata, then upload.
 ext.action.onClicked.addListener(async (tab) => {
   try {
