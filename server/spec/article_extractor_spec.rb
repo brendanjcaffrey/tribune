@@ -20,6 +20,10 @@ RSpec.describe 'ArticleExtractor.clean_html' do
     HTML
   end
 
+  # whatever the machine running this has cloned is none of these examples'
+  # business: they are about what readability does when nothing overrides it
+  before { stub_const('ArticleExtractor::SITE_CONFIG_DIR', nil) }
+
   def page(head: '', article: body)
     <<~HTML
       <html>

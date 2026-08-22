@@ -2,6 +2,7 @@
 
 require 'json'
 require 'open3'
+require_relative 'config'
 
 CleanedHTML = Struct.new(:title, :author, :content)
 
@@ -14,6 +15,12 @@ class ExtractionError < StandardError; end
 class ArticleExtractor
   EXTRACT_SCRIPT = File.join(__dir__, 'extract', 'extract.js')
   NODE_BIN = ENV.fetch('NODE_BIN', 'node')
+
+  # a clone of github.com/fivefilters/ftr-site-config, if there is one. those
+  # files say where a given site keeps its article, which the extractor uses in
+  # preference to readability's guess. optional: without it every page is
+  # readability's guess, which is what it was before
+  SITE_CONFIG_DIR = Config.load.ftr_site_config_dir
 
   # jsdom is slow on a heavy page, but not minutes slow: past this it's stuck
   # rather than working, and the job is better off retrying
@@ -32,12 +39,25 @@ class ArticleExtractor
     CleanedHTML.new(article['title'].to_s, article['author'].to_s, article['content'].to_s)
   end
 
+  # a directory that isn't there would silently cost every page its site config,
+  # so it says so & carries on with readability rather than failing the job
+  def self.site_config_dir
+    return '' if SITE_CONFIG_DIR.nil? || SITE_CONFIG_DIR.empty?
+    return SITE_CONFIG_DIR if File.directory?(SITE_CONFIG_DIR)
+
+    warn "ftr_site_config_dir #{SITE_CONFIG_DIR} is not a directory, extracting with readability alone"
+    ''
+  end
+
   # popen3 rather than capture3 because a jsdom parse that wedges has to be
   # killable: it would otherwise hold a que worker open for good
   def self.run_extractor(raw_html, url)
-    Open3.popen3(NODE_BIN, EXTRACT_SCRIPT, url.to_s) do |stdin, stdout, stderr, wait_thr|
+    Open3.popen3(NODE_BIN, EXTRACT_SCRIPT, url.to_s, site_config_dir) do |stdin, stdout, stderr, wait_thr|
+      # whichever of these is still reading when we raise gets its stream shut
+      # under it, and its complaint about that is noise on top of the real error
       out = Thread.new { stdout.read }
       err = Thread.new { stderr.read }
+      [out, err].each { |reader| reader.report_on_exception = false }
 
       begin
         stdin.write(raw_html.to_s)

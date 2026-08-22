@@ -14,11 +14,13 @@ Start the server with `rake server:run`.
 
 Epub extraction jobs run via [que](https://github.com/que-rb/que), which stores its queue in Postgres. Start a worker with `rake que:work` (set `QUE_WORKER_COUNT` to change the pool size, default 6). **Nothing pushed to `POST /newsletters/raw` turns into an epub until a worker is running.**
 
-`POST /newsletters/raw` (what the Firefox extension uses) only stores the page it was sent and queues an `ExtractArticleJob`, so the extension gets an id back straight away. The newsletter is listed under its url until the job has run, at which point it picks up the title and author readability found and its epub appears. Extraction is `server/extract/extract.js`: jsdom parses the page, @mozilla/readability picks the article out of it, and the result is cleaned down to the xhtml `server/epub.rb` can pack.
-
 A job that fails is retried three times and then left alone; the newsletter keeps its url as a title and has no epub to download. Look in the worker's output for what went wrong, or at `last_error_message` in the `que_jobs` table.
 
 Que keeps its own tables out of `schema.sql` and manages them with its own migrations. `rake db:create` and `rake db:init` apply them; `rake db:que_migrate` (and `rake testdb:que_migrate`) apply them on their own, which is what you want after upgrading the gem.
+
+### Site configs
+
+`ftr_site_config_dir` in the config should point to a clone of [ftr-site-config](https://github.com/fivefilters/ftr-site-config). In that repo, there's one `<host>.txt` per site saying, where that site keeps its article and what to throw away, which beats readability inferring it from text density. If you set the key to a blank string, the server will only use readability.
 
 ### Running the web UI
 

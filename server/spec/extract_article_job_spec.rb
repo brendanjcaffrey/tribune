@@ -19,6 +19,7 @@ RSpec.describe ExtractArticleJob do
 
   let(:url) { 'https://example.com/blog/posts/an-article' }
   let(:newsletter_id) { 1 }
+
   let(:source_path) { File.join(temp_dir, '1.html') }
   let(:epub_path) { File.join(temp_dir, '1.epub') }
   let(:images_dir) { File.join(temp_dir, 'images', '1') }
@@ -51,6 +52,9 @@ RSpec.describe ExtractArticleJob do
   end
 
   before do
+    # the extraction itself has its own specs, & whether this machine has an ftr
+    # site config clone is nothing to do with what the job does with the result
+    stub_const('ArticleExtractor::SITE_CONFIG_DIR', nil)
     DB_POOL.with { |conn| conn.exec('BEGIN') }
     DB_POOL.with { |conn| conn.exec_params(INSERT_NEWSLETTER_QUERY, [newsletter_id, url]) }
     File.write(source_path, page)
