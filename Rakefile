@@ -134,9 +134,13 @@ namespace :que do
 end
 
 namespace :server do
-  desc 'Install ruby dependencies for the server'
+  desc 'Install the ruby & node dependencies for the server'
   task :install do
     command.run('bundle')
+    # the article extractor runs @mozilla/readability in a node subprocess
+    Dir.chdir('server/extract') do
+      command.run('npm install')
+    end
   end
 
   desc 'Lint the ruby code'

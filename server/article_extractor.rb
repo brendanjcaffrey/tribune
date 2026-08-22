@@ -1,50 +1,64 @@
 # frozen_string_literal: true
 
-require 'readability'
-require 'nokogiri'
-require 'uri'
+require 'json'
+require 'open3'
 
 CleanedHTML = Struct.new(:title, :author, :content)
 
+class ExtractionError < StandardError; end
+
+# the extraction itself is @mozilla/readability driving jsdom, in
+# server/extract/extract.js. it runs as a subprocess rather than in ruby because
+# the ruby readability ports strip images & most of the structure out of a page,
+# which is what the epubs kept coming out mangled from
 class ArticleExtractor
-  # readability only whitelists div & p by default, which strips images & all structure
-  CONTENT_TAGS = %w[div p img a br hr h1 h2 h3 h4 h5 h6 ul ol li blockquote pre code
-                    em strong b i figure figcaption table thead tbody tr th td].freeze
-  CONTENT_ATTRIBUTES = %w[src href alt title].freeze
+  EXTRACT_SCRIPT = File.join(__dir__, 'extract', 'extract.js')
+  NODE_BIN = ENV.fetch('NODE_BIN', 'node')
 
-  # remove_empty_nodes defaults to true, which drops <p> tags containing only an image
-  READABILITY_OPTIONS = { tags: CONTENT_TAGS, attributes: CONTENT_ATTRIBUTES, remove_empty_nodes: false }.freeze
+  # jsdom is slow on a heavy page, but not minutes slow: past this it's stuck
+  # rather than working, and the job is better off retrying
+  EXTRACT_TIMEOUT = 120
 
-  # readability returns nil for a title or author it can't find, but both columns
-  # are not null, so they're squashed to empty strings here
+  # both columns are not null & readability comes up empty on plenty of real
+  # pages, especially for the author, so neither is ever nil here
   def self.clean_html(raw_html, url)
-    doc = Readability::Document.new(raw_html, READABILITY_OPTIONS)
-    CleanedHTML.new(doc.title.to_s, doc.author.to_s, absolutize_images(doc.content, url))
-  end
-
-  # readability leaves img srcs relative, but epub.rb silently discards any src that isn't http(s)
-  def self.absolutize_images(content, url)
-    frag = Nokogiri::HTML::DocumentFragment.parse(content)
-    frag.css('img').each do |img|
-      absolute = absolute_src(img['src'], url)
-      if absolute
-        img['src'] = absolute
-      else
-        img.remove
-      end
+    stdout = run_extractor(raw_html, url)
+    begin
+      article = JSON.parse(stdout)
+    rescue JSON::ParserError => e
+      raise ExtractionError, "extractor returned invalid json for #{url}: #{e.message}"
     end
-    frag.to_html
-  end
-  private_class_method :absolutize_images
 
-  # nil unless the src resolves to something epub.rb can fetch, so data: & mailto: are dropped here
-  def self.absolute_src(src, url)
-    return nil if src.nil? || src.empty?
-
-    absolute = URI.join(url, src).to_s
-    absolute.start_with?('http://', 'https://') ? absolute : nil
-  rescue URI::Error
-    nil
+    CleanedHTML.new(article['title'].to_s, article['author'].to_s, article['content'].to_s)
   end
-  private_class_method :absolute_src
+
+  # popen3 rather than capture3 because a jsdom parse that wedges has to be
+  # killable: it would otherwise hold a que worker open for good
+  def self.run_extractor(raw_html, url)
+    Open3.popen3(NODE_BIN, EXTRACT_SCRIPT, url.to_s) do |stdin, stdout, stderr, wait_thr|
+      out = Thread.new { stdout.read }
+      err = Thread.new { stderr.read }
+
+      begin
+        stdin.write(raw_html.to_s)
+      rescue Errno::EPIPE
+        # the extractor gave up before it read the page, so its complaint is on stderr
+      ensure
+        stdin.close
+      end
+
+      unless wait_thr.join(EXTRACT_TIMEOUT)
+        Process.kill('KILL', wait_thr.pid)
+        wait_thr.join
+        raise ExtractionError, "extracting #{url} timed out after #{EXTRACT_TIMEOUT}s"
+      end
+
+      raise ExtractionError, "extracting #{url} failed: #{err.value.strip}" unless wait_thr.value.success?
+
+      out.value
+    end
+  rescue Errno::ENOENT
+    raise ExtractionError, "#{NODE_BIN} is not on the path, run rake server:install"
+  end
+  private_class_method :run_extractor
 end

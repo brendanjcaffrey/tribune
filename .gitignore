@@ -1,6 +1,7 @@
 /newsletters/*.epub
 /newsletters/*.html
 /newsletters/*.pdf
+/newsletters/images/
 /config.yaml
 /public
 /tribune-dev.conf

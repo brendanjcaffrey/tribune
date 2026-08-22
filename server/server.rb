@@ -11,6 +11,7 @@ require_relative 'db'
 require_relative 'jwt'
 require_relative 'article_extractor'
 require_relative 'epub'
+require_relative 'jobs/extract_article_job'
 
 ANY_USERS_EXIST_QUERY = 'SELECT EXISTS(SELECT 1 FROM users);'
 VALID_USERNAME_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE username = $1);'
@@ -27,7 +28,7 @@ GET_NEWSLETTERS_BEFORE_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at
 CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, source_id, source_mime_type) VALUES ($1, $2, $3, $4) RETURNING id;'
 CREATE_NEWSLETTER_AT_TIME_QUERY = 'INSERT INTO newsletters (title, author, source_id, source_mime_type, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING id;'
 NEWSLETTER_ID_EXISTS_QUERY = 'SELECT EXISTS(SELECT 1 FROM newsletters WHERE id = $1 AND deleted = FALSE);'
-NEWSLETTER_SOURCE_ID_EXISTS_QUERY = 'SELECT EXISTS(SELECT 1 FROM newsletters WHERE source_id = $1);'
+NEWSLETTER_FOR_SOURCE_ID_QUERY = 'SELECT id, source_mime_type FROM newsletters WHERE source_id = $1;'
 NEWSLETTER_SOURCE_MIME_TYPE_QUERY = 'SELECT source_mime_type FROM newsletters WHERE id = $1 AND deleted = FALSE;'
 
 MARK_NEWSLETTER_READ_QUERY = <<~SQL
@@ -74,19 +75,12 @@ EPUB_UPDATED_NEWSLETTER_QUERY = <<-SQL
   WHERE source_id = $1
   RETURNING id;
 SQL
-SOURCE_UPDATED_NEWSLETTER_QUERY = <<-SQL
+SOURCE_RECEIVED_NEWSLETTER_QUERY = <<-SQL
   UPDATE newsletters
   SET
-      title = $1,
-      author = $2,
       updated_at = CURRENT_TIMESTAMP,
-      epub_updated_at = CURRENT_TIMESTAMP,
-      source_updated_at = CURRENT_TIMESTAMP,
-      progress = '',
-      read = FALSE,
-      deleted = FALSE
-  WHERE source_id = $3 and source_mime_type = $4
-  RETURNING id;
+      source_updated_at = CURRENT_TIMESTAMP
+  WHERE id = $1;
 SQL
 
 EPUB_MIME_TYPE = 'application/epub+zip'
@@ -162,15 +156,19 @@ class Server < Sinatra::Base
       "#{id}.epub"
     end
 
+    def images_dir(id)
+      File.join(CONFIG.newsletters_dir, 'images', id.to_s)
+    end
+
     # the uploader sends the images it found on the page alongside the html, each
     # in its own form field, and metadata['images'] pairs those fields back up
     # with the src they had in the page. anything missing or unusable is just left
     # out, and the epub falls back to downloading it.
     def uploaded_images(metadata)
       entries = metadata['images']
-      return {} unless entries.is_a?(Array)
+      return [] unless entries.is_a?(Array)
 
-      entries.each_with_object({}) do |entry, images|
+      entries.filter_map do |entry|
         next unless entry.is_a?(Hash)
 
         src = entry['src']
@@ -180,7 +178,25 @@ class Server < Sinatra::Base
         upload = params[field]
         next unless upload.is_a?(Hash) && upload[:tempfile]
 
-        images[src] = { path: upload[:tempfile].path, type: upload[:type] }
+        { src: src, tempfile: upload[:tempfile], type: upload[:type] }
+      end
+    end
+
+    # rack deletes the uploads the moment the request is over, so anything the
+    # extraction job still needs has to be moved somewhere it will keep. the job
+    # takes the directory away again once it has built the epub.
+    def persist_uploaded_images(id, metadata)
+      dir = images_dir(id)
+      FileUtils.rm_rf(dir)
+
+      images = uploaded_images(metadata)
+      return [] if images.empty?
+
+      FileUtils.mkdir_p(dir)
+      images.each_with_index.map do |image, index|
+        path = File.join(dir, index.to_s)
+        FileUtils.move(image[:tempfile].path, path)
+        { src: image[:src], path: path, type: image[:type] }
       end
     end
   end
@@ -332,25 +348,31 @@ class Server < Sinatra::Base
     halt 400, 'Missing url in metadata' if url.nil? || url.empty?
 
     source_mime_type = params[:raw_source_file][:type]
-    result = ArticleExtractor.clean_html(File.read(raw_source_tempfile.path), url)
-    epub_tempfile = Tempfile.new('newsletter_epub')
-    Epub.generate(result.title, result.author, result.content, epub_tempfile.path, uploaded_images(metadata))
+    existing = query(NEWSLETTER_FOR_SOURCE_ID_QUERY, [url]).first
+    halt 409, 'Source already stored as a different mime type' if existing && existing['source_mime_type'] != source_mime_type
 
-    exists = query(NEWSLETTER_SOURCE_ID_EXISTS_QUERY, [url])[0]['exists'] == 't'
-    result = if exists
-               # NB: this query will fail intentionally if the source_mime_type is different
-               query(SOURCE_UPDATED_NEWSLETTER_QUERY, [result.title, result.author, url, source_mime_type])
-             else
-               query(CREATE_NEWSLETTER_QUERY, [result.title, result.author, url, source_mime_type])
-             end
-
-    if (id = result[0]['id'])
-      FileUtils.move(raw_source_tempfile.path, source_path(id, source_mime_type))
-      FileUtils.move(epub_tempfile.path, epub_path(id))
-      json({ id: id.to_i })
+    if existing
+      id = existing['id'].to_i
+      update_query(SOURCE_RECEIVED_NEWSLETTER_QUERY, [id])
     else
-      halt 500, 'Failed to create newsletter'
+      # the url stands in for a title until the extraction job has a real one,
+      # since the column is not null and nothing has read the page yet
+      result = query(CREATE_NEWSLETTER_QUERY, [url, '', url, source_mime_type])
+      halt 500, 'Failed to create newsletter' if result.empty? || result[0]['id'].nil?
+
+      id = result[0]['id'].to_i
     end
+
+    FileUtils.move(raw_source_tempfile.path, source_path(id, source_mime_type))
+
+    ExtractArticleJob.enqueue(
+      newsletter_id: id,
+      url: url,
+      paths: { source: source_path(id, source_mime_type), epub: epub_path(id), images_dir: images_dir(id) },
+      images: persist_uploaded_images(id, metadata)
+    )
+
+    json({ id: id })
   end
 
   get '/newsletters/:id/source' do

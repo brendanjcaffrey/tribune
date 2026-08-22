@@ -39,6 +39,9 @@ jobs:
     - name: npm ci
       run: cd web && npm ci
 
+    - name: npm ci (article extractor)
+      run: cd server/extract && npm ci
+
     - name: build web
       run: bundle exec rake web:build
 

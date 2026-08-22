@@ -1,0 +1,11 @@
+{
+  "name": "tribune-extract",
+  "private": true,
+  "version": "1.0.0",
+  "description": "readability extraction for the ruby article extractor",
+  "main": "extract.js",
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "jsdom": "^26.1.0"
+  }
+}

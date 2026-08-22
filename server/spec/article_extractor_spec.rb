@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
+require 'nokogiri'
 require 'rspec'
 require_relative '../article_extractor'
 
 RSpec.describe 'ArticleExtractor.clean_html' do
   let(:url) { 'https://example.com/blog/posts/an-article' }
 
-  # readability gives up & retries below :retry_length (250 chars), so the body needs real bulk
+  # readability keeps retrying with looser rules below :charThreshold, so the body needs real bulk
   let(:body) do
     <<~HTML
       <p>The first paragraph of the article carries enough prose that readability scores it as
@@ -103,5 +104,54 @@ RSpec.describe 'ArticleExtractor.clean_html' do
     content = ArticleExtractor.clean_html(html, url).content
     expect(content).not_to include('<img')
     expect(content).to include('the best candidate on the page')
+  end
+
+  it 'keeps tables, with the spans that make them readable' do
+    table = '<table><thead><tr><th colspan="2">head</th></tr></thead><tbody><tr><td>a</td><td>b</td></tr></tbody></table>'
+    content = ArticleExtractor.clean_html(page(article: body + table), url).content
+    expect(content).to include('<table>')
+    expect(content).to include('colspan="2"')
+    expect(content).to include('<td>a</td>')
+  end
+
+  it 'drops elements an epub reader cannot render' do
+    embeds = '<iframe src="https://youtube.com/embed/x"></iframe><script>alert(1)</script><form><input /></form>'
+    content = ArticleExtractor.clean_html(page(article: body + embeds), url).content
+    expect(content).not_to include('<iframe')
+    expect(content).not_to include('<script')
+    expect(content).not_to include('<input')
+  end
+
+  # xml attribute names like @click & :class would otherwise break the serializer,
+  # and none of the rest of them mean anything in an epub
+  it 'drops every attribute the epub does not render' do
+    para = '<p @click="boom" data-id="7" dir="rtl" class="lede">A paragraph with attributes on it that
+            has to be long enough that readability keeps it around rather than cleaning it away.</p>'
+    content = ArticleExtractor.clean_html(page(article: body + para), url).content
+    expect(content).to include('A paragraph with attributes on it')
+    expect(content).not_to include('@click')
+    expect(content).not_to include('data-id')
+    expect(content).not_to include('dir=')
+    expect(content).not_to include('class=')
+  end
+
+  # epub.rb parses this back with Nokogiri::XML, which recovers from bad markup
+  # silently & leaves the article mangled, so it has to come out well formed
+  it 'returns well formed xhtml' do
+    html = page(article: "#{body}<p>a break<br>and an unclosed paragraph")
+    content = ArticleExtractor.clean_html(html, url).content
+    expect(content).to include('<br />')
+    expect(Nokogiri::XML(content, &:strict).errors).to be_empty
+  end
+
+  it 'raises when the page has no article in it' do
+    expect { ArticleExtractor.clean_html('<html><body></body></html>', url) }
+      .to raise_error(ExtractionError, /no article content found/)
+  end
+
+  it 'raises when node is not installed' do
+    stub_const('ArticleExtractor::NODE_BIN', 'definitely-not-node')
+    expect { ArticleExtractor.clean_html(page, url) }
+      .to raise_error(ExtractionError, /not on the path/)
   end
 end

@@ -1287,6 +1287,13 @@ RSpec.describe 'Tribune Server' do
     before do
       create_user
       CONFIG.newsletters_dir = temp_dir
+      allow(ExtractArticleJob).to receive(:enqueue)
+    end
+
+    def enqueued_images
+      args = nil
+      expect(ExtractArticleJob).to have_received(:enqueue) { |kwargs| args = kwargs }
+      args[:images]
     end
 
     let(:pdf_file_path) do
@@ -1381,13 +1388,7 @@ RSpec.describe 'Tribune Server' do
       expect(last_response.status).to eq(400)
     end
 
-    it 'cleans the html & turns it into an epub' do
-      allow(ArticleExtractor).to receive(:clean_html)
-        .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
-      allow(Epub).to receive(:generate) do |_, _, _, epub_path|
-        File.write(epub_path, 'epub epub epub')
-      end
-
+    it 'stores the page & queues the extraction' do
       post '/newsletters/raw', { metadata: metadata_file, raw_source_file: html_file }, get_auth_header
       expect(last_response).to be_ok
       id = JSON.parse(last_response.body)['id']
@@ -1396,35 +1397,35 @@ RSpec.describe 'Tribune Server' do
       expect(File).to exist(source_path)
       expect(File.read(source_path)).to eq('html html html')
 
-      epub_path = File.join(temp_dir, "#{id}.epub")
-      expect(File).to exist(epub_path)
-      expect(File.read(epub_path)).to eq('epub epub epub')
+      expect(ExtractArticleJob).to have_received(:enqueue).with(
+        newsletter_id: id, url: metadata['url'], images: [],
+        paths: { source: source_path, epub: File.join(temp_dir, "#{id}.epub"),
+                 images_dir: File.join(temp_dir, 'images', id.to_s) }
+      )
+    end
 
-      expect(ArticleExtractor).to have_received(:clean_html).with('html html html', metadata['url'])
-      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything, {})
+    # the job fills the real ones in, but the row has to exist & be listable
+    # before it runs, and the title column is not null
+    it 'titles the newsletter with its url until the job has extracted one' do
+      post '/newsletters/raw', { metadata: metadata_file, raw_source_file: html_file }, get_auth_header
+      expect(last_response).to be_ok
+      id = JSON.parse(last_response.body)['id']
 
       get '/newsletters', {}, get_auth_header
       expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(item['id']).to eq(id)
-      expect(item['title']).to eq('clean title')
-      expect(item['author']).to eq('clean author')
+      expect(item['title']).to eq(metadata['url'])
+      expect(item['author']).to eq('')
       expect(item['source_mime_type']).to eq(HTML_MIME_TYPE)
       expect(item['read']).to be(false)
       expect(item['deleted']).to be(false)
       expect(Time.parse(item['created_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
-      expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(Time.parse(item['source_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
     end
 
-    it 'updates source and epub if the url exists already', :focus do
-      allow(ArticleExtractor).to receive(:clean_html)
-        .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
-      allow(Epub).to receive(:generate) do |_, _, _, epub_path|
-        File.write(epub_path, 'epub epub epub')
-      end
-
+    it 'updates the source & requeues if the url exists already' do
       create_newsletter(id: 1, source_id: metadata['url'], created_at: BASE_TIME, updated_at: BASE_TIME, epub_updated_at: BASE_TIME, source_updated_at: BASE_TIME, read: true, deleted: true)
 
       post '/newsletters/raw', { metadata: metadata_file, raw_source_file: html_file }, get_auth_header
@@ -1432,37 +1433,35 @@ RSpec.describe 'Tribune Server' do
       id = JSON.parse(last_response.body)['id']
       expect(id).to eq(1)
 
-      source_path = File.join(temp_dir, "#{id}.html")
-      expect(File).to exist(source_path)
+      source_path = File.join(temp_dir, '1.html')
       expect(File.read(source_path)).to eq('html html html')
-
-      epub_path = File.join(temp_dir, "#{id}.epub")
-      expect(File).to exist(epub_path)
-      expect(File.read(epub_path)).to eq('epub epub epub')
-
-      expect(ArticleExtractor).to have_received(:clean_html).with('html html html', metadata['url'])
-      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything, {})
+      expect(ExtractArticleJob).to have_received(:enqueue).with(hash_including(newsletter_id: 1))
 
       get '/newsletters', {}, get_auth_header
-      expect(last_response).to be_ok
       item = JSON.parse(last_response.body)['result'][0]
       expect(item['id']).to eq(1)
-      expect(item['read']).to be(false)
-      expect(item['deleted']).to be(false)
+      # the title, author, read & deleted flags stay put until the job has run
+      expect(item['title']).to eq('t1')
+      expect(item['read']).to be(true)
+      expect(item['deleted']).to be(true)
       expect(Time.parse(item['created_at'])).to be_within(HALF_SECOND).of(BASE_TIME)
+      expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_SECOND).of(BASE_TIME)
       expect(Time.parse(item['updated_at'])).to be_within(HALF_SECOND).of(Time.now)
-      expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
       expect(Time.parse(item['source_updated_at'])).to be_within(HALF_SECOND).of(Time.now)
     end
 
-    it 'passes the uploaded images to the epub' do
+    it 'returns an error if the url is already stored under another mime type' do
+      create_newsletter(id: 1, source_id: metadata['url'], source_mime_type: PDF_MIME_TYPE)
+
+      post '/newsletters/raw', { metadata: metadata_file, raw_source_file: html_file }, get_auth_header
+      expect(last_response.status).to eq(409)
+      expect(ExtractArticleJob).not_to have_received(:enqueue)
+    end
+
+    # rack throws the uploads away the moment the request is over, so the job
+    # gets copies rather than the tempfiles themselves
+    it 'keeps the uploaded images somewhere the job can still read them' do
       metadata['images'] = [{ 'field' => 'image_0', 'src' => 'http://example.com/img.png' }]
-      allow(ArticleExtractor).to receive(:clean_html)
-        .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
-      allow(Epub).to receive(:generate) do |_, _, _, epub_path, images|
-        expect(File.read(images['http://example.com/img.png'][:path])).to eq('this is a png')
-        File.write(epub_path, 'epub epub epub')
-      end
 
       post '/newsletters/raw', {
         'metadata' => metadata_file,
@@ -1470,11 +1469,14 @@ RSpec.describe 'Tribune Server' do
         'image_0' => png_file
       }, get_auth_header
       expect(last_response).to be_ok
+      id = JSON.parse(last_response.body)['id']
 
-      expect(Epub).to have_received(:generate).with(
-        'clean title', 'clean author', 'clean html', anything,
-        { 'http://example.com/img.png' => { path: anything, type: 'image/png' } }
-      )
+      images = enqueued_images
+      expect(images.length).to eq(1)
+      expect(images[0][:src]).to eq('http://example.com/img.png')
+      expect(images[0][:type]).to eq('image/png')
+      expect(images[0][:path]).to start_with(File.join(temp_dir, 'images', id.to_s))
+      expect(File.read(images[0][:path])).to eq('this is a png')
     end
 
     it 'ignores image entries that have no matching upload' do
@@ -1484,15 +1486,10 @@ RSpec.describe 'Tribune Server' do
         { 'field' => 'image_1' },
         'nonsense'
       ]
-      allow(ArticleExtractor).to receive(:clean_html)
-        .and_return(CleanedHTML.new('clean title', 'clean author', 'clean html'))
-      allow(Epub).to receive(:generate) do |_, _, _, epub_path|
-        File.write(epub_path, 'epub epub epub')
-      end
 
       post '/newsletters/raw', { metadata: metadata_file, raw_source_file: html_file }, get_auth_header
       expect(last_response).to be_ok
-      expect(Epub).to have_received(:generate).with('clean title', 'clean author', 'clean html', anything, {})
+      expect(enqueued_images).to eq([])
     end
   end
 end
