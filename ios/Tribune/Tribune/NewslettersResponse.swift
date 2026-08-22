@@ -5,6 +5,7 @@ struct NewslettersResponse: Codable {
         let id: Int
         let title: String
         let author: String
+        let source_id: String
         let source_mime_type: String
         let read: Bool
         let deleted: Bool

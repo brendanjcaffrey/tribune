@@ -8,6 +8,7 @@ struct NewslettersList: View {
     let searchText: String
     let openEpub: (_: Newsletter) -> Void
     let openSource: (_: Newsletter) -> Void
+    let openURL: (_: Newsletter) -> Void
     let deleteNewsletter: (_: Newsletter) -> Void
     let toggleRead: (_: Newsletter) -> Void
 
@@ -17,12 +18,14 @@ struct NewslettersList: View {
         searchText: String,
         openEpub: @escaping (_: Newsletter) -> Void,
         openSource: @escaping (_: Newsletter) -> Void,
+        openURL: @escaping (_: Newsletter) -> Void,
         deleteNewsletter: @escaping (_: Newsletter) -> Void,
         toggleRead: @escaping (_: Newsletter) -> Void
     ) {
         self.searchText = searchText
         self.openEpub = openEpub
         self.openSource = openSource
+        self.openURL = openURL
         self.deleteNewsletter = deleteNewsletter
         self.toggleRead = toggleRead
 
@@ -64,6 +67,7 @@ struct NewslettersList: View {
                             n: n,
                             openEpub: { openEpub(n) },
                             openSource: { openSource(n) },
+                            openURL: { openURL(n) },
                             deleteNewsletter: { deleteNewsletter(n) },
                             toggleRead: { toggleRead(n) },
                         )

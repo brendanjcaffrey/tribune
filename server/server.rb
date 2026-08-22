@@ -19,7 +19,7 @@ VALID_USERNAME_AND_PASSWORD_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE use
 
 # keeping swift and javascript happy with the date format
 DATE_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS.US'
-GET_NEWSLETTERS_QUERY_START = "SELECT id, title, author, source_mime_type, read, deleted, progress, to_char(created_at, '#{DATE_FORMAT}') || 'Z' as created_at, updated_at, epub_updated_at, source_updated_at FROM newsletters".freeze
+GET_NEWSLETTERS_QUERY_START = "SELECT id, title, author, source_id, source_mime_type, read, deleted, progress, to_char(created_at, '#{DATE_FORMAT}') || 'Z' as created_at, updated_at, epub_updated_at, source_updated_at FROM newsletters".freeze
 GET_NEWSLETTERS_QUERY_END = 'ORDER BY updated_at DESC, id DESC LIMIT 100;'
 GET_NEWSLETTERS_QUERY = "#{GET_NEWSLETTERS_QUERY_START} #{GET_NEWSLETTERS_QUERY_END}".freeze
 GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) > ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze

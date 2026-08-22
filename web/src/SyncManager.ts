@@ -173,6 +173,7 @@ export class SyncManager {
         id: n.id,
         title: n.title,
         author: n.author,
+        sourceId: n.source_id,
         sourceMimeType: n.source_mime_type,
         read: n.read,
         deleted: n.deleted,

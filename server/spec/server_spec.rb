@@ -299,6 +299,7 @@ RSpec.describe 'Tribune Server' do
       expect(item['id']).to eq(1)
       expect(item['title']).to eq('t1')
       expect(item['author']).to eq('a1')
+      expect(item['source_id']).to eq('si1')
       expect(item['read']).to be(false)
       expect(item['deleted']).to be(false)
       expect(item['progress']).to eq('')
@@ -306,6 +307,15 @@ RSpec.describe 'Tribune Server' do
       expect(Time.parse(item['updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
       expect(Time.parse(item['epub_updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
       expect(Time.parse(item['source_updated_at'])).to be_within(HALF_MICROSECOND).of(BASE_TIME + 1)
+    end
+
+    it 'returns the source id, which is the page url for saved web pages' do
+      create_newsletter(id: 1, source_id: 'https://example.com/post')
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+
+      item = JSON.parse(last_response.body)['result'][0]
+      expect(item['source_id']).to eq('https://example.com/post')
     end
 
     it 'returns created_at in iso8601 with 6 digits of fractional seconds' do

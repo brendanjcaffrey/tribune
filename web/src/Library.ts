@@ -2,12 +2,15 @@ import { memoize } from "lodash";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
 const DATABASE_NAME = "library";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 export interface Newsletter {
   id: number;
   title: string;
   author: string;
+  // the server's identifier for where this came from, e.g. a url for pages saved from
+  // the browser extension. null for newsletters synced before this existed
+  sourceId: string | null;
   sourceMimeType: string;
   read: boolean;
   deleted: boolean;
@@ -59,6 +62,20 @@ class Library {
             if (n.sourceLastAccessedAt != null) {
               n.sourceVersion = n.sourceUpdatedAt ?? null;
             }
+
+            await cursor.update(n);
+            cursor = await cursor.continue();
+          }
+        }
+        // v2 -> v3: add the source id, which older rows have no value for
+        if (oldVersion < 3) {
+          const store = tx.objectStore("newsletters");
+
+          let cursor = await store.openCursor();
+          while (cursor) {
+            const n = cursor.value as Newsletter;
+
+            n.sourceId = null;
 
             await cursor.update(n);
             cursor = await cursor.continue();

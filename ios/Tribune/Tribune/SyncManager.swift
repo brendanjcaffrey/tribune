@@ -97,6 +97,7 @@ final class SyncManager: ObservableObject {
                 id: item.id,
                 title: item.title,
                 author: item.author,
+                sourceId: item.source_id,
                 sourceMimeType: item.source_mime_type,
                 read: item.read,
                 deleted: item.deleted,

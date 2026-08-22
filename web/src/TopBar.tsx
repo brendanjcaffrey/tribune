@@ -16,12 +16,14 @@ import Tooltip from "react-bootstrap/Tooltip";
 
 import {
   ArrowRepeat,
+  BoxArrowUpRight,
   Download,
   Gear,
   Search,
   XLg,
 } from "react-bootstrap-icons";
 import { Newsletter } from "./Library";
+import { openSourceUrl, sourceUrl } from "./Util";
 
 interface TopBarProps {
   newsletterShown: boolean;
@@ -41,6 +43,12 @@ export default function TopBar({
   const [syncRunning, setSyncRunning] = useState(false);
   const authVerified = useAtomValue(authVerifiedAtom);
   const colorScheme = useColorScheme();
+
+  // newsletters saved from a web page keep the page url as their source id, so the one
+  // being read can be opened at its original location
+  const displayedUrl = newsletterShown
+    ? sourceUrl(displayedNewsletter?.sourceId)
+    : null;
 
   const toggleShowDownloads = () => {
     setShowDownloads((prev) => !prev);
@@ -93,11 +101,26 @@ export default function TopBar({
         data-bs-theme="dark"
         className="px-3"
       >
-        <Navbar.Brand className="text-truncate">
+        <Navbar.Brand className="text-truncate me-0">
           {newsletterShown && displayedNewsletter
             ? displayedNewsletter.title
             : "Tribune"}
         </Navbar.Brand>
+        {displayedUrl !== null && (
+          <OverlayTrigger
+            placement="bottom"
+            overlay={<Tooltip>Open URL</Tooltip>}
+          >
+            <Button
+              variant="link"
+              className="text-white p-1 flex-shrink-0"
+              onClick={() => openSourceUrl(displayedUrl)}
+              aria-label="open url"
+            >
+              <BoxArrowUpRight size={18} />
+            </Button>
+          </OverlayTrigger>
+        )}
         <div className="flex-grow-1" />
         {authVerified && !newsletterShown && (
           <div className="d-flex align-items-center gap-2">

@@ -10,6 +10,7 @@ import BackgroundTasks
 struct MainView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURLAction
     @EnvironmentObject var session: Session
     @EnvironmentObject private var syncManager: SyncManager
     @EnvironmentObject private var downloadManager: DownloadManager
@@ -28,6 +29,7 @@ struct MainView: View {
             searchText: searchText,
             openEpub: { n in openEpub(n) },
             openSource: { n in openSource(n) },
+            openURL: { n in openURL(n) },
             deleteNewsletter: { n in delete(n) },
             toggleRead: { n in toggleRead(n) },
         )
@@ -149,6 +151,14 @@ extension MainView {
                 showDownloadToast = true
             }
         }
+    }
+
+    /// newsletters saved from a web page keep the page url as their source id, so it can be
+    /// handed off to the browser
+    @MainActor
+    func openURL(_ n: Newsletter) {
+        guard let url = n.sourceURL else { return }
+        openURLAction(url)
     }
 
     @MainActor

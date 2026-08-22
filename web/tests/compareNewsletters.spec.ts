@@ -15,6 +15,7 @@ function buildNewsletter(
     id,
     title: id.toString(),
     author: id.toString(),
+    sourceId: "https://example.com/page",
     sourceMimeType: "index/html",
     read,
     deleted: false,

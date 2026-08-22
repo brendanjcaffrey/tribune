@@ -41,6 +41,7 @@ function buildNewsletter(input: PartialNewsletterInput): Newsletter {
   const defaultNewsletterValues: Omit<Newsletter, "id" | "createdAt"> = {
     title: input.id.toString(),
     author: input.id.toString(),
+    sourceId: "https://example.com/page",
     sourceMimeType: "text/html",
     read: false,
     deleted: false,

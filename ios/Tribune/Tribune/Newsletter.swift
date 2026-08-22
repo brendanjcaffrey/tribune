@@ -7,6 +7,7 @@ public final class Newsletter {
     public var id: Int
     public var title: String
     public var author: String
+    public var sourceId: String?
     public var sourceFileType: FileType
     public var read: Bool
     public var deleted: Bool
@@ -29,6 +30,7 @@ public final class Newsletter {
         id: Int,
         title: String,
         author: String,
+        sourceId: String?,
         sourceMimeType: String,
         read: Bool,
         deleted: Bool,
@@ -45,6 +47,7 @@ public final class Newsletter {
         self.id = id
         self.title = title
         self.author = author
+        self.sourceId = sourceId
         self.sourceFileType = Files.mimeToFileType(sourceMimeType)
         self.read = read
         self.deleted = deleted
@@ -57,6 +60,17 @@ public final class Newsletter {
         self.sourceVersion = sourceVersion
         self.epubLastAccessedAt = epubLastAccessedAt
         self.sourceLastAccessedAt = sourceLastAccessedAt
+    }
+
+    /// the source id is a url when the newsletter came from a saved web page, so it can be
+    /// opened in the browser. emails and the like use other schemes, which aren't openable
+    public var sourceURL: URL? {
+        guard let sourceId, let url = URL(string: sourceId) else { return nil }
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return nil
+        }
+        guard url.host?.isEmpty == false else { return nil }
+        return url
     }
 
     // yyyy-MM-dd hh:mm am/pm in local time, with lowercase am/pm

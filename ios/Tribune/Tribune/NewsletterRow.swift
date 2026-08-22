@@ -9,6 +9,7 @@ struct NewsletterRow: View {
     let n: Newsletter
     let openEpub: () -> Void
     let openSource: () -> Void
+    let openURL: () -> Void
     let deleteNewsletter: () -> Void
     let toggleRead: () -> Void
 
@@ -78,6 +79,9 @@ struct NewsletterRow: View {
         Button("Mark as \(n.read ? "Unread" : "Read")", action: { toggleRead() })
         Button("Open ePub", action: { openEpub() })
         Button("Open Source", action: { openSource() })
+        if n.sourceURL != nil {
+            Button("Open URL", action: { openURL() })
+        }
         Button("Delete", role: .destructive, action: { deleteNewsletter() })
         Button("Cancel", role: .cancel) { }
     }

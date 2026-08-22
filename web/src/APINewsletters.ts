@@ -14,6 +14,7 @@ export interface APINewsletter {
   id: number;
   title: string;
   author: string;
+  source_id: string;
   source_mime_type: string;
   read: boolean;
   deleted: boolean;

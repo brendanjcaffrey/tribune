@@ -4,9 +4,11 @@ import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 import { useAtomValue } from "jotai";
 import { showNewsletterFileCallbackAtom } from "./State";
+import { openSourceUrl, sourceUrl } from "./Util";
 
 import {
   Book,
+  BoxArrowUpRight,
   Envelope,
   EnvelopeOpen,
   FileEarmarkText,
@@ -46,6 +48,18 @@ export function NewsletterContextMenu({
       return;
     }
     showNewsletterFileCallback.fn(data.newsletter, "source");
+    handleClose();
+  };
+
+  // newsletters saved from a web page keep the page url as their source id, so it can
+  // be handed off to a new tab
+  const url = sourceUrl(data?.newsletter.sourceId);
+
+  const openUrl = () => {
+    if (url === null) {
+      return;
+    }
+    openSourceUrl(url);
     handleClose();
   };
 
@@ -147,6 +161,11 @@ export function NewsletterContextMenu({
       <button className={itemClass} onClick={showSource}>
         <FileEarmarkText /> Open Source
       </button>
+      {url !== null && (
+        <button className={itemClass} onClick={openUrl}>
+          <BoxArrowUpRight /> Open URL
+        </button>
+      )}
       <button className={`${itemClass} text-danger`} onClick={markDeleted}>
         <Trash /> Delete
       </button>
