@@ -3,6 +3,7 @@ import { useAtom, useAtomValue } from "jotai";
 import { anyDownloadErrorsAtom, authVerifiedAtom, searchAtom } from "./State";
 import DownloadsPanel from "./DownloadsPanel";
 import SettingsPanel from "./SettingsPanel";
+import ReadStatusToggle from "./ReadStatusToggle";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
 import { useColorScheme } from "./useColorScheme";
@@ -177,15 +178,21 @@ export default function TopBar({
             </div>
           </div>
         )}
-        {authVerified && newsletterShown && (
-          <Button
-            variant="link"
-            className="text-white p-1"
-            onClick={closeNewsletter}
-            aria-label="close"
-          >
-            <XLg size={22} />
-          </Button>
+        {authVerified && newsletterShown && displayedNewsletter && (
+          <div className="d-flex align-items-center gap-1">
+            <ReadStatusToggle
+              newsletterId={displayedNewsletter.id}
+              initiallyRead={displayedNewsletter.read}
+            />
+            <Button
+              variant="link"
+              className="text-white p-1"
+              onClick={closeNewsletter}
+              aria-label="close"
+            >
+              <XLg size={22} />
+            </Button>
+          </div>
         )}
       </Navbar>
       <DownloadsPanel
