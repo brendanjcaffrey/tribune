@@ -23,4 +23,9 @@ enum AppConfig {
         }
         return h
     }()
+
+    static let appIdentifierPrefix: String = {
+        let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String
+        return prefix ?? ""
+    }()
 }

@@ -10,6 +10,7 @@
 		C633CFA42E9AB709007F8C2D /* Reachability in Frameworks */ = {isa = PBXBuildFile; productRef = C633CFA32E9AB709007F8C2D /* Reachability */; };
 		C66CADD22E9345C8002FA0F5 /* AlertToast in Frameworks */ = {isa = PBXBuildFile; productRef = C66CADD12E9345C8002FA0F5 /* AlertToast */; };
 		C66EEE002E94BA7D00AC6E7B /* TextBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = C66EEDFF2E94BA7D00AC6E7B /* TextBuilder */; };
+		C6F0A0010000000000000A0A /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C6F0A0010000000000000A02 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -27,6 +28,13 @@
 			remoteGlobalIDString = C61648E82E8D703B004B9FA4;
 			remoteInfo = Tribune;
 		};
+		C6F0A0010000000000000A0C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C61648E12E8D703B004B9FA4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C6F0A0010000000000000A01;
+			remoteInfo = ShareExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +42,7 @@
 		C61648F82E8D703C004B9FA4 /* TribuneTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TribuneTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C61649022E8D703C004B9FA4 /* TribuneUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TribuneUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C6AB99882E93078900874657 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		C6F0A0010000000000000A02 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -41,8 +50,17 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Tribune.entitlements,
 			);
 			target = C61648E82E8D703B004B9FA4 /* Tribune */;
+		};
+		C6F0A0010000000000000A05 /* Exceptions for "ShareExtension" folder in "ShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				ShareExtension.entitlements,
+			);
+			target = C6F0A0010000000000000A01 /* ShareExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -63,6 +81,19 @@
 		C61649052E8D703C004B9FA4 /* TribuneUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = TribuneUITests;
+			sourceTree = "<group>";
+		};
+		C6F0A0010000000000000A03 /* ShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C6F0A0010000000000000A05 /* Exceptions for "ShareExtension" folder in "ShareExtension" target */,
+			);
+			path = ShareExtension;
+			sourceTree = "<group>";
+		};
+		C6F0A0010000000000000A04 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -92,6 +123,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C6F0A0010000000000000A07 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -99,7 +137,9 @@
 			isa = PBXGroup;
 			children = (
 				C6AB99882E93078900874657 /* Config.xcconfig */,
+				C6F0A0010000000000000A04 /* Shared */,
 				C61648EB2E8D703B004B9FA4 /* Tribune */,
+				C6F0A0010000000000000A03 /* ShareExtension */,
 				C61648FB2E8D703C004B9FA4 /* TribuneTests */,
 				C61649052E8D703C004B9FA4 /* TribuneUITests */,
 				C66CADD02E9345C8002FA0F5 /* Frameworks */,
@@ -113,6 +153,7 @@
 				C61648E92E8D703B004B9FA4 /* Tribune.app */,
 				C61648F82E8D703C004B9FA4 /* TribuneTests.xctest */,
 				C61649022E8D703C004B9FA4 /* TribuneUITests.xctest */,
+				C6F0A0010000000000000A02 /* ShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -134,12 +175,15 @@
 				C61648E52E8D703B004B9FA4 /* Sources */,
 				C61648E62E8D703B004B9FA4 /* Frameworks */,
 				C61648E72E8D703B004B9FA4 /* Resources */,
+				C6F0A0010000000000000A09 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C6F0A0010000000000000A0B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
+				C6F0A0010000000000000A04 /* Shared */,
 				C61648EB2E8D703B004B9FA4 /* Tribune */,
 			);
 			name = Tribune;
@@ -198,6 +242,29 @@
 			productReference = C61649022E8D703C004B9FA4 /* TribuneUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		C6F0A0010000000000000A01 /* ShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C6F0A0010000000000000A0F /* Build configuration list for PBXNativeTarget "ShareExtension" */;
+			buildPhases = (
+				C6F0A0010000000000000A06 /* Sources */,
+				C6F0A0010000000000000A07 /* Frameworks */,
+				C6F0A0010000000000000A08 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C6F0A0010000000000000A04 /* Shared */,
+				C6F0A0010000000000000A03 /* ShareExtension */,
+			);
+			name = ShareExtension;
+			packageProductDependencies = (
+			);
+			productName = ShareExtension;
+			productReference = C6F0A0010000000000000A02 /* ShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -218,6 +285,9 @@
 					C61649012E8D703C004B9FA4 = {
 						CreatedOnToolsVersion = 26.0.1;
 						TestTargetID = C61648E82E8D703B004B9FA4;
+					};
+					C6F0A0010000000000000A01 = {
+						CreatedOnToolsVersion = 26.0.1;
 					};
 				};
 			};
@@ -243,9 +313,24 @@
 				C61648E82E8D703B004B9FA4 /* Tribune */,
 				C61648F72E8D703C004B9FA4 /* TribuneTests */,
 				C61649012E8D703C004B9FA4 /* TribuneUITests */,
+				C6F0A0010000000000000A01 /* ShareExtension */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C6F0A0010000000000000A09 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C6F0A0010000000000000A0A /* ShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXResourcesBuildPhase section */
 		C61648E72E8D703B004B9FA4 /* Resources */ = {
@@ -263,6 +348,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C61649002E8D703C004B9FA4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C6F0A0010000000000000A08 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -293,6 +385,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C6F0A0010000000000000A06 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -305,6 +404,11 @@
 			isa = PBXTargetDependency;
 			target = C61648E82E8D703B004B9FA4 /* Tribune */;
 			targetProxy = C61649032E8D703C004B9FA4 /* PBXContainerItemProxy */;
+		};
+		C6F0A0010000000000000A0B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C6F0A0010000000000000A01 /* ShareExtension */;
+			targetProxy = C6F0A0010000000000000A0C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -441,6 +545,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Tribune/Tribune.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = JD9296YG3D;
@@ -475,6 +580,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Tribune/Tribune.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = JD9296YG3D;
@@ -588,6 +694,64 @@
 			};
 			name = Release;
 		};
+		C6F0A0010000000000000A0D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JD9296YG3D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Push to Tribune";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jcaffrey.Tribune.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C6F0A0010000000000000A0E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JD9296YG3D;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Push to Tribune";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jcaffrey.Tribune.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -623,6 +787,15 @@
 			buildConfigurations = (
 				C61649132E8D703C004B9FA4 /* Debug */,
 				C61649142E8D703C004B9FA4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C6F0A0010000000000000A0F /* Build configuration list for PBXNativeTarget "ShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C6F0A0010000000000000A0D /* Debug */,
+				C6F0A0010000000000000A0E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

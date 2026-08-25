@@ -11,12 +11,10 @@ enum APIClient {
     private static let readPath = "/read"
     private static let unreadPath = "/unread"
     private static let progressPath = "/progress"
-    private static let keychainService = "com.jcaffrey.tribune.auth"
-    private static let keychainAccount = "jwt"
     private static let defaultTimeoutInterval = 2.5
 
     private static func getToken() throws -> String? {
-        return try Keychain.readJWT(service: keychainService, account: keychainAccount)
+        return try AuthToken.read()
     }
 
     static func hasToken() -> Bool {
@@ -44,7 +42,7 @@ enum APIClient {
         guard (200..<300).contains(code) else { throw APIError.badStatus(code) }
 
         let auth = try JSONDecoder().decode(AuthResponse.self, from: data)
-        try Keychain.storeJWT(auth.jwt, service: keychainService, account: keychainAccount)
+        try AuthToken.store(auth.jwt)
         return auth.jwt
     }
 
@@ -63,18 +61,18 @@ enum APIClient {
         guard (200..<300).contains(code) else {
             // only drop the cached token if the server explicitly rejected it
             if code == 401 || code == 403 {
-                try? Keychain.deleteJWT(service: keychainService, account: keychainAccount)
+                try? AuthToken.delete()
             }
             throw APIError.badStatus(code)
         }
 
         let refreshed = try JSONDecoder().decode(AuthResponse.self, from: data)
-        try Keychain.storeJWT(refreshed.jwt, service: keychainService, account: keychainAccount)
+        try AuthToken.store(refreshed.jwt)
         return refreshed.jwt
     }
 
     static func signOut() {
-        try? Keychain.deleteJWT(service: keychainService, account: keychainAccount)
+        try? AuthToken.delete()
     }
 
     // GET /newsletters

@@ -6,6 +6,8 @@
 	<string>$(API_HOST)</string>
 	<key>API_PROTOCOL</key>
 	<string>$(API_PROTOCOL)</string>
+	<key>AppIdentifierPrefix</key>
+	<string>$(AppIdentifierPrefix)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
