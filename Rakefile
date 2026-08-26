@@ -36,6 +36,14 @@ def que_migrate(config, dbname)
   puts "que-scheduler schema in #{dbname} is at version #{Que::Scheduler::Migrations.db_version}"
 end
 
+# repaint logo-web.png in a flat colour, keeping the original's alpha channel as
+# the shape. the parens are escaped because tty-command runs this through a shell
+def recolor_logo(command, source, colour, size, dest)
+  command.run("magick #{source} -alpha extract -alpha off " \
+              "\\( +clone -fill '#{colour}' -colorize 100 \\) +swap " \
+              "-compose copy_opacity -composite -resize #{size} PNG32:#{dest}")
+end
+
 command = TTY::Command.new
 
 ROOT = __dir__
@@ -436,6 +444,11 @@ namespace :logo do
     command.run('magick logos/logo-web.png -resize 32x32 web/public/favicon/favicon-32x32.png')
     command.run('magick logos/logo-web.png -resize 16x16 web/public/favicon/favicon-16x16.png')
     command.run('magick logos/logo-web.png -resize 16x16 web/public/favicon/favicon.ico')
+
+    # the glyph is black, so it disappears against a dark tab bar. these are the
+    # same icon in white, swapped in at runtime by the script in index.html
+    recolor_logo(command, 'logos/logo-web.png', '#ffffff', '32x32', 'web/public/favicon/favicon-dark-32x32.png')
+    recolor_logo(command, 'logos/logo-web.png', '#ffffff', '16x16', 'web/public/favicon/favicon-dark-16x16.png')
   end
 
   desc 'Update the firefox extension icons from logos/logo-firefox.png'
@@ -447,5 +460,11 @@ namespace :logo do
   desc 'Update the ios app icons from logos/logo-ios.png'
   task :ios do
     command.run('magick logos/logo-ios.png -resize 1024x1024 ios/Tribune/Tribune/Assets.xcassets/AppIcon.appiconset/logo-1024.png')
+  end
+
+  # notion wants a flat, single-colour icon on a transparent background
+  desc 'Build a grey, transparent notion emoji from logos/logo-web.png'
+  task :notion do
+    recolor_logo(command, 'logos/logo-web.png', '#808080', '512x512', 'logos/logo-notion-gray.png')
   end
 end

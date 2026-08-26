@@ -13,12 +13,19 @@ function developmentTab(): Plugin {
     name: "development-tab",
     apply: "serve",
     transformIndexHtml(html) {
-      return html
-        .replace(
-          "<title>Tribune</title>",
-          "<title>Tribune (Development)</title>",
-        )
-        .replaceAll("/favicon/", "/favicon-dev/");
+      return (
+        html
+          .replace(
+            "<title>Tribune</title>",
+            "<title>Tribune (Development)</title>",
+          )
+          .replaceAll("/favicon/", "/favicon-dev/")
+          // the development icon is red, which reads on a light or a dark tab
+          // bar, so there's no dark variant to point the rewrite at. dropping
+          // the attribute leaves the runtime swap in index.html with nothing
+          // to do rather than pointing it at a file that doesn't exist
+          .replaceAll(/\s*data-dark-href="[^"]*"/g, "")
+      );
     },
   };
 }

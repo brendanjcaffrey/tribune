@@ -16,12 +16,14 @@
       type="image/png"
       sizes="32x32"
       href="/favicon/favicon-32x32.png"
+      data-dark-href="/favicon/favicon-dark-32x32.png"
     />
     <link
       rel="icon"
       type="image/png"
       sizes="16x16"
       href="/favicon/favicon-16x16.png"
+      data-dark-href="/favicon/favicon-dark-16x16.png"
     />
     <link rel="manifest" href="/site.webmanifest" />
     <title>Tribune</title>
@@ -48,11 +50,24 @@
       // it in sync. bootstrap doesn't follow prefers-color-scheme on its own.
       (function () {
         var mq = window.matchMedia("(prefers-color-scheme: dark)");
+
+        // the favicon is a black glyph, which vanishes against a dark tab bar.
+        // swap in the white one for any icon that declares a dark variant. no
+        // browser picks a favicon by prefers-color-scheme on its own, so the
+        // light href stays on the element and we flip it here
+        var icons = [];
+        document.querySelectorAll("link[data-dark-href]").forEach(function (l) {
+          icons.push({ link: l, light: l.href, dark: l.dataset.darkHref });
+        });
+
         function apply() {
           document.documentElement.setAttribute(
             "data-bs-theme",
             mq.matches ? "dark" : "light",
           );
+          icons.forEach(function (i) {
+            i.link.href = mq.matches ? i.dark : i.light;
+          });
         }
         apply();
         mq.addEventListener("change", apply);
