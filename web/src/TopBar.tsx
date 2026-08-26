@@ -24,6 +24,7 @@ import {
   XLg,
 } from "react-bootstrap-icons";
 import { Newsletter } from "./Library";
+import { isDevelopment } from "./Environment";
 import { openSourceUrl, sourceUrl } from "./Util";
 
 interface TopBarProps {
@@ -44,6 +45,13 @@ export default function TopBar({
   const [syncRunning, setSyncRunning] = useState(false);
   const authVerified = useAtomValue(authVerifiedAtom);
   const colorScheme = useColorScheme();
+
+  // development gets its own navbar color so it can't be confused with production
+  const navbarBg = isDevelopment
+    ? "danger"
+    : colorScheme === "dark"
+      ? "dark"
+      : "primary";
 
   // newsletters saved from a web page keep the page url as their source id, so the one
   // being read can be opened at its original location
@@ -97,11 +105,7 @@ export default function TopBar({
 
   return (
     <>
-      <Navbar
-        bg={colorScheme === "dark" ? "dark" : "primary"}
-        data-bs-theme="dark"
-        className="px-3"
-      >
+      <Navbar bg={navbarBg} data-bs-theme="dark" className="px-3">
         <Navbar.Brand className="text-truncate me-0">
           {newsletterShown && displayedNewsletter
             ? displayedNewsletter.title
@@ -121,6 +125,11 @@ export default function TopBar({
               <BoxArrowUpRight size={18} />
             </Button>
           </OverlayTrigger>
+        )}
+        {isDevelopment && (
+          <Navbar.Text className="text-white ms-2 flex-shrink-0">
+            Development
+          </Navbar.Text>
         )}
         <div className="flex-grow-1" />
         {authVerified && !newsletterShown && (

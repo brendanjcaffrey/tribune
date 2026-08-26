@@ -1,18 +1,61 @@
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { defineConfig } from "vite";
-import type { UserConfig } from "vite";
+import type { Plugin, UserConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import type { InlineConfig } from "vitest";
+
+// marks the browser tab when the dev server is serving the app, so a development tab
+// isn't mistaken for a production one. apply: "serve" leaves `vite build` untouched
+function developmentTab(): Plugin {
+  return {
+    name: "development-tab",
+    apply: "serve",
+    transformIndexHtml(html) {
+      return html
+        .replace(
+          "<title>Tribune</title>",
+          "<title>Tribune (Development)</title>",
+        )
+        .replaceAll("/favicon/", "/favicon-dev/");
+    },
+  };
+}
+
+// vite copies everything in publicDir into the build, so the development icons
+// would otherwise ship to production as dead weight. nothing references them
+// there - the title and favicon rewrite above only runs on the dev server
+function dropDevelopmentFavicon(): Plugin {
+  let outDir = "";
+  return {
+    name: "drop-development-favicon",
+    apply: "build",
+    configResolved(resolved) {
+      outDir = path.resolve(resolved.root, resolved.build.outDir);
+    },
+    async closeBundle() {
+      await rm(path.join(outDir, "favicon-dev"), {
+        recursive: true,
+        force: true,
+      });
+    },
+  };
+}
 
 // https://vite.dev/config/
 type ViteConfig = UserConfig & { test: InlineConfig };
 const config: ViteConfig = {
   plugins: [
     react(),
+    developmentTab(),
+    dropDevelopmentFavicon(),
     VitePWA({
       registerType: "autoUpdate",
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
+        // the development favicon is only ever served by the dev server
+        globIgnores: ["favicon-dev/**"],
       },
       manifest: {
         name: "Tribune",
