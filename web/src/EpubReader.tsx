@@ -185,8 +185,12 @@ const EpubReader: React.FC<EpubReaderProps> = ({
 
   // frame the book content - this is done as a separate step because the framing changes when the screen size does
   useEffect(() => {
+    // bail out until the epub has parsed - building the frame with a null spine
+    // item would interpolate the string "undefined" into the iframe body, which
+    // flashes on screen until the real content arrives
     if (!bookContent) {
       setIframeContent("");
+      return;
     }
 
     const content = Epub.buildIframeContent(

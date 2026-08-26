@@ -41,11 +41,11 @@ var Bundle=(()=>{var Pt=Object.create;var yt=Object.defineProperty;var Ft=Object
                   break-inside: avoid;
                 }
                 ${c}
-                ${i?.headContent}
+                ${i?.headContent??""}
               </style>
             </head>
             <body>
-              ${i?.bodyContent}
+              ${i?.bodyContent??""}
             </body>
           </html>
         `}},St=class m{static handleKeyDown(x,c,i){let s=c.target?.tagName?.toLowerCase();if(!(s==="input"||s==="textarea"||c.target?.isContentEditable)){if(c.key==="Escape"){i();return}c.key==="ArrowRight"?m.scrollPage(x,"forward"):c.key==="ArrowLeft"&&m.scrollPage(x,"backward")}}static handleTouchStart(x,c){c.touches.length===1&&(x.current={x:c.touches[0].clientX,y:c.touches[0].clientY,targetIsAnchorOrButton:c.target.closest("a")!=null||c.target.closest("button")!=null})}static handleTouchEnd(x,c,i){if(c.current&&i.changedTouches.length===1){let s=i.changedTouches[0].clientX,r=c.current.x,o=s-r;if(Math.abs(o)>=Ht)m.scrollPage(x,o<0?"forward":"backward"),i.preventDefault();else if(!c.current.targetIsAnchorOrButton){if(x.current?.contentWindow){let g=x.current.clientWidth;m.scrollPage(x,s<g/2?"backward":"forward"),i.preventDefault()}}c.current=null}}static handleScrollToHref(x,c,i){let{current:s}=x,r=c.detail.href.substring(1);if(s?.contentDocument&&s?.contentWindow){let o=s.contentDocument.getElementById(r);if(o){let g=o.getBoundingClientRect().left,y=s.contentWindow.scrollX,_=g+y,a=Math.floor(_/(s.clientWidth+dt))*(s.clientWidth+dt);i.current&&Math.abs(a-y)>1&&(i.current.jumpedByAnchor=!0),s.contentWindow.scrollTo({left:a,behavior:"instant"})}}}static scrollPage(x,c){let{current:i}=x;if(i?.contentWindow){let s=i.clientWidth+dt;c==="forward"&&i.contentWindow.scrollBy({left:s,behavior:"instant"}),c==="backward"&&i.contentWindow.scrollBy({left:-s,behavior:"instant"})}}static calculateReadingProgress(x){let{current:c}=x,i={progress:0,atEnd:!1};if(c&&c.contentWindow&&c.contentDocument){let s=c.contentDocument.body.scrollWidth,r=c.clientWidth,o=c.contentWindow.scrollX;if(s>r){let g=o/s*100;i.progress=Math.round(g),o+r>=s-5&&(i.atEnd=!0)}else i.progress=100,i.atEnd=!0}return i}static createEndTracking(){return{wasAtEnd:!1,jumpedByAnchor:!1}}static shouldMarkRead(x,c){let i=x.current;if(!i)return!1;let s=c.atEnd&&!i.wasAtEnd;return c.atEnd||(i.jumpedByAnchor=!1),i.wasAtEnd=c.atEnd,s&&!i.jumpedByAnchor}};return Zt(Xt);})();

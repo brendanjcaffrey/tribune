@@ -406,11 +406,11 @@ export class Epub {
                   break-inside: avoid;
                 }
                 ${muiStyles}
-                ${bookContent?.headContent}
+                ${bookContent?.headContent ?? ""}
               </style>
             </head>
             <body>
-              ${bookContent?.bodyContent}
+              ${bookContent?.bodyContent ?? ""}
             </body>
           </html>
         `;
