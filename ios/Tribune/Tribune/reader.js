@@ -6,6 +6,7 @@ const SWIPE_THRESHOLD = 50;
 
 let iframeRef = { current: null };
 let touchStartRef = { current: null };
+let endTrackingRef = { current: null };
 
 function getMuiStyles(theme) {
   return `
@@ -158,7 +159,7 @@ function handleTouchEnd(event) {
 }
 
 function handleScrollToHref(event) {
-  Bundle.EpubInteraction.handleScrollToHref(iframeRef, event);
+  Bundle.EpubInteraction.handleScrollToHref(iframeRef, event, endTrackingRef);
 }
 
 function handleOpenExternalLink(event) {
@@ -178,7 +179,9 @@ function handleScroll() {
   const progress = Bundle.EpubInteraction.calculateReadingProgress(iframeRef);
   document.getElementById("progress").textContent =
     Math.round(progress.progress).toString() + "%";
-  if (progress.atEnd) {
+  // shouldMarkRead filters out the scroll a footnote link causes, which lands on
+  // the notes at the back of the article without any of it having been read
+  if (Bundle.EpubInteraction.shouldMarkRead(endTrackingRef, progress)) {
     window.webkit.messageHandlers.readerEvent.postMessage({
       type: "at end",
     });
@@ -186,6 +189,8 @@ function handleScroll() {
 }
 
 async function openBook(path, initialProgress) {
+  endTrackingRef.current = Bundle.EpubInteraction.createEndTracking();
+
   const buf = await readLocalFileToArrayBuffer(path);
   book = new Bundle.Epub(buf);
   await book.parse();

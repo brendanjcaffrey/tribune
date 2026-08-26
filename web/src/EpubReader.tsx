@@ -16,6 +16,7 @@ import {
   Cfi,
   COLUMN_GAP,
   TouchStart,
+  EndTracking,
   EpubInteraction,
 } from "./Epub";
 import { WorkerInstance } from "./WorkerInstance";
@@ -100,7 +101,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const touchStartRef = useRef<TouchStart>(null);
   const setOffsetOnNextLoad = useRef<number | string | null>(null);
-  const wasAtEnd = useRef(false);
+  const endTracking = useRef<EndTracking>(EpubInteraction.createEndTracking());
 
   // event handlers
   const handleKeyDown = useCallback(
@@ -119,22 +120,19 @@ const EpubReader: React.FC<EpubReaderProps> = ({
   }, []);
 
   const handleScrollToHref = useCallback((e: Event) => {
-    EpubInteraction.handleScrollToHref(iframeRef, e);
+    EpubInteraction.handleScrollToHref(iframeRef, e, endTracking);
   }, []);
 
   const updateReadingProgress = useCallback(() => {
     const progress = EpubInteraction.calculateReadingProgress(iframeRef);
     setReadingProgress(progress.progress);
-    // only mark read when the end is newly reached, so marking it unread by hand
-    // while sitting on the last page isn't undone by the next scroll event
-    if (progress.atEnd && !wasAtEnd.current) {
+    if (EpubInteraction.shouldMarkRead(endTracking, progress)) {
       WorkerInstance.postMessage(
         buildMainMessage("mark newsletter as read", {
           id: newsletter.id,
         }),
       );
     }
-    wasAtEnd.current = progress.atEnd;
   }, [newsletter.id]);
 
   const saveProgress = useCallback(() => {
@@ -168,7 +166,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
 
   // parse epub on file change
   useEffect(() => {
-    wasAtEnd.current = false;
+    endTracking.current = EpubInteraction.createEndTracking();
     if (!file || file.byteLength === 0) {
       setBookContent(null);
       return;

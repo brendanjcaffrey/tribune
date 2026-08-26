@@ -35,7 +35,6 @@ struct ReaderWebView: UIViewRepresentable {
         webView.navigationDelegate = context.coordinator
         context.coordinator.newsletter = newsletter
         context.coordinator.library = library
-        context.coordinator.webView = webView
 
         return webView
     }
@@ -46,7 +45,6 @@ struct ReaderWebView: UIViewRepresentable {
     class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var newsletter: Newsletter?
         var library: Library?
-        weak var webView: WKWebView?
 
         // Called when JS posts events
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -56,8 +54,6 @@ struct ReaderWebView: UIViewRepresentable {
                     Task { try? await l.updateNewsletterProgress(n, progress: cfi) }
                 } else if type == "at end" && !n.read {
                     Task { try? await l.markNewsletterRead(n) }
-                } else if type == "footnote", let href = obj["href"] as? String {
-                    webView?.evaluateJavaScript("scrollToHref('\(href)')", completionHandler: nil)
                 } else if type == "external link", let href = obj["href"] as? String, let url = URL(string: href) {
                     UIApplication.shared.open(url)
                 }

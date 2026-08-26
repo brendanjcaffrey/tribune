@@ -23,6 +23,15 @@ export interface ReadingProgress {
   atEnd: boolean;
 }
 
+// state behind "mark as read once the end is reached". it lives outside
+// calculateReadingProgress because reaching the end only counts when the reader
+// got there by turning pages - a footnote link that jumps straight to the notes
+// at the back of the article must not count
+export interface EndTracking {
+  wasAtEnd: boolean;
+  jumpedByAnchor: boolean;
+}
+
 export const COLUMN_GAP = 40;
 const SWIPE_THRESHOLD = 50;
 const TEXT_EXTENSIONS = [
@@ -488,6 +497,7 @@ export class EpubInteraction {
   static handleScrollToHref(
     iframeRef: RefObject<HTMLIFrameElement | null>,
     event: Event,
+    endTrackingRef: RefObject<EndTracking | null>,
   ) {
     const { current: iframe } = iframeRef;
     const id = (event as CustomEvent).detail.href.substring(1);
@@ -501,6 +511,19 @@ export class EpubInteraction {
           absoluteLeft / (iframe.clientWidth + COLUMN_GAP),
         );
         const scrollLeft = page * (iframe.clientWidth + COLUMN_GAP);
+
+        // footnotes live at the back of the article, so this jump can land on
+        // the last page without any of it having been read. flag it before
+        // scrolling, because the scroll event it causes arrives afterwards.
+        // a jump that doesn't move is skipped: it fires no scroll event, so
+        // nothing would ever clear the flag again
+        if (
+          endTrackingRef.current &&
+          Math.abs(scrollLeft - currentScroll) > 1
+        ) {
+          endTrackingRef.current.jumpedByAnchor = true;
+        }
+
         iframe.contentWindow.scrollTo({
           left: scrollLeft,
           behavior: "instant",
@@ -554,5 +577,31 @@ export class EpubInteraction {
       }
     }
     return out;
+  }
+
+  static createEndTracking(): EndTracking {
+    return { wasAtEnd: false, jumpedByAnchor: false };
+  }
+
+  // decides whether this scroll should mark the newsletter as read. the end has
+  // to be newly reached, so marking it unread by hand while sitting on the last
+  // page isn't undone by the next scroll event, and it has to be reached by
+  // reading rather than by following a footnote link. an anchor jump stays
+  // suppressed until a later scroll reports we're off the end again, which means
+  // the reader moved away under their own steam and can earn the mark by
+  // scrolling back
+  static shouldMarkRead(
+    endTrackingRef: RefObject<EndTracking | null>,
+    progress: ReadingProgress,
+  ): boolean {
+    const tracking = endTrackingRef.current;
+    if (!tracking) return false;
+
+    const newlyAtEnd = progress.atEnd && !tracking.wasAtEnd;
+    if (!progress.atEnd) {
+      tracking.jumpedByAnchor = false;
+    }
+    tracking.wasAtEnd = progress.atEnd;
+    return newlyAtEnd && !tracking.jumpedByAnchor;
   }
 }
