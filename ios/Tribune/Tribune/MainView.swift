@@ -41,9 +41,12 @@ struct MainView: View {
         .fullScreenCover(item: $presentedEpub) { n in
             ZStack(alignment: .bottomTrailing) {
                 ReaderWebView(newsletter: n, library: Library(context: modelContext))
-                button(systemName: "xmark") { presentedEpub = nil }
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 44)
+                HStack(spacing: 12) {
+                    ReadStatusButton(n: n)
+                    ReaderOverlayButton(systemName: "xmark") { presentedEpub = nil }
+                }
+                .padding(.trailing, 16)
+                .padding(.bottom, 44)
             }
             .ignoresSafeArea()
         }
@@ -105,16 +108,6 @@ struct MainView: View {
         AlertToast(
             displayMode: .alert, type: .error(.red),
             title: "Download error", subTitle: message ?? "")
-    }
-
-    private func button(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.title3)
-                .foregroundStyle(.primary)
-                .frame(width: 36, height: 36)
-                .background(.ultraThinMaterial, in: Circle())
-        }
     }
 }
 
