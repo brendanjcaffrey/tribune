@@ -34,6 +34,32 @@ export type Update =
   | DeleteUpdate
   | ProgressUpdate;
 
+// updates of the same kind for the same newsletter supersede each other, so
+// they share a key. read & unread are the same piece of state, so the later
+// one wins.
+function coalesceKey(update: Update): string {
+  const kind = update.type === "unread" ? "read" : update.type;
+  return `${kind}:${update.newsletterId}`;
+}
+
+// keep only the newest update of each kind per newsletter, preserving order.
+// a burst of progress updates (or a read/unread flip flop) piled up while
+// offline collapses to whatever state the user ended up with, since that's
+// all the server cares about.
+export function coalesceUpdates(updates: Update[]): Update[] {
+  const seen = new Set<string>();
+  const coalesced: Update[] = [];
+  for (let i = updates.length - 1; i >= 0; i--) {
+    const key = coalesceKey(updates[i]);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    coalesced.unshift(updates[i]);
+  }
+  return coalesced;
+}
+
 export class UpdateManager {
   private libraryInitialized: boolean = false;
   private authToken: string | null = null;
@@ -43,9 +69,13 @@ export class UpdateManager {
   private timerHandler: ReturnType<typeof setTimeout> | undefined = undefined;
 
   constructor() {
-    get(DB_KEY).then((stored) => {
-      this.pendingUpdates = Array.isArray(stored) ? stored : [];
+    get(DB_KEY).then(async (stored) => {
+      const loaded = Array.isArray(stored) ? stored : [];
+      this.pendingUpdates = coalesceUpdates(loaded);
       this.pendingUpdatesFetched = true;
+      if (this.pendingUpdates.length !== loaded.length) {
+        await this.persistUpdates();
+      }
       this.attemptUpdates();
     });
 
@@ -177,7 +207,7 @@ export class UpdateManager {
   }
 
   private async handleUpdate(update: Update) {
-    this.pendingUpdates.push(update);
+    this.pendingUpdates = coalesceUpdates([...this.pendingUpdates, update]);
     await this.persistUpdates();
     await this.attemptUpdates();
   }
@@ -223,6 +253,18 @@ export class UpdateManager {
     }
   }
 
+  // remove by identity rather than shifting: a newer update coalesced in
+  // while this one was in flight may have replaced it in the queue, and that
+  // replacement still needs to be sent.
+  private async dropUpdate(update: Update) {
+    const index = this.pendingUpdates.indexOf(update);
+    if (index === -1) {
+      return;
+    }
+    this.pendingUpdates.splice(index, 1);
+    await this.persistUpdates();
+  }
+
   private async attemptUpdates() {
     if (this.timerHandler) {
       clearTimeout(this.timerHandler);
@@ -245,13 +287,11 @@ export class UpdateManager {
         const update = this.pendingUpdates[0];
         try {
           await this.attemptUpdate(update);
-          this.pendingUpdates.shift();
-          await this.persistUpdates();
+          await this.dropUpdate(update);
         } catch (e) {
           if (this.isPermanent(e)) {
             console.error("dropping update due to permanent error:", update, e);
-            this.pendingUpdates.shift();
-            await this.persistUpdates();
+            await this.dropUpdate(update);
             continue;
           }
           // transient (network down, 5xx, 401 mid-renewal): stop the loop and rely on retry later

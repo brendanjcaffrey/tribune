@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import axios from "axios";
 import qs from "qs";
 import library, { Newsletter } from "../src/Library";
-import { UpdateManager, Update, DB_KEY } from "../src/UpdateManager";
+import {
+  UpdateManager,
+  Update,
+  DB_KEY,
+  coalesceUpdates,
+} from "../src/UpdateManager";
 
 vi.stubGlobal("postMessage", vi.fn());
 vi.mock("axios");
@@ -801,5 +806,134 @@ describe("UpdateManager", () => {
     expect(axios.put).toHaveBeenCalledTimes(2);
     expect(await get(DB_KEY)).toBeUndefined();
     expect(manager.getPendingUpdates()).toEqual([]);
+  });
+
+  describe("coalescing", () => {
+    it("keeps only the last update of each kind per newsletter", () => {
+      const updates: Update[] = [
+        { type: "progress", newsletterId: 123, progress: "a" },
+        { type: "read", newsletterId: 123 },
+        { type: "progress", newsletterId: 123, progress: "b" },
+        { type: "unread", newsletterId: 123 },
+        { type: "progress", newsletterId: 456, progress: "c" },
+        { type: "progress", newsletterId: 123, progress: "d" },
+      ];
+
+      expect(coalesceUpdates(updates)).toEqual([
+        { type: "unread", newsletterId: 123 },
+        { type: "progress", newsletterId: 456, progress: "c" },
+        { type: "progress", newsletterId: 123, progress: "d" },
+      ]);
+    });
+
+    it("keeps updates of different kinds for the same newsletter", () => {
+      const updates: Update[] = [
+        { type: "read", newsletterId: 1 },
+        { type: "progress", newsletterId: 1, progress: "a" },
+        { type: "delete", newsletterId: 1 },
+      ];
+
+      expect(coalesceUpdates(updates)).toEqual(updates);
+      expect(coalesceUpdates([])).toEqual([]);
+    });
+
+    it("coalesces pending updates loaded from the db & re-persists them", async () => {
+      await set(DB_KEY, [
+        { type: "progress", newsletterId: 123, progress: "a" },
+        { type: "read", newsletterId: 123 },
+        { type: "progress", newsletterId: 123, progress: "b" },
+      ]);
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+
+      const expected = [
+        { type: "read", newsletterId: 123 },
+        { type: "progress", newsletterId: 123, progress: "b" },
+      ];
+      expect(manager.getPendingUpdates()).toEqual(expected);
+      await vi.waitFor(async () => expect(await get(DB_KEY)).toEqual(expected));
+    });
+
+    it("coalesces updates queued up while unauthenticated", async () => {
+      vi.mocked(library().getNewsletter)
+        .mockResolvedValueOnce(NEWSLETTER_123_UNREAD())
+        .mockResolvedValueOnce(NEWSLETTER_123_READ())
+        .mockResolvedValueOnce(
+          buildNewsletter(
+            123,
+            "2025-01-01 06:00:01.456789+00",
+            /*read=*/ true,
+            /*deleted=*/ false,
+            /*progress=*/ "a",
+          ),
+        )
+        .mockResolvedValueOnce(
+          buildNewsletter(
+            123,
+            "2025-01-01 06:00:01.456789+00",
+            /*read=*/ true,
+            /*deleted=*/ false,
+            /*progress=*/ "b",
+          ),
+        );
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setLibraryInitialized();
+
+      await manager.markNewsletterAsRead(123);
+      await manager.updateNewsletterProgress(123, "a");
+      await manager.updateNewsletterProgress(123, "b");
+      await manager.markNewsletterAsUnread(123);
+
+      const expected = [
+        { type: "progress", newsletterId: 123, progress: "b" },
+        { type: "unread", newsletterId: 123 },
+      ];
+      expect(manager.getPendingUpdates()).toEqual(expected);
+      expect(await get(DB_KEY)).toEqual(expected);
+      expect(axios.put).not.toHaveBeenCalled();
+    });
+
+    it("still sends an update that coalesced over one already in flight", async () => {
+      vi.mocked(library().getNewsletter)
+        .mockResolvedValueOnce(NEWSLETTER_123_UNREAD())
+        .mockResolvedValueOnce(NEWSLETTER_123_PROGRESS());
+
+      let resolveFirst: (value: unknown) => void = () => {};
+      vi.mocked(axios.put).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      );
+      vi.mocked(axios.put).mockResolvedValueOnce(HTTP_200);
+
+      const manager = new UpdateManager();
+      await vi.waitUntil(() => manager.getPendingUpdatesFetched());
+      await manager.setAuthToken("mock-token");
+      await manager.setLibraryInitialized();
+
+      // don't await: it doesn't settle until the in-flight request does
+      const inFlight = manager.updateNewsletterProgress(123, "hi");
+      await vi.waitUntil(() => manager.isAttemptingBulkUpdates());
+
+      // this supersedes the request currently on the wire
+      await manager.updateNewsletterProgress(123, "bye");
+      expect(manager.getPendingUpdates()).toEqual([
+        { type: "progress", newsletterId: 123, progress: "bye" },
+      ]);
+
+      resolveFirst(HTTP_200);
+      await inFlight;
+      await waitForUpdatesToFinish(manager);
+
+      expectAxiosPutProgressRequest(123, "hi");
+      expectAxiosPutProgressRequest(123, "bye");
+      expect(axios.put).toHaveBeenCalledTimes(2);
+      expect(manager.getPendingUpdates()).toEqual([]);
+      expect(await get(DB_KEY)).toBeUndefined();
+    });
   });
 });

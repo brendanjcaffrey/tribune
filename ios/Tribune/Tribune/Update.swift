@@ -56,3 +56,31 @@ enum Update: Codable, Equatable {
         }
     }
 }
+
+extension Update {
+    /// updates of the same kind for the same newsletter supersede each other,
+    /// so they share a key. read & unread are the same piece of state, so the
+    /// later one wins.
+    var coalesceKey: String {
+        switch self {
+        case .read(let id), .unread(let id): return "read:\(id)"
+        case .delete(let id): return "delete:\(id)"
+        case .progress(let id, _): return "progress:\(id)"
+        }
+    }
+}
+
+extension Array where Element == Update {
+    /// keep only the newest update of each kind per newsletter, preserving
+    /// order. a burst of progress updates (or a read/unread flip flop) piled up
+    /// while offline collapses to whatever state the user ended up with, since
+    /// that's all the server cares about.
+    func coalesced() -> [Update] {
+        var seen = Set<String>()
+        var result: [Update] = []
+        for update in reversed() where seen.insert(update.coalesceKey).inserted {
+            result.append(update)
+        }
+        return result.reversed()
+    }
+}

@@ -8,17 +8,34 @@ import Reachability
 final class UpdateManager {
     static let shared = UpdateManager()
 
-    private let storageKey = "updates"
-    private let retrySeconds: UInt64 = 30
+    // not private so tests can seed & inspect the queue in storage
+    static let storageKey = "updates"
 
-    private var pendingUpdates: [Update] = []
+    private let sender: UpdateSending
+    private let defaults: UserDefaults
+    private let retrySeconds: UInt64
+
+    private(set) var pendingUpdates: [Update] = []
     private var flushTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var reachability: Reachability?
 
-    private init() {
+    /// the defaults are all what the app wants. tests inject their own sender,
+    /// storage and retry delay, and skip the reachability notifier
+    init(
+        sender: UpdateSending = APIUpdateSender(),
+        defaults: UserDefaults = .standard,
+        retrySeconds: UInt64 = 30,
+        monitorReachability: Bool = true
+    ) {
+        self.sender = sender
+        self.defaults = defaults
+        self.retrySeconds = retrySeconds
+
         loadPending()
-        setupReachability()
+        if monitorReachability {
+            setupReachability()
+        }
         flushPending()
     }
 
@@ -51,15 +68,15 @@ final class UpdateManager {
     // MARK: - Internal
 
     private func enqueue(_ update: Update) async {
-        pendingUpdates.append(update)
+        pendingUpdates = (pendingUpdates + [update]).coalesced()
         persist()
         await flush()
     }
 
     /// drain `pendingUpdates` in order. stops at the first transient failure
     /// and schedules a retry. concurrent callers join the in-flight flush
-    /// rather than starting a parallel one.
-    private func flush() async {
+    /// rather than starting a parallel one. not private so tests can await it.
+    func flush() async {
         if let existing = flushTask {
             await existing.value
             return
@@ -73,10 +90,10 @@ final class UpdateManager {
             while let next = self.pendingUpdates.first {
                 do {
                     try await self.send(next)
-                    self.dropFirst()
+                    self.drop(next)
                 } catch let error where Self.isPermanent(error) {
                     print("dropping update due to permanent error \(error): \(next)")
-                    self.dropFirst()
+                    self.drop(next)
                 } catch {
                     self.scheduleRetry()
                     return
@@ -89,24 +106,18 @@ final class UpdateManager {
         flushTask = nil
     }
 
-    private func dropFirst() {
-        guard !pendingUpdates.isEmpty else { return }
-        pendingUpdates.removeFirst()
+    /// remove by value rather than position: a newer update coalesced in while
+    /// this one was in flight may have replaced it in the queue, and that
+    /// replacement still needs to be sent.
+    private func drop(_ update: Update) {
+        guard let index = pendingUpdates.firstIndex(of: update) else { return }
+        pendingUpdates.remove(at: index)
         persist()
     }
 
     private func send(_ update: Update) async throws {
         do {
-            switch update {
-            case .read(let id):
-                try await APIClient.newsletterRead(id: id)
-            case .unread(let id):
-                try await APIClient.newsletterUnread(id: id)
-            case .delete(let id):
-                try await APIClient.deleteNewsletter(id: id)
-            case .progress(let id, let progress):
-                try await APIClient.newsletterProgress(id: id, progress: progress)
-            }
+            try await sender.send(update)
         } catch APIError.badStatus(404) {
             // should only happen when a newsletter is deleted already, so drop the update
         }
@@ -152,14 +163,18 @@ final class UpdateManager {
     private func persist() {
         do {
             let data = try JSONEncoder().encode(pendingUpdates)
-            UserDefaults.standard.set(data, forKey: storageKey)
+            defaults.set(data, forKey: Self.storageKey)
         } catch {
             print("UpdateManager persist error: \(error)")
         }
     }
 
     private func loadPending() {
-        guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
-        pendingUpdates = (try? JSONDecoder().decode([Update].self, from: data)) ?? []
+        guard let data = defaults.data(forKey: Self.storageKey) else { return }
+        let loaded = (try? JSONDecoder().decode([Update].self, from: data)) ?? []
+        pendingUpdates = loaded.coalesced()
+        if pendingUpdates.count != loaded.count {
+            persist()
+        }
     }
 }
