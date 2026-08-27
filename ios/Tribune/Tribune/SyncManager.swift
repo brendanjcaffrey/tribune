@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-enum SyncStatus {
+enum SyncStatus: Equatable {
     case success
     case error(String)
     case blocked
@@ -10,14 +10,21 @@ enum SyncStatus {
 @MainActor
 final class SyncManager: ObservableObject {
     private let library: LibraryProtocol
+    private let fetcher: NewsletterListFetching
     private weak var downloadManager: DownloadManaging?
 
-    private var currentSyncTask: Task<SyncStatus, Never>?
+    // not private so tests can await a sync they cancelled
+    private(set) var currentSyncTask: Task<SyncStatus, Never>?
     @Published private var isSyncing = false
 
-    init(library: LibraryProtocol, downloadManager: DownloadManaging?) {
+    init(
+        library: LibraryProtocol,
+        downloadManager: DownloadManaging?,
+        fetcher: NewsletterListFetching = APINewsletterListFetcher()
+    ) {
         self.library = library
         self.downloadManager = downloadManager
+        self.fetcher = fetcher
     }
 
     func reset() {
@@ -57,7 +64,7 @@ final class SyncManager: ObservableObject {
     }
 
     private func fetchInitial() async throws {
-        let response = try await APIClient.getNewsletters()
+        let response = try await fetcher.fetchAll()
 
         for n in transformResponse(api: response, originalMap: .none) {
             try await library.putNewsletter(n)
@@ -68,7 +75,7 @@ final class SyncManager: ObservableObject {
         let newsletter = try await library.getNewestNewsletter()
         guard let newsletter = newsletter else { return }
 
-        let response = try await APIClient.getNewslettersAfter(newsletter: newsletter)
+        let response = try await fetcher.fetchAfter(newsletter: newsletter)
         let all = try await library.getAllNewsletters()
         let originalMap = buildOriginalNewslettersMap(all: all, api: response)
 

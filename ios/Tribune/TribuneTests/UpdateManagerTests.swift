@@ -88,17 +88,6 @@ struct UpdateManagerTests {
         return (try? JSONDecoder().decode([Update].self, from: data)) ?? []
     }
 
-    /// spin (briefly) until `condition` holds, so tests can wait on work that
-    /// isn't awaitable - the retry timer, or a flush another task kicked off
-    private func waitUntil(_ condition: () -> Bool) async -> Bool {
-        for _ in 0..<500 {
-            if condition() { return true }
-            await Task.yield()
-            try? await Task.sleep(nanoseconds: 2_000_000)
-        }
-        return condition()
-    }
-
     private static let transientError = URLError(.notConnectedToInternet)
 
     // MARK: - sending
