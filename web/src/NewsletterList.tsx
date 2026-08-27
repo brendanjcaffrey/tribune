@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowSize } from "@react-hook/window-size";
 import { useAtomValue, useSetAtom } from "jotai";
-import { Book, FileEarmarkText } from "react-bootstrap-icons";
+import { Book, FileEarmarkText, Link45deg } from "react-bootstrap-icons";
 import Spinner from "react-bootstrap/Spinner";
 import { enqueueToast } from "./Toasts";
 import { useColorScheme } from "./useColorScheme";
@@ -27,6 +27,7 @@ import { SortableNewsletter } from "./SortableNewsletter";
 import { buildMainMessage, FileType } from "./WorkerTypes";
 import { files } from "./Files";
 import { compareNewslettersForDisplay } from "./compareNewsletters";
+import { authorWithDomain, sourceUrl } from "./Util";
 import { GetBodyHeight } from "./Height";
 import {
   NewsletterContextMenu,
@@ -59,6 +60,7 @@ const gridOptions: GridOptions = {
         title: p.data.title,
         hasEpub: p.data.epubLastAccessedAt !== null,
         hasSource: p.data.sourceLastAccessedAt !== null,
+        isLink: sourceUrl(p.data.sourceId) !== null,
         isDownloading: p.data.downloadInProgress,
       }),
       // the value is an object for the cell renderer, so tell the quick filter
@@ -68,6 +70,7 @@ const gridOptions: GridOptions = {
         a?.title === b?.title &&
         a?.hasEpub === b?.hasEpub &&
         a?.hasSource === b?.hasSource &&
+        a?.isLink === b?.isLink &&
         a?.isDownloading === b?.isDownloading,
       cellRenderer: (params: CustomCellRendererProps<SortableNewsletter>) => {
         return (
@@ -81,6 +84,12 @@ const gridOptions: GridOptions = {
             )}
             {params.value.hasSource && (
               <FileEarmarkText
+                size={13}
+                style={{ verticalAlign: "middle", marginLeft: "3px" }}
+              />
+            )}
+            {params.value.isLink && (
+              <Link45deg
                 size={13}
                 style={{ verticalAlign: "middle", marginLeft: "3px" }}
               />
@@ -107,6 +116,9 @@ const gridOptions: GridOptions = {
         "is-read": (p) => !!p.data?.read,
       },
       flex: 4,
+      // pages saved from the browser show their domain, since the author is often
+      // missing or unhelpful for them
+      valueGetter: (p) => authorWithDomain(p.data.author, p.data.sourceId),
     },
     {
       field: "createdAt",

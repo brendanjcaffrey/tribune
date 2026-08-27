@@ -77,3 +77,26 @@ export function sourceUrl(sourceId: string | null | undefined): string | null {
   }
   return url.href;
 }
+
+// the domain of the source url, with any leading www. dropped since it adds nothing
+export function sourceDomain(
+  sourceId: string | null | undefined,
+): string | null {
+  const url = sourceUrl(sourceId);
+  if (url === null) {
+    return null;
+  }
+  return new URL(url).hostname.replace(/^www\./, "");
+}
+
+// the author with the source domain appended, or just the domain when there's no author
+export function authorWithDomain(
+  author: string,
+  sourceId: string | null | undefined,
+): string {
+  const domain = sourceDomain(sourceId);
+  if (domain === null) {
+    return author;
+  }
+  return author.trim() === "" ? domain : `${author} (${domain})`;
+}

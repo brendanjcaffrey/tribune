@@ -18,7 +18,7 @@ struct NewsletterRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 titleLine
                     .font(.headline)
-                Text(n.author)
+                Text(n.authorDisplay)
                     .font(.subheadline)
                 HStack {
                     Text(Newsletter.displayFormatter.string(from: n.createdAt))
@@ -70,6 +70,9 @@ struct NewsletterRow: View {
             }
             if n.sourceLastAccessedAt != nil {
                 Text(Image(systemName: "folder"))
+            }
+            if n.sourceURL != nil {
+                Text(Image(systemName: "link"))
             }
         }
     }

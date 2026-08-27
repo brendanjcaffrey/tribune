@@ -73,6 +73,19 @@ public final class Newsletter {
         return url
     }
 
+    /// the domain of the source url, with any leading www. dropped since it adds nothing
+    public var sourceDomain: String? {
+        guard let host = sourceURL?.host, !host.isEmpty else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    /// the author with the source domain appended, or just the domain when there's no author
+    public var authorDisplay: String {
+        guard let sourceDomain else { return author }
+        return author.trimmingCharacters(in: .whitespaces).isEmpty
+            ? sourceDomain : "\(author) (\(sourceDomain))"
+    }
+
     // yyyy-MM-dd hh:mm am/pm in local time, with lowercase am/pm
     static let displayFormatter: DateFormatter = {
         let df = DateFormatter()
