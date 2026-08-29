@@ -21,8 +21,10 @@ VALID_USERNAME_AND_PASSWORD_QUERY = 'SELECT EXISTS(SELECT 1 FROM users WHERE use
 DATE_FORMAT = 'YYYY-MM-DD"T"HH24:MI:SS.US'
 GET_NEWSLETTERS_QUERY_START = "SELECT id, title, author, source_id, source_mime_type, read, deleted, progress, to_char(created_at, '#{DATE_FORMAT}') || 'Z' as created_at, updated_at, epub_updated_at, source_updated_at FROM newsletters".freeze
 GET_NEWSLETTERS_QUERY_END = 'ORDER BY updated_at DESC, id DESC LIMIT 100;'
+# sorted the opposite direction since we're walking in the opposite direction
+GET_NEWSLETTERS_AFTER_QUERY_END = 'ORDER BY updated_at ASC, id ASC LIMIT 100;'
 GET_NEWSLETTERS_QUERY = "#{GET_NEWSLETTERS_QUERY_START} #{GET_NEWSLETTERS_QUERY_END}".freeze
-GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) > ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
+GET_NEWSLETTERS_AFTER_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) > ($1, $2) #{GET_NEWSLETTERS_AFTER_QUERY_END}".freeze
 GET_NEWSLETTERS_BEFORE_QUERY = "#{GET_NEWSLETTERS_QUERY_START} WHERE (updated_at, id) < ($1, $2) #{GET_NEWSLETTERS_QUERY_END}".freeze
 
 CREATE_NEWSLETTER_QUERY = 'INSERT INTO newsletters (title, author, source_id, source_mime_type) VALUES ($1, $2, $3, $4) RETURNING id;'

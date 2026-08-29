@@ -263,6 +263,18 @@ RSpec.describe 'Tribune Server' do
       create_user
     end
 
+    def newsletters_after(timestamp, id)
+      get '/newsletters', { after_timestamp: timestamp, after_id: id }, get_auth_header
+      expect(last_response).to be_ok
+      JSON.parse(last_response.body)['result']
+    end
+
+    def newsletters_before(timestamp, id)
+      get '/newsletters', { before_timestamp: timestamp, before_id: id }, get_auth_header
+      expect(last_response).to be_ok
+      JSON.parse(last_response.body)['result']
+    end
+
     it 'returns an error if no auth header' do
       get '/newsletters'
       expect(last_response.status).to eq(401)
@@ -377,56 +389,90 @@ RSpec.describe 'Tribune Server' do
       body = JSON.parse(last_response.body)
       expect(body['meta']['after_timestamp']).to eq(BASE_TIME.iso8601(6))
       expect(body['meta']['after_id']).to eq(1)
-      expect(body['result'].size).to eq(5)
+      expect(body['result'].map { _1['id'] }).to eq([1, 2, 3, 4, 5])
 
       get '/newsletters', { after_timestamp: (BASE_TIME + 0.99).iso8601(6), after_id: 1 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['after_timestamp']).to eq((BASE_TIME + 0.99).iso8601(6))
       expect(body['meta']['after_id']).to eq(1)
-      expect(body['result'].size).to eq(5)
+      expect(body['result'].map { _1['id'] }).to eq([1, 2, 3, 4, 5])
 
       get '/newsletters', { after_timestamp: (BASE_TIME + 1).iso8601(6), after_id: 1 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['after_timestamp']).to eq((BASE_TIME + 1).iso8601(6))
       expect(body['meta']['after_id']).to eq(1)
-      expect(body['result'].size).to eq(4)
+      expect(body['result'].map { _1['id'] }).to eq([2, 3, 4, 5])
 
       get '/newsletters', { after_timestamp: (BASE_TIME + 2).iso8601(6), after_id: 2 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['after_timestamp']).to eq((BASE_TIME + 2).iso8601(6))
       expect(body['meta']['after_id']).to eq(2)
-      expect(body['result'].size).to eq(3)
+      expect(body['result'].map { _1['id'] }).to eq([3, 4, 5])
 
       get '/newsletters', { after_timestamp: (BASE_TIME + 3).iso8601(6), after_id: 3 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['after_timestamp']).to eq((BASE_TIME + 3).iso8601(6))
       expect(body['meta']['after_id']).to eq(3)
-      expect(body['result'].size).to eq(2)
+      expect(body['result'].map { _1['id'] }).to eq([4, 5])
 
       get '/newsletters', { after_timestamp: (BASE_TIME + 4).iso8601(6), after_id: 4 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['after_timestamp']).to eq((BASE_TIME + 4).iso8601(6))
       expect(body['meta']['after_id']).to eq(4)
-      expect(body['result'].size).to eq(1)
+      expect(body['result'].map { _1['id'] }).to eq([5])
 
       get '/newsletters', { after_timestamp: (BASE_TIME + 4.99).iso8601(6), after_id: 4 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['after_timestamp']).to eq((BASE_TIME + 4.99).iso8601(6))
       expect(body['meta']['after_id']).to eq(4)
-      expect(body['result'].size).to eq(1)
+      expect(body['result'].map { _1['id'] }).to eq([5])
 
       get '/newsletters', { after_timestamp: (BASE_TIME + 5).iso8601(6), after_id: 5 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['after_timestamp']).to eq((BASE_TIME + 5).iso8601(6))
       expect(body['meta']['after_id']).to eq(5)
-      expect(body['result'].size).to eq(0)
+      expect(body['result']).to eq([])
+    end
+
+    it 'answers after with the page immediately above the cursor' do
+      257.times do |i|
+        create_newsletter(id: i + 1)
+      end
+
+      get '/newsletters', { after_timestamp: BASE_TIME.iso8601(6), after_id: 1 }, get_auth_header
+      expect(last_response).to be_ok
+      expect(JSON.parse(last_response.body)['result'].map { _1['id'] }).to eq((1..100).to_a)
+    end
+
+    it 'pages upward with after over a library bigger than one page, skipping and repeating nothing' do
+      257.times do |i|
+        create_newsletter(id: i + 1)
+      end
+
+      pages = []
+      seen = []
+      timestamp = BASE_TIME.iso8601(6)
+      id = 1
+      loop do
+        rows = newsletters_after(timestamp, id)
+        pages << rows.map { _1['id'] }
+        seen.concat(rows.map { _1['id'] })
+        break if rows.size < 100
+
+        timestamp = rows.last['updated_at']
+        id = rows.last['id']
+      end
+
+      expect(pages).to eq([(1..100).to_a, (101..200).to_a, (201..257).to_a])
+      expect(seen).to eq((1..257).to_a)
+      expect(seen.uniq.size).to eq(seen.size)
     end
 
     it 'supports id tiebreakers with after' do
@@ -449,7 +495,7 @@ RSpec.describe 'Tribune Server' do
       body = JSON.parse(last_response.body)
       expect(body['meta']['after_timestamp']).to eq(BASE_TIME.iso8601(6))
       expect(body['meta']['after_id']).to eq(100)
-      expect(body['result'].map { _1['id'] }).to eq((101..105).to_a.reverse)
+      expect(body['result'].map { _1['id'] }).to eq((101..105).to_a)
     end
 
     it 'returns the item if the newest item got updated' do
@@ -510,42 +556,65 @@ RSpec.describe 'Tribune Server' do
       body = JSON.parse(last_response.body)
       expect(body['meta']['before_timestamp']).to eq((BASE_TIME + 6).iso8601(6))
       expect(body['meta']['before_id']).to eq(6)
-      expect(body['result'].size).to eq(5)
+      expect(body['result'].map { _1['id'] }).to eq([5, 4, 3, 2, 1])
 
       get '/newsletters', { before_timestamp: (BASE_TIME + 5).iso8601(6), before_id: 5 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['before_timestamp']).to eq((BASE_TIME + 5).iso8601(6))
       expect(body['meta']['before_id']).to eq(5)
-      expect(body['result'].size).to eq(4)
+      expect(body['result'].map { _1['id'] }).to eq([4, 3, 2, 1])
 
       get '/newsletters', { before_timestamp: (BASE_TIME + 4).iso8601(6), before_id: 4 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['before_timestamp']).to eq((BASE_TIME + 4).iso8601(6))
       expect(body['meta']['before_id']).to eq(4)
-      expect(body['result'].size).to eq(3)
+      expect(body['result'].map { _1['id'] }).to eq([3, 2, 1])
 
       get '/newsletters', { before_timestamp: (BASE_TIME + 3).iso8601(6), before_id: 3 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['before_timestamp']).to eq((BASE_TIME + 3).iso8601(6))
       expect(body['meta']['before_id']).to eq(3)
-      expect(body['result'].size).to eq(2)
+      expect(body['result'].map { _1['id'] }).to eq([2, 1])
 
       get '/newsletters', { before_timestamp: (BASE_TIME + 2).iso8601(6), before_id: 2 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['before_timestamp']).to eq((BASE_TIME + 2).iso8601(6))
       expect(body['meta']['before_id']).to eq(2)
-      expect(body['result'].size).to eq(1)
+      expect(body['result'].map { _1['id'] }).to eq([1])
 
       get '/newsletters', { before_timestamp: (BASE_TIME + 1).iso8601(6), before_id: 1 }, get_auth_header
       expect(last_response).to be_ok
       body = JSON.parse(last_response.body)
       expect(body['meta']['before_timestamp']).to eq((BASE_TIME + 1).iso8601(6))
       expect(body['meta']['before_id']).to eq(1)
-      expect(body['result'].size).to eq(0)
+      expect(body['result']).to eq([])
+    end
+
+    it 'pages downward with before over a library bigger than one page, skipping and repeating nothing' do
+      257.times do |i|
+        create_newsletter(id: i + 1)
+      end
+
+      get '/newsletters', {}, get_auth_header
+      expect(last_response).to be_ok
+      first = JSON.parse(last_response.body)['result']
+
+      pages = [first.map { _1['id'] }]
+      seen = first.map { _1['id'] }
+      rows = first
+      while rows.size == 100
+        rows = newsletters_before(rows.last['updated_at'], rows.last['id'])
+        pages << rows.map { _1['id'] }
+        seen.concat(rows.map { _1['id'] })
+      end
+
+      expect(pages).to eq([(158..257).to_a.reverse, (58..157).to_a.reverse, (1..57).to_a.reverse])
+      expect(seen).to eq((1..257).to_a.reverse)
+      expect(seen.uniq.size).to eq(seen.size)
     end
 
     it 'supports id tiebreakers with before' do
