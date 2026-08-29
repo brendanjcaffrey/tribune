@@ -19,6 +19,8 @@ export interface TouchStart {
 }
 
 export interface ReadingProgress {
+  // a fraction of the document between 0 and 1, quantised to four decimal
+  // places by ReadingPosition.quantise
   progress: number;
   atEnd: boolean;
 }
@@ -44,108 +46,69 @@ const TEXT_EXTENSIONS = [
   ".js",
 ];
 
-export class Cfi {
-  static getElementCfiPath(element: Element | null): string {
-    if (!element || element.tagName.toLowerCase() === "html") {
-      return "/4";
-    }
-    if (element.tagName.toLowerCase() === "body") {
-      return "/4";
-    }
+// progress is a fraction of the document between 0 and 1, quantised to four
+// decimal places. koreader quantises the same way, so no renderer's value
+// disagrees with another's, and reopening a newsletter without reading further
+// yields the string that is already stored rather than a jittering float that
+// would churn the sync
+const PROGRESS_PLACES = 4;
+const PROGRESS_SCALE = 10 ** PROGRESS_PLACES;
 
-    let path = "";
-    let current: Element | null = element;
-
-    while (current && current.tagName.toLowerCase() !== "body") {
-      if (!current.parentElement) {
-        break;
-      }
-      const siblingIndex = Array.from(current.parentElement.children).indexOf(
-        current,
-      );
-      const cfiIndex = (siblingIndex + 1) * 2;
-      path = `/${cfiIndex}${path}`;
-      current = current.parentElement;
+export class ReadingPosition {
+  // truncates rather than rounding to nearest, matching koreader's
+  // math.floor(p * 10000) / 10000
+  static quantise(fraction: number): number {
+    if (!Number.isFinite(fraction)) {
+      return 0;
     }
-
-    return "/4" + path;
+    const clamped = Math.min(Math.max(fraction, 0), 1);
+    return Math.floor(clamped * PROGRESS_SCALE) / PROGRESS_SCALE;
   }
 
-  static getElementByCfiPath(doc: Document, cfiPath: string): Element | null {
-    // remove the initial 4/ which corresponds to the <body> element in our CFI generation
-    const cleanPath = cfiPath.startsWith("4/") ? cfiPath.substring(2) : cfiPath;
-    const parts = cleanPath.split("/").filter(Boolean);
-    let currentElement: Element | null = doc.body;
-
-    for (const part of parts) {
-      if (!currentElement || !currentElement.children) {
-        return null;
-      }
-      const index = parseInt(part, 10);
-      if (isNaN(index)) {
-        return null;
-      }
-
-      const children: Element[] = Array.from(currentElement.children);
-      const childIndex = index / 2 - 1;
-
-      if (childIndex >= 0 && childIndex < children.length) {
-        currentElement = children[childIndex];
-      } else {
-        return null;
-      }
-    }
-    return currentElement;
+  // the decimal string that gets stored and synced
+  static format(fraction: number): string {
+    return ReadingPosition.quantise(fraction).toFixed(PROGRESS_PLACES);
   }
 
-  static calculateCurrentCfi(
+  // a stored value that isn't a fraction means the newsletter has never been
+  // opened, so it opens at the beginning. that is what retires the epub cfis
+  // stored before progress became a fraction: nothing migrates them, each is
+  // overwritten the first time its newsletter is opened
+  static parse(stored: string | null | undefined): number | null {
+    if (typeof stored !== "string" || stored.trim() === "") {
+      return null;
+    }
+    const value = Number(stored);
+    if (!Number.isFinite(value) || value < 0 || value > 1) {
+      return null;
+    }
+    return ReadingPosition.quantise(value);
+  }
+
+  static scrollToProgress(
     iframeRef: RefObject<HTMLIFrameElement | null>,
-  ): string | null {
-    const { current: iframe } = iframeRef;
-    if (iframe && iframe.contentWindow && iframe.contentDocument) {
-      const range = iframe.contentDocument.caretPositionFromPoint(1, 1);
-      const node = range ? range.offsetNode : null;
-      const element =
-        node && node.nodeType === 3 ? node.parentElement : (node as Element);
-      const path = Cfi.getElementCfiPath(element);
-      return `epubcfi(/6/2!${path})`;
-    }
-    return null;
-  }
-
-  static scrollToCfi(
-    iframeRef: RefObject<HTMLIFrameElement | null>,
-    cfi: string,
+    fraction: number,
   ) {
     const { current: iframe } = iframeRef;
-    // extract the path part, e.g., epubcfi(/6/2!/4/2/2/2/2/1:0 -> /4/2/2/2/2/1
-    const cfiPathMatch = cfi.match(/!\/(.*?)(?::|$)/);
-    if (
-      cfiPathMatch &&
-      iframe &&
-      iframe.contentDocument &&
-      iframe.contentWindow
-    ) {
-      const cfiPath = cfiPathMatch[1];
-      const targetElement = Cfi.getElementByCfiPath(
-        iframe.contentDocument,
-        cfiPath,
-      );
-
-      if (targetElement) {
-        const elementLeft = targetElement.getBoundingClientRect().left;
-        const currentScroll = iframe.contentWindow.scrollX;
-        const absoluteLeft = elementLeft + currentScroll;
-        const pageWidth = iframe.clientWidth + COLUMN_GAP;
-        const page = Math.floor(absoluteLeft / pageWidth);
-        const scrollLeft = page * pageWidth;
-
-        iframe.contentWindow.scrollTo({
-          left: scrollLeft,
-          behavior: "instant",
-        });
-      }
+    if (!iframe || !iframe.contentWindow || !iframe.contentDocument) {
+      return;
     }
+
+    const pageWidth = iframe.clientWidth + COLUMN_GAP;
+    if (pageWidth <= 0) {
+      return;
+    }
+
+    // land on a page boundary, which is the only place the reader ever sits.
+    // rounding to the nearest page is what makes reopening stable: quantising
+    // truncated the fraction, so it points a hair short of the page it came
+    // from, and the nearest page is that one again
+    const scrollWidth = iframe.contentDocument.body.scrollWidth;
+    const page = Math.round((fraction * scrollWidth) / pageWidth);
+    iframe.contentWindow.scrollTo({
+      left: page * pageWidth,
+      behavior: "instant",
+    });
   }
 }
 
@@ -565,14 +528,13 @@ export class EpubInteraction {
       const scrollLeft = iframe.contentWindow.scrollX;
 
       if (scrollWidth > clientWidth) {
-        const progress = (scrollLeft / scrollWidth) * 100;
-        out.progress = Math.round(progress);
+        out.progress = ReadingPosition.quantise(scrollLeft / scrollWidth);
         if (scrollLeft + clientWidth >= scrollWidth - 5) {
           out.atEnd = true;
         }
       } else {
-        // if content fits in one screen, it's 100% read
-        out.progress = 100;
+        // if content fits in one screen, the whole document has been reached
+        out.progress = 1;
         out.atEnd = true;
       }
     }

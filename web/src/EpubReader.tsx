@@ -13,7 +13,7 @@ import { Newsletter } from "./Library";
 import {
   Epub,
   SpineItem,
-  Cfi,
+  ReadingPosition,
   COLUMN_GAP,
   TouchStart,
   EndTracking,
@@ -79,6 +79,13 @@ function CalculateColumnWidth(windowWidth: number): number {
   }
 }
 
+// where the reader should be put once the iframe has laid out: either a
+// fraction of the document, restored from the newsletter's stored progress, or
+// a pixel offset, used to hold the place across a resize
+type PendingSeek =
+  | { kind: "progress"; progress: number }
+  | { kind: "offset"; offset: number };
+
 type EpubReaderProps = {
   newsletter: Newsletter;
   file: ArrayBuffer;
@@ -100,7 +107,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const touchStartRef = useRef<TouchStart>(null);
-  const setOffsetOnNextLoad = useRef<number | string | null>(null);
+  const seekOnNextLoad = useRef<PendingSeek | null>(null);
   const endTracking = useRef<EndTracking>(EpubInteraction.createEndTracking());
 
   // event handlers
@@ -123,9 +130,17 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     EpubInteraction.handleScrollToHref(iframeRef, e, endTracking);
   }, []);
 
-  const updateReadingProgress = useCallback(() => {
+  const saveProgress = useCallback(() => {
     const progress = EpubInteraction.calculateReadingProgress(iframeRef);
     setReadingProgress(progress.progress);
+
+    WorkerInstance.postMessage(
+      buildMainMessage("update newsletter progress", {
+        id: newsletter.id,
+        progress: ReadingPosition.format(progress.progress),
+      }),
+    );
+
     if (EpubInteraction.shouldMarkRead(endTracking, progress)) {
       WorkerInstance.postMessage(
         buildMainMessage("mark newsletter as read", {
@@ -134,20 +149,6 @@ const EpubReader: React.FC<EpubReaderProps> = ({
       );
     }
   }, [newsletter.id]);
-
-  const saveProgress = useCallback(() => {
-    const fullCfi = Cfi.calculateCurrentCfi(iframeRef);
-    if (fullCfi) {
-      WorkerInstance.postMessage(
-        buildMainMessage("update newsletter progress", {
-          id: newsletter.id,
-          progress: fullCfi,
-        }),
-      );
-    }
-
-    updateReadingProgress();
-  }, [newsletter.id, updateReadingProgress]);
 
   useEffect(() => {
     // these events are added when parsing the epub content
@@ -176,8 +177,9 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     epub.parse().then(async () => {
       if (epub.spine.length > 0) {
         setBookContent(await epub.getSpineItem(0, "target _blank"));
-        if (newsletter.progress) {
-          setOffsetOnNextLoad.current = newsletter.progress;
+        const progress = ReadingPosition.parse(newsletter.progress);
+        if (progress !== null) {
+          seekOnNextLoad.current = { kind: "progress", progress };
         }
       }
     });
@@ -231,7 +233,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
         iframe.contentWindow.scrollX / (iframe.clientWidth + COLUMN_GAP),
       );
       const scrollLeft = page * (iframe.clientWidth + COLUMN_GAP);
-      setOffsetOnNextLoad.current = scrollLeft;
+      seekOnNextLoad.current = { kind: "offset", offset: scrollLeft };
     }
   }, [windowWidth, windowHeight]);
 
@@ -279,20 +281,17 @@ const EpubReader: React.FC<EpubReaderProps> = ({
       // ensure even number of columns on load
       ensureEvenColumns(windowWidth);
 
-      if (setOffsetOnNextLoad.current !== null && iframe.contentWindow) {
-        // check if the stored offset is a CFI string
-        if (
-          typeof setOffsetOnNextLoad.current === "string" &&
-          setOffsetOnNextLoad.current.startsWith("epubcfi")
-        ) {
-          Cfi.scrollToCfi(iframeRef, setOffsetOnNextLoad.current);
-        } else if (typeof setOffsetOnNextLoad.current === "number") {
+      const seek = seekOnNextLoad.current;
+      if (seek !== null && iframe.contentWindow) {
+        if (seek.kind === "progress") {
+          ReadingPosition.scrollToProgress(iframeRef, seek.progress);
+        } else {
           iframe.contentWindow.scrollTo({
-            left: setOffsetOnNextLoad.current,
+            left: seek.offset,
             behavior: "instant",
           });
         }
-        setOffsetOnNextLoad.current = null;
+        seekOnNextLoad.current = null;
       }
     };
     iframe.addEventListener("load", onLoad);
@@ -369,7 +368,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
           lineHeight: 1.5,
         }}
       >
-        {readingProgress}%
+        {Math.round(readingProgress * 100)}%
       </div>
     </>
   );

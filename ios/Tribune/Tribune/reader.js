@@ -170,15 +170,14 @@ function handleOpenExternalLink(event) {
 }
 
 function handleScroll() {
-  const cfi = Bundle.Cfi.calculateCurrentCfi(iframeRef);
+  const progress = Bundle.EpubInteraction.calculateReadingProgress(iframeRef);
   window.webkit.messageHandlers.readerEvent.postMessage({
     type: "progress",
-    cfi: cfi,
+    progress: Bundle.ReadingPosition.format(progress.progress),
   });
 
-  const progress = Bundle.EpubInteraction.calculateReadingProgress(iframeRef);
   document.getElementById("progress").textContent =
-    Math.round(progress.progress).toString() + "%";
+    Math.round(progress.progress * 100).toString() + "%";
   // shouldMarkRead filters out the scroll a footnote link causes, which lands on
   // the notes at the back of the article without any of it having been read
   if (Bundle.EpubInteraction.shouldMarkRead(endTrackingRef, progress)) {
@@ -225,8 +224,11 @@ async function openBook(path, initialProgress) {
   let shown = false;
   const seekAndReveal = () => {
     attachContentListeners();
-    if (initialProgress !== null) {
-      Bundle.Cfi.scrollToCfi(iframeRef, initialProgress);
+    // a stored value that isn't a fraction means never opened, so start at the
+    // beginning
+    const restored = Bundle.ReadingPosition.parse(initialProgress);
+    if (restored !== null) {
+      Bundle.ReadingPosition.scrollToProgress(iframeRef, restored);
     }
     handleScroll();
     iframe.style.opacity = "1";

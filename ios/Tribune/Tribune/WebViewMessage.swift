@@ -5,10 +5,10 @@ struct WebViewMessage: Decodable {
 
     enum MessageType: Decodable {
         case atEnd
-        case progress(cfi: String)
+        case progress(progress: String)
 
         enum CodingKeys: String, CodingKey {
-            case type, cfi
+            case type, progress
         }
 
         init(from decoder: Decoder) throws {
@@ -19,8 +19,8 @@ struct WebViewMessage: Decodable {
             case "at end":
                 self = .atEnd
             case "progress":
-                let cfi = try container.decode(String.self, forKey: .cfi)
-                self = .progress(cfi: cfi)
+                let progress = try container.decode(String.self, forKey: .progress)
+                self = .progress(progress: progress)
             default:
                 throw DecodingError.dataCorruptedError(
                     forKey: .type,

@@ -99,13 +99,13 @@ struct UpdateManagerTests {
         await manager.markNewsletterAsRead(1)
         await manager.markNewsletterAsUnread(2)
         await manager.markNewsletterAsDeleted(3)
-        await manager.updateNewsletterProgress(4, progress: "epubcfi(/6/4)")
+        await manager.updateNewsletterProgress(4, progress: "0.4200")
 
         #expect(sender.sent == [
             .read(newsletterId: 1),
             .unread(newsletterId: 2),
             .delete(newsletterId: 3),
-            .progress(newsletterId: 4, progress: "epubcfi(/6/4)"),
+            .progress(newsletterId: 4, progress: "0.4200"),
         ])
         #expect(manager.pendingUpdates.isEmpty)
         #expect(stored().isEmpty)

@@ -50,8 +50,8 @@ struct ReaderWebView: UIViewRepresentable {
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let n = newsletter, let l = library else { return }
             if message.name == "readerEvent", let obj = message.body as? NSDictionary, let type = obj["type"] as? String {
-                if type == "progress", let cfi = obj["cfi"] as? String {
-                    Task { try? await l.updateNewsletterProgress(n, progress: cfi) }
+                if type == "progress", let progress = obj["progress"] as? String {
+                    Task { try? await l.updateNewsletterProgress(n, progress: progress) }
                 } else if type == "at end" && !n.read {
                     Task { try? await l.markNewsletterRead(n) }
                 } else if type == "external link", let href = obj["href"] as? String, let url = URL(string: href) {
