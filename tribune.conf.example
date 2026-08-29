@@ -1,0 +1,104 @@
+# production nginx config, for the linux box the server actually runs on.
+#
+# replace [USERNAME HERE] with your linux username (`whoami`)
+# replace [TAILSCALE DOMAIN HERE] with your tail domain, e.g. "host.tailXXXX.ts.net"
+# replace [TAILSCALE IP HERE] with the output of `tailscale ip -4`
+
+upstream tribune_server {
+    server unix:/tmp/tribune.sock fail_timeout=0;
+}
+
+server {
+    server_name         [TAILSCALE DOMAIN HERE];
+    ssl_certificate     /home/[USERNAME HERE]/[TAILSCALE DOMAIN HERE].crt;
+    ssl_certificate_key /home/[USERNAME HERE]/[TAILSCALE DOMAIN HERE].key;
+
+    root /home/[USERNAME HERE]/tribune/server/public;
+    listen [TAILSCALE IP HERE]:1847 ssl;
+    client_max_body_size 1G;
+    keepalive_timeout 5;
+
+    location ^~ /users {
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+        proxy_pass http://tribune_server;
+        proxy_max_temp_file_size 0;
+        proxy_read_timeout 600;
+        proxy_send_timeout 600;
+        proxy_buffering off;
+    }
+
+    location ^~ /auth {
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+        proxy_pass http://tribune_server;
+        proxy_max_temp_file_size 0;
+        proxy_read_timeout 600;
+        proxy_send_timeout 600;
+        proxy_buffering off;
+    }
+
+    location ^~ /newsletters {
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+        proxy_pass http://tribune_server;
+        proxy_max_temp_file_size 0;
+        proxy_read_timeout 600;
+        proxy_send_timeout 600;
+        proxy_buffering off;
+    }
+
+    location = / {
+        try_files /index.html =404;
+    }
+
+    location / {
+        try_files $uri =404;
+    }
+
+    location ^~ /accel/newsletters/ {
+        alias /home/[USERNAME HERE]/tribune/newsletters/;
+        internal;
+    }
+}
+
+# plain http for the kindle.
+#
+# with the koreader tailscale plugin running in user space networking mode,
+# the kindle can only reach a plain http endpoint.
+server {
+    listen [TAILSCALE IP HERE]:1850;
+
+    server_name [TAILSCALE DOMAIN HERE];
+
+    client_max_body_size 1G;
+    keepalive_timeout 5;
+
+    location ~ ^/(users|auth|newsletters)(/|$) {
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $http_host;
+        proxy_redirect off;
+        proxy_pass http://tribune_server;
+        proxy_max_temp_file_size 0;
+        proxy_read_timeout 600;
+        proxy_send_timeout 600;
+        proxy_buffering off;
+    }
+
+    location ^~ /accel/newsletters/ {
+        alias /home/[USERNAME HERE]/tribune/newsletters/;
+        internal;
+    }
+
+    # the web app is not served here
+    location / {
+        return 404;
+    }
+}

@@ -26,13 +26,19 @@ Recurring jobs are scheduled by [que-scheduler](https://github.com/hlascelles/qu
 
 A que worker runs `git pull` in that clone once a day, so it doesn't go stale. If `ftr_site_config_dir` is blank or missing, the job says so and does nothing.
 
-### Running the web UI
+### Running the production server
+
+Put nginx in front of the web server using `tribune.conf.example` as a guide. Run `rake web:build` to build the static files for the web app, which are also served through nginx. Set `server_accel` to `true` in `config.yaml` if you do this to speed up delivery of the epub & source files.
+
+`tribune.conf.example` contains a plain http listener for a jailbroken Kindle running the Tailscale KOReader plugin in network mode. Point the plugin at this port and set the web proxy to `http://localhost:1056`.
+
+### Running the development web UI
 
 Start the UI in development mode with `rake web:vite`. The website should be available at `http://localhost:1848`.
 
-### Accessing the web UI remotely
+### Accessing the development web UI remotely
 
-If you want to test on a tablet for example, you need to put a proxy like nginx in front of the vite server that handles TLS termination for you. `navigator.storage` is only available in secure contexts (`http://localhost` and `https://`), which the web app depends on. An example nginx config for development on macOS with tailscale is in this repository at `tribune-dev.conf.example`. Make sure to uncomment the `allowedHosts: true` line in `web/vite.config.ts` as well.
+If you want to reach a dev server on a tablet for example, you need to put a proxy like nginx in front of the vite server that handles TLS termination for you. `navigator.storage` is only available in secure contexts (`http://localhost` and `https://`), which the web app depends on. `tribune-dev.conf.example` is an example for macOS with tailscale, terminating TLS in front of the vite server. Make sure to uncomment the `allowedHosts: true` line in `web/vite.config.ts` as well.
 
 To remotely debug an Android tablet, first enable Developer Mode and then USB Debugging in Android settings. Then enable USB Debugging in the Android Firefox settings. Finally, connect the device and go to `about:debugging` in macOS Firefox and connect to the device.
 

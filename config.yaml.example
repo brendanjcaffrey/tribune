@@ -4,10 +4,14 @@ database_username: user
 database_password:
 database_name: tribune
 test_database_name: tribune-test
--- generate with: ruby -rsecurerandom -e 'p SecureRandom.hex(32)'
-secret: [something]
+# generate with: ruby -rsecurerandom -e 'p SecureRandom.hex(32)'
+server_secret: [something]
 server_port: 1847
+# hand epub and source downloads off to nginx with x-accel-redirect instead of
+# sending them through ruby. only turn this on if your nginx has a matching
+# internal /accel/newsletters/ location
+server_accel: false
 newsletters_dir: /Users/you/tribune/newsletters/
--- `git clone git@github.com:fivefilters/ftr-site-config.git`
--- can leave blank to rely only on readability
+# `git clone git@github.com:fivefilters/ftr-site-config.git`
+# can leave blank to rely only on readability
 ftr_site_config_dir: /Users/you/ftr-site-config/
