@@ -48,7 +48,7 @@ final class Library: LibraryProtocol {
         var fetch = FetchDescriptor<Newsletter>()
         fetch.sortBy = [
             .init(\.updatedAt, order: .reverse),  // newest first
-            .init(\.id, order: .forward)          // stable tiebreaker
+            .init(\.id, order: .reverse)          // highest id, stable tiebreaker
         ]
         fetch.fetchLimit = 1
         return try context.fetch(fetch).first

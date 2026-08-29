@@ -48,11 +48,11 @@ final class MockLibrary: LibraryProtocol {
         return withFilesToDelete
     }
 
-    /// newest by updatedAt, with the id as a stable tiebreaker, like the real one
+    /// newest by updatedAt, ties broken by the highest id, like the real one
     func getNewestNewsletter() async throws -> Newsletter? {
         if let error { throw error }
         return stored.sorted {
-            $0.updatedAt == $1.updatedAt ? $0.id < $1.id : $0.updatedAt > $1.updatedAt
+            $0.updatedAt == $1.updatedAt ? $0.id > $1.id : $0.updatedAt > $1.updatedAt
         }.first
     }
 

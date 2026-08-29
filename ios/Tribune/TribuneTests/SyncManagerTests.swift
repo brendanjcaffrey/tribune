@@ -20,6 +20,17 @@ final class MockNewsletterListFetcher: NewsletterListFetching {
     /// thrown instead of returning a page
     var error: Error?
 
+    /// when set, pages are answered the way the server does instead of being
+    /// handed out from `pages`: every row above the cursor, oldest first, cut
+    /// off at `pageSize`
+    var serverRows: [NewslettersResponse.Item]?
+    var pageSize = 100
+
+    /// a sync whose cursor never advances would ask forever, so give up and
+    /// throw rather than hanging the test
+    var maxFetches = 20
+    struct RunawaySync: Error {}
+
     /// fetches block until `release()` is called, or the sync is cancelled
     var hold = false
     private var released = false
@@ -33,8 +44,19 @@ final class MockNewsletterListFetcher: NewsletterListFetching {
 
     func fetchAfter(newsletter: Newsletter) async throws -> NewslettersResponse {
         fetchedAfter.append(newsletter.id)
+        if fetchedAfter.count > maxFetches { throw RunawaySync() }
         try await waitIfHeld()
         if let error { throw error }
+        if let serverRows {
+            let above = serverRows
+                .filter {
+                    $0.updated_at == newsletter.updatedAt
+                        ? $0.id > newsletter.id
+                        : $0.updated_at > newsletter.updatedAt
+                }
+                .sorted { $0.updated_at == $1.updated_at ? $0.id < $1.id : $0.updated_at < $1.updated_at }
+            return NewslettersResponse(result: Array(above.prefix(pageSize)))
+        }
         return NewslettersResponse(result: pages.isEmpty ? [] : pages.removeFirst())
     }
 
@@ -181,6 +203,39 @@ struct SyncManagerTests {
         // each page moves the cursor on to the newest newsletter it just stored
         #expect(fetcher.fetchedAfter == [1, 2, 3])
         #expect(library.put.map(\.id) == [2, 3])
+    }
+
+    @Test func finishesWhenTheTwoNewestNewslettersShareATimestamp() async {
+        // updated_at defaults to the transaction's start time, so newsletters
+        // written together carry identical timestamps. the cursor has to break
+        // that tie the way the server does, on the highest id -- picking the
+        // lowest asks after 5, gets handed 9, and asks after 5 again forever
+        let tie = "2025-02-01 06:00:00+00"
+        library.stored = [
+            newsletter(id: 5, updatedAt: tie),
+            newsletter(id: 9, updatedAt: tie),
+        ]
+        fetcher.serverRows = [item(id: 5, updatedAt: tie), item(id: 9, updatedAt: tie)]
+
+        let status = await makeManager().syncLibrary()
+
+        #expect(status == .success)
+        #expect(fetcher.fetchedAfter == [9])
+    }
+
+    @Test func walksATiedTimestampToTheEndWithoutRepeatingItself() async {
+        // the whole page shares one timestamp, so every step of the walk is a
+        // tie and the cursor can only move on the id
+        let tie = "2025-02-01 06:00:00+00"
+        library.stored = [newsletter(id: 1, updatedAt: tie)]
+        fetcher.serverRows = (1...7).map { item(id: $0, updatedAt: tie) }
+        fetcher.pageSize = 2
+
+        let status = await makeManager().syncLibrary()
+
+        #expect(status == .success)
+        #expect(fetcher.fetchedAfter == [1, 3, 5, 7])
+        #expect(library.put.map(\.id) == [2, 3, 4, 5, 6, 7])
     }
 
     @Test func doesNothingWhenTheLibrarySaysItHasNewslettersButCantFindOne() async {
