@@ -48,6 +48,20 @@ If you're trying to advance to the next page in an ebook and the browser is clos
 
 First, copy `ios/Tribune/Config.xcconfig.example` to `ios/Tribune/Config.xcconfig` and update it to point at your api server. Then open the app in Xcode and run.
 
+### Running the KOReader plugin
+
+The plugin is `koreader/tribune.koplugin`. KOReader loads plugins from the `plugins` directory in its data directory, so installing it means putting that directory there and restarting KOReader:
+
+- macOS release build (`KOReader.app`): `~/Library/Application Support/koreader/plugins/`
+- Kindle: `/mnt/us/koreader/plugins/`
+- Android: `koreader/plugins/` in the app's storage directory
+
+On macOS, `rake koreader:install` symlinks the plugin into `~/Library/Application Support/koreader/plugins/`. `COPY=1 rake koreader:install` installs a real copy instead of a symlink. Set `KO_HOME` to override the data directory. Run `rake koreader:run` to launch the macOS app with verbose logs printed in the terminal. Enable verbose logs by clicking the top of the screen, hitting the menu icon on the right, Help > Report a Bug > Enable verbose logging.
+
+The plugin's entry is in the file browser's menu under `Tools`. Set the server address first, then sign in with the same username and password as the web app. The token is kept in `settings/tribune.lua` in KOReader's data directory and survives a restart; signing out discards it.
+
+The two devices reach the server differently. An Android tablet can run a full Tailscale tunnel and use the https address (`https://<host>.ts.net:1847`). The Kindle may run Tailscale in userspace networking mode and need to use plain http, with KOReader's `Network → HTTP proxy` set to `http://localhost:1056`.
+
 ### Creating a User
 
 Run `rake user:create` and it will prompt you for a username and password.

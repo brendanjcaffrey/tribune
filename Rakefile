@@ -44,6 +44,15 @@ def recolor_logo(command, source, colour, size, dest)
               "-compose copy_opacity -composite -resize #{size} PNG32:#{dest}")
 end
 
+# koreader reads KO_HOME as an override for its data directory, so we do too.
+# otherwise datastorage.lua resolves it to ~/Library/Application Support/koreader on macos.
+def koreader_data_dir
+  home = ENV['KO_HOME'].to_s
+  return home unless home.empty?
+
+  File.join(Dir.home, 'Library', 'Application Support', 'koreader')
+end
+
 command = TTY::Command.new
 
 ROOT = __dir__
@@ -356,6 +365,44 @@ namespace :ios do
 
     sh "xcrun altool --upload-app -f #{export}/Tribune.ipa --type ios " \
        "--apiKey #{key_id} --apiIssuer #{issuer_id}"
+  end
+end
+
+namespace :koreader do
+  desc 'Install the KOReader plugin into KOReader\'s data directory (COPY=1 to copy instead of symlink)'
+  task :install do
+    pastel = Pastel.new
+    source = File.join(ROOT, 'koreader', 'tribune.koplugin')
+    data_dir = koreader_data_dir
+
+    plugins_dir = File.join(data_dir, 'plugins')
+    FileUtils.mkdir_p(plugins_dir)
+    dest = File.join(plugins_dir, 'tribune.koplugin')
+
+    # clear the previous install first, or a symlink onto an existing directory
+    # nests inside it. this only ever touches the plugin's own destination, and
+    # rm_rf on a symlink removes the link rather than what it points at.
+    FileUtils.rm_rf(dest) if File.symlink?(dest) || File.exist?(dest)
+
+    if ENV['COPY'].to_s.empty?
+      FileUtils.ln_s(source, dest)
+      puts pastel.green("symlinked #{dest} -> #{source}")
+    else
+      FileUtils.cp_r(source, dest)
+      puts pastel.green("copied #{source} to #{dest}")
+    end
+
+    puts 'restart koreader to pick it up.'
+  end
+
+  desc 'Launch KOReader on macOS and stream verbose logs to the terminal'
+  task :run do
+    abort 'koreader:run is only available on macOS' unless RUBY_PLATFORM.include?('darwin')
+
+    launcher = '/Applications/KOReader.app/Contents/MacOS/koreader'
+    abort "KOReader is not installed at #{launcher}" unless File.executable?(launcher)
+
+    exec launcher, '-d', '-v'
   end
 end
 
