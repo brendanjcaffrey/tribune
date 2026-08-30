@@ -35,6 +35,7 @@ local messages = {}
 local free_space
 local http_response
 local network = {}
+local clock
 
 local function reset_environment()
     stored_settings = {}
@@ -44,6 +45,7 @@ local function reset_environment()
     messages = {}
     free_space = nil
     http_response = nil
+    clock = nil
     network = { wifi_on = false, connected = false, rerun_when_connected = false }
 end
 
@@ -170,6 +172,10 @@ package.preload["gettext"] = function() return function(value) return value end 
 local original_open = io.open
 local original_remove = os.remove
 local original_rename = os.rename
+local original_time = os.time
+-- the clock the plugin reads. a test that cares how old a file is sets it; the
+-- rest are left on the real one.
+os.time = function() return clock or original_time() end
 io.open = function(path, mode)
     if mode ~= "wb" then return original_open(path, mode) end
     local chunks = {}
@@ -1119,8 +1125,173 @@ test("a failed download removes its partial epub and leaves the cache pending", 
     assert_equal(local_cache:get(8).downloaded_epub_updated_at, nil)
 end)
 
+--[[ eviction ]]--
+
+-- an epub that arrived at NOW and has not been opened since. three days is what
+-- the other clients wait too, so the fixtures are written in days.
+local NOW = 1800000000
+local DAY = 24 * 60 * 60
+
+local function downloaded(id, fields)
+    local local_cache = cache()
+    local_cache:put(row(id, fields))
+    local_cache:setDownloaded(id, local_cache:get(id).epub_updated_at, NOW)
+    files["/library/newsletters/" .. id .. ".epub"] = "epub " .. id
+    return local_cache
+end
+
+test("a read newsletter's epub goes three days after it was last opened", function()
+    reset_environment()
+    local local_cache = downloaded(7, { read = true })
+    local instance = tribune(local_cache)
+
+    clock = NOW + 3 * DAY
+    assert_equal(instance:evictDownloads(), 0)
+    assert_equal(files["/library/newsletters/7.epub"], "epub 7")
+
+    clock = NOW + 3 * DAY + 1
+    assert_equal(instance:evictDownloads(), 1)
+    assert_equal(files["/library/newsletters/7.epub"], nil)
+    assert_equal(purged[1], "/library/newsletters/7.epub")
+    assert_equal(local_cache:get(7).downloaded_epub_updated_at, nil)
+end)
+
+test("a deleted newsletter's epub goes on the same terms", function()
+    reset_environment()
+    local instance = tribune(downloaded(8, { deleted = true }))
+
+    clock = NOW + 3 * DAY
+    assert_equal(instance:evictDownloads(), 0)
+
+    clock = NOW + 4 * DAY
+    assert_equal(instance:evictDownloads(), 1)
+    assert_equal(files["/library/newsletters/8.epub"], nil)
+    assert_equal(purged[1], "/library/newsletters/8.epub")
+end)
+
+test("an unread newsletter's epub is kept however old it is", function()
+    reset_environment()
+    local local_cache = downloaded(9)
+    local instance = tribune(local_cache)
+
+    clock = NOW + 365 * DAY
+    assert_equal(instance:evictDownloads(), 0)
+    assert_equal(files["/library/newsletters/9.epub"], "epub 9")
+    assert_equal(local_cache:get(9).downloaded_epub_updated_at, "2026-03-09")
+end)
+
+test("opening a newsletter defers the removal of its epub", function()
+    reset_environment()
+    local instance = tribune(downloaded(7, { read = true }))
+
+    clock = NOW + 2 * DAY
+    reader(instance, 7, 1, 10)
+    instance:onReaderReady()
+
+    clock = NOW + 4 * DAY
+    assert_equal(instance:evictDownloads(), 0)
+    assert_equal(files["/library/newsletters/7.epub"], "epub 7")
+
+    clock = NOW + 5 * DAY + 1
+    assert_equal(instance:evictDownloads(), 1)
+    assert_equal(files["/library/newsletters/7.epub"], nil)
+end)
+
+test("a read state the server has not heard about keeps the epub", function()
+    reset_environment()
+    local instance = tribune(downloaded(7))
+    clock = NOW + 4 * DAY
+    instance:markNewsletterRead(7)
+
+    instance.request = function() return false, "offline", nil end
+    assert_equal(instance:sync(), false)
+    assert_equal(files["/library/newsletters/7.epub"], "epub 7")
+
+    instance.request = function(_, method)
+        if method == "GET" then return true, { result = {} }, 200 end
+        return true, nil, 200
+    end
+    -- this sync sends the update, so the file is still held while it runs
+    assert_true(instance:sync())
+    assert_equal(files["/library/newsletters/7.epub"], "epub 7")
+
+    assert_true(instance:sync())
+    assert_equal(files["/library/newsletters/7.epub"], nil)
+end)
+
+test("a delete the server has not heard about keeps the epub", function()
+    reset_environment()
+    local instance = tribune(downloaded(8))
+    clock = NOW + 4 * DAY
+    instance:deleteNewsletter(8)
+
+    assert_equal(instance:evictDownloads(), 0)
+    assert_equal(files["/library/newsletters/8.epub"], "epub 8")
+
+    instance.request = function(_, method)
+        if method == "GET" then return true, { result = {} }, 200 end
+        return true, nil, 200
+    end
+    assert_true(instance:sync())
+
+    assert_equal(instance:evictDownloads(), 1)
+    assert_equal(files["/library/newsletters/8.epub"], nil)
+end)
+
+-- the other side of the same rule. a queued position is not what the file is
+-- being dropped for, and removing the file does not take it with it.
+test("a queued progress does not hold an epub on the device", function()
+    reset_environment()
+    local instance = tribune(downloaded(7, { read = true }))
+    instance.cache:queueUpdate({ kind = "progress", id = 7, progress = "0.5000" })
+
+    clock = NOW + 4 * DAY
+    assert_equal(instance:evictDownloads(), 1)
+    assert_equal(files["/library/newsletters/7.epub"], nil)
+    assert_equal(#instance.cache:pendingUpdates(), 1)
+end)
+
+test("an epub downloaded before the clock existed starts its wait rather than staying for good", function()
+    reset_environment()
+    local local_cache = cache()
+    local_cache:put(row(7, { read = true }))
+    local_cache:setDownloaded(7, "2026-03-07", NOW)
+    local_cache:get(7).epub_accessed_at = nil
+    local_cache.data:saveSetting(7, local_cache:get(7))
+    files["/library/newsletters/7.epub"] = "epub 7"
+    local instance = tribune(local_cache)
+
+    assert_equal(instance:evictDownloads(NOW), 0)
+    assert_equal(local_cache:get(7).epub_accessed_at, NOW)
+
+    assert_equal(instance:evictDownloads(NOW + 4 * DAY), 1)
+    assert_equal(files["/library/newsletters/7.epub"], nil)
+end)
+
+test("a removed newsletter is not downloaded again on the next sync", function()
+    reset_environment()
+    local instance = tribune(downloaded(7, { read = true }))
+    instance.request = function(_, method)
+        if method == "GET" then return true, { result = {} }, 200 end
+        return true, nil, 200
+    end
+    http_response = function() fail("a removed newsletter must not be fetched again") end
+
+    clock = NOW + 4 * DAY
+    local ok, summary = instance:sync()
+    assert_true(ok)
+    assert_equal(summary.removed, 1)
+    assert_equal(files["/library/newsletters/7.epub"], nil)
+
+    local resynced, next_summary = instance:sync()
+    assert_true(resynced)
+    assert_equal(next_summary.downloaded, 0)
+    assert_equal(files["/library/newsletters/7.epub"], nil)
+end)
+
 io.open = original_open
 os.remove = original_remove
 os.rename = original_rename
+os.time = original_time
 
 if failures > 0 then os.exit(1) end

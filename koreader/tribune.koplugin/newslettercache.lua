@@ -5,7 +5,8 @@ only what the plugin needs is kept about a newsletter: its id, so it can be
 named on disk and on the server; when it was published and whether it has been
 read, so it can be ordered; how far through it the reader got, so opening it
 lands where the last device left off; when its epub last changed, so a
-downloaded copy can be told from a stale one; whether it has been deleted, so it
+downloaded copy can be told from a stale one; when that copy was last opened, so
+one nobody is coming back to can be dropped; whether it has been deleted, so it
 stops being listed; and when it last changed, which is what the server pages on.
 
 the file is append-mostly. writing one newsletter appends one line rather than
@@ -34,6 +35,12 @@ local BYTES_PER_NEWSLETTER = 150
 local COMPACT_RATIO = 3
 local COMPACT_FLOOR = 32 * 1024
 local MAX_PENDING_UPDATE_AGE = 30 * 24 * 60 * 60
+
+-- how long an epub with nothing left to do on it stays on the device. only read
+-- and deleted newsletters ever get here, and the wait is what makes going back
+-- to one just after finishing it cost nothing. the other clients wait the same
+-- three days.
+local DOWNLOAD_RETENTION = 3 * 24 * 60 * 60
 
 local Cache = {}
 Cache.__index = Cache
@@ -134,10 +141,35 @@ end
 -- records the version of an epub that made it safely onto the device. this is
 -- deliberately separate from epub_updated_at: the latter is what the server
 -- currently has, while this says which version the local file contains.
-function Cache:setDownloaded(id, epub_updated_at)
+--
+-- arriving counts as being touched, so a newsletter marked read without ever
+-- being opened is still kept for the same three days as one that was.
+function Cache:setDownloaded(id, epub_updated_at, when)
     local newsletter = self:get(id)
     if not newsletter then return false end
     newsletter.downloaded_epub_updated_at = epub_updated_at
+    newsletter.epub_accessed_at = when or os.time()
+    self.data:saveSetting(tonumber(id), newsletter)
+    return true
+end
+
+-- opening a newsletter is what says the file is still wanted, so it starts the
+-- wait again. a newsletter with no file has nothing to defer.
+function Cache:touchDownload(id, when)
+    local newsletter = self:get(id)
+    if not newsletter or not newsletter.downloaded_epub_updated_at then return false end
+    newsletter.epub_accessed_at = when or os.time()
+    self.data:saveSetting(tonumber(id), newsletter)
+    return true
+end
+
+-- the file has gone. both marks go with it, so the cache says what is actually
+-- on disk rather than what once was.
+function Cache:clearDownloaded(id)
+    local newsletter = self:get(id)
+    if not newsletter then return false end
+    newsletter.downloaded_epub_updated_at = nil
+    newsletter.epub_accessed_at = nil
     self.data:saveSetting(tonumber(id), newsletter)
     return true
 end
@@ -183,6 +215,16 @@ end
 function Cache:hasPendingUpdate(id, kind)
     for _, update in ipairs(self:pendingUpdates()) do
         if update.id == id and update.kind == kind then return true end
+    end
+    return false
+end
+
+-- whether the queue is still holding what this device decided a newsletter's
+-- read or deleted state is. progress does not count: it is not why a file gets
+-- dropped, and it is not lost when one is.
+function Cache:hasPendingStateUpdate(id)
+    for _, update in ipairs(self:pendingUpdates()) do
+        if update.id == id and update.kind ~= "progress" then return true end
     end
     return false
 end
@@ -239,6 +281,44 @@ function Cache:downloads()
         if a.created_at ~= b.created_at then return a.created_at < b.created_at end
         return a.id < b.id
     end)
+    return out
+end
+
+-- gives an epub that is on the device but has no access time one. only the
+-- epubs downloaded before the plugin recorded it are without one, and a file
+-- with no clock would otherwise never run out of time.
+function Cache:startDownloadClocks(now)
+    for id, newsletter in pairs(self.data.data) do
+        if type(id) == "number" and newsletter.downloaded_epub_updated_at
+            and not newsletter.epub_accessed_at then
+            newsletter.epub_accessed_at = now or os.time()
+            self.data:saveSetting(id, newsletter)
+        end
+    end
+end
+
+-- the downloaded epubs there is no longer any reason to keep: read or deleted,
+-- and left alone for long enough that nobody is coming back to them. unread
+-- newsletters are never here however old they are, since having them on the
+-- device is the whole point of downloading them.
+--
+-- a newsletter whose read or deleted state has not reached the server yet keeps
+-- its file. that state is the only reason the file would go, and dropping the
+-- file on the strength of something the server has not been told would leave
+-- the next sync fetching it back again.
+function Cache:evictions(now)
+    now = now or os.time()
+    local out = {}
+    for id, newsletter in pairs(self.data.data) do
+        if type(id) == "number" and newsletter.downloaded_epub_updated_at
+            and (newsletter.read or newsletter.deleted)
+            and newsletter.epub_accessed_at
+            and now - newsletter.epub_accessed_at > DOWNLOAD_RETENTION
+            and not self:hasPendingStateUpdate(id) then
+            out[#out + 1] = id
+        end
+    end
+    table.sort(out)
     return out
 end
 

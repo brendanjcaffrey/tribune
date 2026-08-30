@@ -206,6 +206,10 @@ function Tribune:onReaderReady()
     if not id then return end
 
     local cache = self:getCache()
+    -- opening the file is what says it is still wanted, so this is what holds
+    -- the epub on the device once the newsletter itself is finished with
+    cache:touchDownload(id)
+
     if not cache:hasPendingUpdate(id, "progress") then
         local newsletter = cache:get(id)
         local fraction = newsletter and parseProgress(newsletter.progress)
@@ -682,6 +686,12 @@ function Tribune:sync()
     end
 
     local cache = self:getCache()
+    -- before the updates rather than after: a newsletter whose read or deleted
+    -- state is still queued keeps its file, and that is only worth checking
+    -- while the queue still has it in. it also frees whatever space the
+    -- finished newsletters were taking before anything new is fetched.
+    local removed = self:evictDownloads()
+
     local updates_ok, updates_message, updates_code = self:sendPendingUpdates()
     if not updates_ok then return false, updates_message, updates_code end
     -- everything at or below the mark is already known
@@ -705,7 +715,12 @@ function Tribune:sync()
             local download_ok, downloaded, download_code = self:downloadUnread()
             if not download_ok then return false, downloaded, download_code end
             self:refreshBrowser()
-            return true, { fetched = fetched, stored = stored, downloaded = downloaded }
+            return true, {
+                fetched = fetched,
+                stored = stored,
+                downloaded = downloaded,
+                removed = removed,
+            }
         end
     end
 
@@ -745,6 +760,29 @@ function Tribune:downloadUnread()
     return true, downloaded
 end
 
+-- removes the epubs the cache says are done with. the file goes with its
+-- reading sidecar, since the sidecar describes a file that is no longer there
+-- and would otherwise be restored over a later download of the same newsletter.
+--
+-- the cache entry is cleared last, so being interrupted leaves a newsletter the
+-- cache still believes is downloaded and the next run removes again. removing a
+-- file that has already gone costs nothing; forgetting one that is still there
+-- would leave it behind for good.
+function Tribune:evictDownloads(now)
+    local cache = self:getCache()
+    cache:startDownloadClocks(now)
+    local removed = 0
+    for _, id in ipairs(cache:evictions(now)) do
+        local filename = self.newsletters_dir .. "/" .. id .. ".epub"
+        os.remove(filename)
+        DocSettings:open(filename):purge(nil, { doc_settings = true })
+        cache:clearDownloaded(id)
+        removed = removed + 1
+    end
+    if removed > 0 then logger.dbg("tribune: removed", removed, "epubs") end
+    return removed
+end
+
 --[[ when syncing happens ]]--
 
 -- a new file browser means a new plugin, so this runs every time the browser is
@@ -781,7 +819,8 @@ function Tribune:autoSync()
 
     local ok, result, code = self:sync()
     if ok then
-        logger.dbg("tribune: synced", result.fetched, "rows,", result.stored, "kept")
+        logger.dbg("tribune: synced", result.fetched, "rows,", result.stored,
+                   "kept,", result.removed, "epubs removed")
         return
     end
     if code == 401 then
