@@ -16,6 +16,8 @@ final class MockNewsletterListFetcher: NewsletterListFetching {
     private(set) var fetchAllCount = 0
     /// the ids of the newsletters we were asked to fetch after, in order
     private(set) var fetchedAfter: [Int] = []
+    /// the ids of the newsletters we were asked to fetch before, in order
+    private(set) var fetchedBefore: [Int] = []
 
     /// thrown instead of returning a page
     var error: Error?
@@ -57,6 +59,14 @@ final class MockNewsletterListFetcher: NewsletterListFetching {
                 .sorted { $0.updated_at == $1.updated_at ? $0.id < $1.id : $0.updated_at < $1.updated_at }
             return NewslettersResponse(result: Array(above.prefix(pageSize)))
         }
+        return NewslettersResponse(result: pages.isEmpty ? [] : pages.removeFirst())
+    }
+
+    func fetchBefore(updatedAt: String, id: Int) async throws -> NewslettersResponse {
+        fetchedBefore.append(id)
+        if fetchedBefore.count > maxFetches { throw RunawaySync() }
+        try await waitIfHeld()
+        if let error { throw error }
         return NewslettersResponse(result: pages.isEmpty ? [] : pages.removeFirst())
     }
 
@@ -172,6 +182,16 @@ struct SyncManagerTests {
         // nothing is downloaded yet, so there's no local state to carry over
         #expect(stored?.epubVersion == nil)
         #expect(stored?.epubLastAccessedAt == nil)
+    }
+
+    @Test func walksBackwardsThroughFullInitialPages() async {
+        fetcher.all = (101...200).map { item(id: $0) }
+        fetcher.pages = [(1...99).map { item(id: $0) }]
+
+        await makeManager().syncLibrary()
+
+        #expect(fetcher.fetchedBefore == [101])
+        #expect(library.put.map(\.id) == Array(101...200) + Array(1...99))
     }
 
     // MARK: - incremental fetches

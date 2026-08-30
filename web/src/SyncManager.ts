@@ -7,6 +7,7 @@ import { type APINewsletters } from "./APINewsletters";
 import { DownloadManager } from "./DownloadManager";
 
 const REFRESH_MILLIS = 5 * 60 * 1000;
+const NEWSLETTERS_PAGE_SIZE = 100;
 
 export class SyncManager {
   private downloadManager: DownloadManager;
@@ -103,17 +104,40 @@ export class SyncManager {
   }
 
   private async fetchInitial() {
+    if (await this.fetchInitialPage()) {
+      postMessage(buildWorkerMessage("newsletters updated", {}));
+    }
+  }
+
+  // The unqualified endpoint starts at the newest newsletters. Continue from
+  // the oldest row in each full page so a new library gets its whole history.
+  private async fetchInitialPage(
+    before?: Pick<Newsletter, "id" | "updatedAt">,
+  ): Promise<boolean> {
     const { data } = await axios.get<APINewsletters>("/newsletters", {
       signal: this.abortController!.signal,
       headers: { Authorization: `Bearer ${this.authToken}` },
-      params: {}, // this is here for unit tests
+      params: before
+        ? {
+            before_timestamp: before.updatedAt,
+            before_id: before.id,
+          }
+        : {}, // this is here for unit tests
     });
     for (const newsletter of this.transformResponse(data)) {
       await library().putNewsletter(newsletter);
     }
-    if (data.result.length > 0) {
-      postMessage(buildWorkerMessage("newsletters updated", {}));
+
+    let fetchedAny = data.result.length > 0;
+    if (data.result.length === NEWSLETTERS_PAGE_SIZE) {
+      const oldestNewsletter = data.result[data.result.length - 1];
+      fetchedAny =
+        (await this.fetchInitialPage({
+          id: oldestNewsletter.id,
+          updatedAt: oldestNewsletter.updated_at,
+        })) || fetchedAny;
     }
+    return fetchedAny;
   }
 
   private async fetchUpdates(fetchedAny: boolean = false) {

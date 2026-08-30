@@ -131,6 +131,31 @@ enum APIClient {
         return try Self.buildDecoder().decode(NewslettersResponse.self, from: data)
     }
 
+    static func getNewslettersBefore(updatedAt: String, id: Int) async throws -> NewslettersResponse {
+        guard let stored = try getToken() else {
+            throw APIError.notAuthorized
+        }
+        var components = URLComponents(url: AppConfig.baseURL.appending(path: newslettersPath), resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "before_timestamp", value: updatedAt),
+            URLQueryItem(name: "before_id", value: String(id))
+        ]
+        components.percentEncodedQuery = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
+
+        var req = URLRequest(url: components.url!, timeoutInterval: Self.defaultTimeoutInterval)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(code) else {
+            throw APIError.badStatus(code)
+        }
+
+        return try Self.buildDecoder().decode(NewslettersResponse.self, from: data)
+    }
+
     // GET /newsletters/:id/:type
     static func getNewsletterFile(type: APIFileType, id: Int) async throws -> Data {
         guard let stored = try getToken() else {

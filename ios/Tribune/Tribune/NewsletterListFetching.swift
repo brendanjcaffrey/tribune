@@ -5,6 +5,7 @@ import Foundation
 protocol NewsletterListFetching {
     func fetchAll() async throws -> NewslettersResponse
     func fetchAfter(newsletter: Newsletter) async throws -> NewslettersResponse
+    func fetchBefore(updatedAt: String, id: Int) async throws -> NewslettersResponse
 }
 
 struct APINewsletterListFetcher: NewsletterListFetching {
@@ -17,5 +18,9 @@ struct APINewsletterListFetcher: NewsletterListFetching {
 
     func fetchAfter(newsletter: Newsletter) async throws -> NewslettersResponse {
         try await APIClient.getNewslettersAfter(newsletter: newsletter)
+    }
+
+    func fetchBefore(updatedAt: String, id: Int) async throws -> NewslettersResponse {
+        try await APIClient.getNewslettersBefore(updatedAt: updatedAt, id: id)
     }
 }

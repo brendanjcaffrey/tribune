@@ -7,6 +7,8 @@ enum SyncStatus: Equatable {
     case blocked
 }
 
+private let newslettersPageSize = 100
+
 @MainActor
 final class SyncManager: ObservableObject {
     private let library: LibraryProtocol
@@ -65,7 +67,25 @@ final class SyncManager: ObservableObject {
 
     private func fetchInitial() async throws {
         let response = try await fetcher.fetchAll()
+        try await storeInitial(response)
 
+        // The initial endpoint starts with the newest page. Walk backwards
+        // from each full page so a fresh install receives the full library.
+        guard response.result.count == newslettersPageSize,
+              let oldest = response.result.last else { return }
+        try await fetchInitial(beforeUpdatedAt: oldest.updated_at, id: oldest.id)
+    }
+
+    private func fetchInitial(beforeUpdatedAt updatedAt: String, id: Int) async throws {
+        let response = try await fetcher.fetchBefore(updatedAt: updatedAt, id: id)
+        try await storeInitial(response)
+
+        guard response.result.count == newslettersPageSize,
+              let oldest = response.result.last else { return }
+        try await fetchInitial(beforeUpdatedAt: oldest.updated_at, id: oldest.id)
+    }
+
+    private func storeInitial(_ response: NewslettersResponse) async throws {
         for n in transformResponse(api: response, originalMap: .none) {
             try await library.putNewsletter(n)
         }

@@ -315,6 +315,33 @@ describe("SyncManager", () => {
     expect(vi.mocked(downloadManager.checkForDownloads)).toHaveBeenCalledOnce();
   });
 
+  it("should page backwards through the whole library on the first sync", async () => {
+    mockHasAnyNewslettersResolve(false);
+    const newestPage = Array.from({ length: 100 }, (_, index) => ({
+      ...A1,
+      id: 200 - index,
+      updated_at: `2025-01-02 00:00:${String(99 - index).padStart(2, "0")}+00`,
+    }));
+    const oldestPage = [{ ...A1, id: 1, updated_at: "2025-01-01 00:00:00+00" }];
+    mockAxiosGetResolve({ meta: {}, result: newestPage });
+    mockAxiosGetResolve({ meta: {}, result: oldestPage });
+
+    await syncManager.setLibraryInitialized();
+    await syncManager.setAuthToken("test-token");
+
+    expectAxiosGetCalls([
+      { path: "/newsletters", params: {} },
+      {
+        path: "/newsletters",
+        params: {
+          before_id: 101,
+          before_timestamp: "2025-01-02 00:00:00+00",
+        },
+      },
+    ]);
+    expect(library().putNewsletter).toHaveBeenCalledTimes(101);
+  });
+
   it("should attempt to sync with the latest id/updated at", async () => {
     mockHasAnyNewslettersResolve(true);
     mockGetAllNewslettersResolve([N1, N2, N3]);
