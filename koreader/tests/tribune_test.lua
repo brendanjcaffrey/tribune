@@ -607,6 +607,12 @@ test("marking a newsletter read changes the cached state and queues an update", 
     assert_equal(instance.cache:pendingUpdates()[1].kind, "read")
     assert_equal(instance.cache:pendingUpdates()[1].id, 7)
     assert_equal(refreshes, 1)
+    assert_equal(#scheduled, 1)
+
+    local quiet
+    instance.autoSync = function(_, value) quiet = value end
+    scheduled[1]()
+    assert_equal(quiet, true)
 end)
 
 test("sync sends a queued read update before fetching newsletters", function()
@@ -643,6 +649,13 @@ test("unread and delete actions update the device and use their server routes", 
     instance:init()
     rows.tribune_newsletter_actions("/library/newsletters/7.epub", true)[2].callback()
     rows.tribune_newsletter_actions("/library/newsletters/8.epub", true)[3].callback()
+    assert_equal(#scheduled, 2)
+    local quiet = {}
+    instance.autoSync = function(_, value) quiet[#quiet + 1] = value end
+    scheduled[1]()
+    scheduled[2]()
+    assert_equal(quiet[1], true)
+    assert_equal(quiet[2], true)
     local sent = {}
     instance.request = function(_, method, path)
         sent[#sent + 1] = method .. " " .. path

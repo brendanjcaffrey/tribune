@@ -136,15 +136,24 @@ function Tribune:registerNewsletterActions()
         return {
             {
                 text = _("Mark as read"),
-                callback = function() self:markNewsletterRead(id) end,
+                callback = function()
+                    self:markNewsletterRead(id)
+                    self:scheduleSync(true)
+                end,
             },
             {
                 text = _("Mark as unread"),
-                callback = function() self:markNewsletterUnread(id) end,
+                callback = function()
+                    self:markNewsletterUnread(id)
+                    self:scheduleSync(true)
+                end,
             },
             {
                 text = _("Delete"),
-                callback = function() self:deleteNewsletter(id) end,
+                callback = function()
+                    self:deleteNewsletter(id)
+                    self:scheduleSync(true)
+                end,
             },
         }
     end)
