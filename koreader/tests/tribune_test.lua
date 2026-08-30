@@ -112,6 +112,22 @@ package.preload["ui/widget/container/widgetcontainer"] = function()
     end
     return widget
 end
+package.preload["ui/widget/filechooser"] = function()
+    local FileChooser = { collates = {
+        strcoll = {
+            text = "name",
+            init_sort_func = function()
+                return function(a, b) return a.text < b.text end
+            end,
+        },
+    } }
+    function FileChooser:getCollate()
+        local collate = self.collates[self.selected_collate]
+        if collate then return collate, self.selected_collate end
+        return self.collates.strcoll, "strcoll"
+    end
+    return FileChooser
+end
 package.preload["ffi/util"] = function()
     return { template = function(format, value) return format:gsub("%%1", tostring(value)) end }
 end
@@ -156,7 +172,11 @@ io.open = function(path, mode)
         close = function() files[path] = table.concat(chunks); return true end,
     }
 end
-os.remove = function(path) files[path] = nil; return true end
+os.remove = function(path)
+    files[path] = nil
+    stored_settings[path] = nil
+    return true
+end
 os.rename = function(from, to)
     if not files[from] then return nil end
     files[to] = files[from]
@@ -186,6 +206,7 @@ local function row(id, fields)
     fields = fields or {}
     return {
         id = id,
+        title = fields.title or "",
         created_at = fields.created_at or string.format("2026-01-%02d", id),
         updated_at = fields.updated_at or string.format("2026-02-%02d", id),
         epub_updated_at = fields.epub_updated_at or string.format("2026-03-%02d", id),
@@ -194,7 +215,7 @@ local function row(id, fields)
     }
 end
 
-test("cache orders unread newsletters first and preserves downloaded epubs", function()
+test("cache orders unread newsletters newest first and preserves downloaded epubs", function()
     reset_environment()
     local first = cache()
     first:put(row(1, { created_at = "2026-01-03", read = true }))
@@ -204,14 +225,417 @@ test("cache orders unread newsletters first and preserves downloaded epubs", fun
     first:put(row(2, { created_at = "2026-01-02", epub_updated_at = "2026-04-02" }))
 
     local list = first:list()
-    assert_equal(list[1].id, 3)
-    assert_equal(list[2].id, 2)
+    assert_equal(list[1].id, 2)
+    assert_equal(list[2].id, 3)
     assert_equal(list[3].id, 1)
     assert_equal(first:downloads()[1].id, 3)
     assert_equal(first:downloads()[2].id, 2)
 
     local restarted = cache()
     assert_equal(restarted:get(2).downloaded_epub_updated_at, "2026-03-02")
+end)
+
+test("registers an unread-first sort mode that decorates newsletter rows", function()
+    reset_environment()
+    local instance = tribune()
+    instance.ui = { menu = { registerToMainMenu = function() end } }
+    instance.cache:put(row(8, { created_at = "2026-01-02", read = true }))
+    instance.cache:put(row(9, { created_at = "2026-01-03" }))
+
+    instance:init()
+
+    local FileChooser = require("ui/widget/filechooser")
+    local sort_mode = FileChooser.collates.tribune_unread_first
+    assert_equal(sort_mode.text, "unread first")
+
+    local older_unread = { text = "8.epub", path = "/library/newsletters/8.epub", attr = { size = 1 } }
+    local newer_unread = { text = "9.epub", path = "/library/newsletters/9.epub", attr = { size = 1 } }
+    sort_mode.item_func(older_unread)
+    sort_mode.item_func(newer_unread)
+    assert_equal(sort_mode.mandatory_func(newer_unread), "2026-01-03")
+    assert_equal(newer_unread.text, "9")
+
+    local read = { text = "8.epub", path = "/library/newsletters/8.epub", attr = { size = 1 } }
+    sort_mode.item_func(read)
+    assert_equal(sort_mode.mandatory_func(read), "✓ 2026-01-02")
+    assert_true(read.dim)
+    assert_equal(newer_unread.dim, nil)
+
+    local compare = sort_mode.init_sort_func()
+    assert_true(compare(newer_unread, older_unread))
+    instance:onCloseWidget()
+end)
+
+test("an unindexed newsletter displays its cached title instead of its storage id", function()
+    reset_environment()
+    local instance = tribune()
+    instance.ui = { menu = { registerToMainMenu = function() end } }
+    instance.cache:put(row(6189, { title = "A link source" }))
+    instance:init()
+
+    local item = { text = "6189.epub", path = "/library/newsletters/6189.epub", attr = { size = 1 } }
+    require("ui/widget/filechooser").collates.tribune_unread_first.item_func(item)
+
+    assert_equal(item.text, "A link source")
+    instance:onCloseWidget()
+end)
+
+test("unread-first sorting matches the other clients including id ties", function()
+    reset_environment()
+    local instance = tribune()
+    instance.ui = { menu = { registerToMainMenu = function() end } }
+    instance.cache:put(row(2, { created_at = "2026-01-03", read = true }))
+    instance.cache:put(row(3, { created_at = "2026-01-02" }))
+    instance.cache:put(row(4, { created_at = "2026-01-03" }))
+    instance.cache:put(row(5, { created_at = "2026-01-03" }))
+    instance:init()
+
+    local sort_mode = require("ui/widget/filechooser").collates.tribune_unread_first
+    local items = {}
+    for _, id in ipairs({ 2, 3, 4, 5 }) do
+        local item = { text = id .. ".epub", path = "/library/newsletters/" .. id .. ".epub", attr = { size = 1 } }
+        sort_mode.item_func(item)
+        items[#items + 1] = item
+    end
+    table.sort(items, sort_mode.init_sort_func())
+
+    assert_equal(items[1].text, "5")
+    assert_equal(items[2].text, "4")
+    assert_equal(items[3].text, "3")
+    assert_equal(items[4].text, "2")
+    instance:onCloseWidget()
+end)
+
+test("unread-first sorting reads cached newsletter state once per file", function()
+    reset_environment()
+    local lookups = 0
+    local local_cache = {
+        get = function(_, id)
+            lookups = lookups + 1
+            return { created_at = "2026-01-0" .. id, read = false }
+        end,
+    }
+    local instance = tribune(local_cache)
+    instance.ui = { menu = { registerToMainMenu = function() end } }
+    instance:init()
+
+    local sort_mode = require("ui/widget/filechooser").collates.tribune_unread_first
+    local items = {}
+    for id = 1, 20 do
+        local item = { text = id .. ".epub", path = "/library/newsletters/" .. id .. ".epub", attr = { size = 1 } }
+        sort_mode.item_func(item)
+        items[#items + 1] = item
+    end
+    table.sort(items, sort_mode.init_sort_func())
+
+    assert_equal(lookups, 20)
+    instance:onCloseWidget()
+end)
+
+test("stopping the plugin removes its sort mode", function()
+    reset_environment()
+    local instance = tribune()
+    instance.ui = { menu = { registerToMainMenu = function() end } }
+    instance:init()
+    local FileChooser = require("ui/widget/filechooser")
+    assert_true(FileChooser.collates.tribune_unread_first ~= nil)
+
+    FileChooser.selected_collate = "tribune_unread_first"
+    instance:onCloseWidget()
+
+    assert_equal(FileChooser.collates.tribune_unread_first, nil)
+    local fallback, fallback_id = FileChooser:getCollate()
+    assert_equal(fallback.text, "name")
+    assert_equal(fallback_id, "strcoll")
+end)
+
+test("the newsletters folder uses unread-first without changing other folders", function()
+    reset_environment()
+    local post_init = {}
+    local browser = {
+        path = "/library",
+        getCollate = function() return { text = "name" }, "strcoll" end,
+    }
+    local instance = tribune()
+    instance.ui = {
+        menu = { registerToMainMenu = function() end },
+        registerPostInitCallback = function(_, callback) post_init[#post_init + 1] = callback end,
+    }
+    instance:init()
+    instance.ui.file_chooser = browser
+    post_init[1]()
+
+    local outside, outside_id = browser:getCollate()
+    assert_equal(outside.text, "name")
+    assert_equal(outside_id, "strcoll")
+
+    browser.path = "/library/newsletters"
+    local library, library_id = browser:getCollate()
+    assert_equal(library.text, "unread first")
+    assert_equal(library_id, "tribune_unread_first")
+    instance:onCloseWidget()
+end)
+
+test("returning to the newsletters folder refreshes it with unread-first sorting", function()
+    reset_environment()
+    local refreshes = 0
+    local browser = {
+        path = "/library/newsletters",
+        getCollate = function() return { text = "name" }, "strcoll" end,
+        refreshPath = function() refreshes = refreshes + 1 end,
+    }
+    local instance = tribune()
+    instance.ui = {
+        menu = { registerToMainMenu = function() end },
+        file_chooser = browser,
+    }
+
+    instance:init()
+
+    assert_equal(refreshes, 1)
+    instance:onCloseWidget()
+end)
+
+test("a synced read-state change refreshes unread-first ordering", function()
+    reset_environment()
+    local local_cache = cache()
+    local_cache:put(row(1, { created_at = "2026-01-03" }))
+    local_cache:put(row(2, { created_at = "2026-01-02" }))
+    local_cache:setDownloaded(2, local_cache:get(2).epub_updated_at)
+    local refreshes = 0
+    local instance = tribune(local_cache)
+    instance.ui = {
+        menu = { registerToMainMenu = function() end },
+        file_chooser = { refreshPath = function() refreshes = refreshes + 1 end },
+    }
+    instance:init()
+    instance.request = function()
+        return true, { result = { row(1, { created_at = "2026-01-03", read = true }) } }, 200
+    end
+
+    assert_true(instance:sync())
+    assert_equal(refreshes, 1)
+
+    local sort_mode = require("ui/widget/filechooser").collates.tribune_unread_first
+    local changed = { text = "1.epub", path = "/library/newsletters/1.epub", attr = { size = 1 } }
+    local unread = { text = "2.epub", path = "/library/newsletters/2.epub", attr = { size = 1 } }
+    sort_mode.item_func(changed)
+    sort_mode.item_func(unread)
+    assert_true(sort_mode.init_sort_func()(unread, changed))
+    instance:onCloseWidget()
+end)
+
+test("the Library menu entry opens the newsletters folder", function()
+    reset_environment()
+    local opened_path
+    local instance = tribune()
+    instance.ui = {
+        file_chooser = {
+            changeToPath = function(_, path) opened_path = path end,
+        },
+    }
+    local menu_items = {}
+    instance:addToMainMenu(menu_items)
+
+    menu_items.tribune.sub_item_table[4].callback()
+
+    assert_equal(opened_path, "/library/newsletters")
+    assert_true(directories["/library/newsletters"])
+end)
+
+test("signing out removes downloaded newsletters and their reading sidecars", function()
+    reset_environment()
+    local instance = tribune()
+    instance.settings = {
+        delSetting = function() end,
+        flush = function() end,
+    }
+    instance.cache:put(row(7))
+    instance.cache:setDownloaded(7, "2026-03-07")
+    files["/library/newsletters/7.epub"] = "epub seven"
+
+    instance:signOut()
+
+    assert_equal(files["/library/newsletters/7.epub"], nil)
+    assert_equal(purged[1], "/library/newsletters/7.epub")
+end)
+
+test("long-pressing a newsletter offers read unread and delete actions", function()
+    reset_environment()
+    local rows = {}
+    local instance = tribune()
+    instance.ui = {
+        menu = { registerToMainMenu = function() end },
+        addFileDialogButtons = function(_, id, row) rows[id] = row end,
+    }
+
+    instance:init()
+
+    local actions = rows.tribune_newsletter_actions("/library/newsletters/7.epub", true)
+    assert_equal(actions[1].text, "Mark as read")
+    assert_equal(actions[2].text, "Mark as unread")
+    assert_equal(actions[3].text, "Delete")
+    assert_equal(rows.tribune_newsletter_actions("/library/other.epub", true), nil)
+    assert_equal(rows.tribune_newsletter_actions("/library/newsletters/7.epub", false), nil)
+end)
+
+test("closing the file-browser plugin unregisters its long-press actions", function()
+    reset_environment()
+    local added, removed
+    local instance = tribune()
+    instance.ui = {
+        menu = { registerToMainMenu = function() end },
+        addFileDialogButtons = function(_, id) added = id end,
+        removeFileDialogButtons = function(_, id) removed = id end,
+    }
+
+    instance:init()
+    instance:onCloseWidget()
+
+    assert_equal(added, "tribune_newsletter_actions")
+    assert_equal(removed, "tribune_newsletter_actions")
+end)
+
+test("marking a newsletter read changes the cached state and queues an update", function()
+    reset_environment()
+    local rows, refreshes = {}, 0
+    local instance = tribune()
+    instance.cache:put(row(7))
+    instance.ui = {
+        menu = { registerToMainMenu = function() end },
+        addFileDialogButtons = function(_, id, action_row) rows[id] = action_row end,
+        file_chooser = { refreshPath = function() refreshes = refreshes + 1 end },
+    }
+    instance:init()
+
+    rows.tribune_newsletter_actions("/library/newsletters/7.epub", true)[1].callback()
+
+    assert_true(instance.cache:get(7).read)
+    assert_equal(instance.cache:pendingUpdates()[1].kind, "read")
+    assert_equal(instance.cache:pendingUpdates()[1].id, 7)
+    assert_equal(refreshes, 1)
+end)
+
+test("sync sends a queued read update before fetching newsletters", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+    instance:markNewsletterRead(7)
+    local requests = {}
+    instance.request = function(_, method, path)
+        requests[#requests + 1] = { method = method, path = path }
+        if method == "GET" then return true, { result = {} }, 200 end
+        return true, {}, 200
+    end
+
+    assert_true(instance:sync())
+
+    assert_equal(requests[1].method, "PUT")
+    assert_equal(requests[1].path, "/newsletters/7/read")
+    assert_equal(requests[2].method, "GET")
+    assert_equal(#instance.cache:pendingUpdates(), 0)
+end)
+
+test("unread and delete actions update the device and use their server routes", function()
+    reset_environment()
+    local rows = {}
+    local instance = tribune()
+    instance.cache:put(row(7, { read = true }))
+    instance.cache:put(row(8))
+    instance.ui = {
+        menu = { registerToMainMenu = function() end },
+        addFileDialogButtons = function(_, id, action_row) rows[id] = action_row end,
+        file_chooser = { refreshPath = function() end },
+    }
+    instance:init()
+    rows.tribune_newsletter_actions("/library/newsletters/7.epub", true)[2].callback()
+    rows.tribune_newsletter_actions("/library/newsletters/8.epub", true)[3].callback()
+    local sent = {}
+    instance.request = function(_, method, path)
+        sent[#sent + 1] = method .. " " .. path
+        if method == "GET" then return true, { result = {} }, 200 end
+        return true, nil, 200
+    end
+    instance.downloadUnread = function() return true, 0 end
+
+    assert_true(instance:sync())
+
+    assert_equal(instance.cache:get(7).read, false)
+    assert_true(instance.cache:get(8).deleted)
+    assert_equal(sent[1], "PUT /newsletters/7/unread")
+    assert_equal(sent[2], "DELETE /newsletters/8")
+end)
+
+test("offline read then unread keeps only the final persisted update after restart", function()
+    reset_environment()
+    local first = cache()
+    first:put(row(7))
+    first:setRead(7, true)
+    first:queueUpdate({ kind = "read", id = 7 })
+    first:setRead(7, false)
+    first:queueUpdate({ kind = "unread", id = 7 })
+
+    local restarted = cache()
+    local updates = restarted:pendingUpdates()
+    assert_equal(#updates, 1)
+    assert_equal(updates[1].kind, "unread")
+    assert_equal(updates[1].id, 7)
+end)
+
+test("a rejected update remains queued for a later sync", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+    instance:markNewsletterRead(7)
+    instance.request = function(_, method)
+        if method == "PUT" then return false, "rejected", 422 end
+        fail("the library must not be fetched after a rejected update")
+    end
+
+    assert_equal(instance:sync(), false)
+    assert_equal(#instance.cache:pendingUpdates(), 1)
+end)
+
+test("updates that remain undeliverable for thirty days expire", function()
+    reset_environment()
+    local local_cache = cache()
+    local now = 1800000000
+    local_cache:queueUpdate({ kind = "read", id = 7, queued_at = now - 30 * 24 * 60 * 60 - 1 })
+    local_cache:queueUpdate({ kind = "delete", id = 8, queued_at = now - 30 * 24 * 60 * 60 })
+
+    local_cache:expirePendingUpdates(now)
+
+    local updates = local_cache:pendingUpdates()
+    assert_equal(#updates, 1)
+    assert_equal(updates[1].id, 8)
+end)
+
+test("closing a finished newsletter marks it read but an unfinished one does not", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+    instance.ui = {
+        document = { file = "/library/newsletters/7.epub" },
+        doc_settings = { readSetting = function() return { status = "complete" } end },
+    }
+
+    instance:onCloseDocument()
+
+    assert_true(instance.cache:get(7).read)
+    assert_equal(#instance.cache:pendingUpdates(), 1)
+
+    reset_environment()
+    instance = tribune()
+    instance.cache:put(row(7))
+    instance.ui = {
+        document = { file = "/library/newsletters/7.epub" },
+        doc_settings = { readSetting = function() return { status = "reading" } end },
+    }
+
+    instance:onCloseDocument()
+
+    assert_equal(instance.cache:get(7).read, false)
+    assert_equal(#instance.cache:pendingUpdates(), 0)
 end)
 
 test("sync pages from an empty cache and resumes after an interrupted page", function()

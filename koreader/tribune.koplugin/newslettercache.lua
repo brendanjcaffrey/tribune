@@ -32,6 +32,7 @@ local BYTES_PER_NEWSLETTER = 150
 -- only once there is enough of it for the ratio to mean anything.
 local COMPACT_RATIO = 3
 local COMPACT_FLOOR = 32 * 1024
+local MAX_PENDING_UPDATE_AGE = 30 * 24 * 60 * 60
 
 local Cache = {}
 Cache.__index = Cache
@@ -52,6 +53,7 @@ end
 -- shrank to one field would silently keep the values it was meant to lose.
 local function reduce(row)
     return {
+        title = row.title or "",
         created_at = row.created_at or "",
         updated_at = row.updated_at or "",
         epub_updated_at = row.epub_updated_at or "",
@@ -93,8 +95,8 @@ function Cache:all()
 end
 
 -- the newsletters worth showing: everything that has not been deleted, unread
--- first and then oldest published first, which is the order the other clients
--- read in.
+-- first and then newest published first, which is the display order the other
+-- clients use.
 function Cache:list()
     local out = {}
     for id, newsletter in pairs(self.data.data) do
@@ -110,8 +112,8 @@ function Cache:list()
     end
     table.sort(out, function(a, b)
         if a.read ~= b.read then return b.read end
-        if a.created_at ~= b.created_at then return a.created_at < b.created_at end
-        return a.id < b.id
+        if a.created_at ~= b.created_at then return a.created_at > b.created_at end
+        return a.id > b.id
     end)
     return out
 end
@@ -142,6 +144,64 @@ function Cache:isDownloadedCurrent(id)
     local newsletter = self:get(id)
     return newsletter
         and newsletter.downloaded_epub_updated_at == newsletter.epub_updated_at
+end
+
+--[[ pending updates ]]--
+
+function Cache:pendingUpdates()
+    return self.data:readSetting("pending_updates") or {}
+end
+
+function Cache:queueUpdate(update)
+    local updates = self:pendingUpdates()
+    local key = (update.kind == "read" or update.kind == "unread") and "read" or update.kind
+    for index = #updates, 1, -1 do
+        local pending = updates[index]
+        local pending_key = (pending.kind == "read" or pending.kind == "unread") and "read" or pending.kind
+        if pending.id == update.id and pending_key == key then table.remove(updates, index) end
+    end
+    update.queued_at = update.queued_at or os.time()
+    updates[#updates + 1] = update
+    self.data:saveSetting("pending_updates", updates)
+end
+
+function Cache:expirePendingUpdates(now)
+    now = now or os.time()
+    local kept = {}
+    for _, update in ipairs(self:pendingUpdates()) do
+        if not update.queued_at or now - update.queued_at <= MAX_PENDING_UPDATE_AGE then
+            kept[#kept + 1] = update
+        end
+    end
+    self.data:saveSetting("pending_updates", kept)
+end
+
+function Cache:removePendingUpdate(update)
+    local updates = self:pendingUpdates()
+    for index, pending in ipairs(updates) do
+        if pending == update then
+            table.remove(updates, index)
+            self.data:saveSetting("pending_updates", updates)
+            return true
+        end
+    end
+    return false
+end
+
+function Cache:setRead(id, read)
+    local newsletter = self:get(id)
+    if not newsletter then return false end
+    newsletter.read = read
+    self.data:saveSetting(tonumber(id), newsletter)
+    return true
+end
+
+function Cache:setDeleted(id, deleted)
+    local newsletter = self:get(id)
+    if not newsletter then return false end
+    newsletter.deleted = deleted
+    self.data:saveSetting(tonumber(id), newsletter)
+    return true
 end
 
 -- unread, undeleted newsletters that need a local epub, in the library order.

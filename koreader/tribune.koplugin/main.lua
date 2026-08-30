@@ -10,6 +10,7 @@ the library up to date against that server.
 local DataStorage = require("datastorage")
 local Device = require("device")
 local DocSettings = require("docsettings")
+local FileChooser = require("ui/widget/filechooser")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local JSON = require("json")
@@ -77,9 +78,159 @@ function Tribune:init()
     self:loadSettings()
     -- file browser menu only. the reader gets no entry of its own.
     if not self.ui.document then
+        self:registerSortMode()
+        self:registerNewsletterActions()
+        if self.ui.registerPostInitCallback then
+            self.ui:registerPostInitCallback(function() self:attachSortModeToBrowser() end)
+        else
+            self:attachSortModeToBrowser()
+        end
         self.ui.menu:registerToMainMenu(self)
         self:scheduleAutoSync()
     end
+end
+
+--[[ file browser actions ]]--
+
+function Tribune:registerNewsletterActions()
+    if not self.ui.addFileDialogButtons then return end
+    self.ui:addFileDialogButtons("tribune_newsletter_actions", function(path, is_file)
+        if not is_file then return nil end
+        local id = tonumber(path:match("^" .. self.newsletters_dir .. "/(%d+)%.epub$"))
+        if not id then return nil end
+        return {
+            {
+                text = _("Mark as read"),
+                callback = function() self:markNewsletterRead(id) end,
+            },
+            {
+                text = _("Mark as unread"),
+                callback = function() self:markNewsletterUnread(id) end,
+            },
+            {
+                text = _("Delete"),
+                callback = function() self:deleteNewsletter(id) end,
+            },
+        }
+    end)
+end
+
+function Tribune:markNewsletterRead(id)
+    self:setNewsletterRead(id, true)
+end
+
+function Tribune:markNewsletterUnread(id)
+    self:setNewsletterRead(id, false)
+end
+
+function Tribune:setNewsletterRead(id, read)
+    local cache = self:getCache()
+    if not cache:setRead(id, read) then return end
+    cache:queueUpdate({ kind = read and "read" or "unread", id = id })
+    self:refreshBrowser()
+end
+
+function Tribune:deleteNewsletter(id)
+    local cache = self:getCache()
+    if not cache:setDeleted(id, true) then return end
+    cache:queueUpdate({ kind = "delete", id = id })
+    self:refreshBrowser()
+end
+
+-- the reader has already asked whether this book was finished. its answer is
+-- recorded in summary before CloseDocument, unlike the position and percentage.
+function Tribune:onCloseDocument()
+    local document = self.ui and self.ui.document
+    local settings = self.ui and self.ui.doc_settings
+    if not document or not settings then return end
+    local id = tonumber(document.file:match("^" .. self.newsletters_dir .. "/(%d+)%.epub$"))
+    local summary = settings:readSetting("summary")
+    if id and summary and summary.status == "complete" then self:markNewsletterRead(id) end
+end
+
+--[[ file browser sorting ]]--
+
+-- the browser asks item_func once per visible file, then compares the decorated
+-- items many times. keeping the cache lookup here makes sorting a folder cheap.
+function Tribune:registerSortMode()
+    local cache = self:getCache()
+    local mode = {
+        text = _("unread first"),
+        menu_order = 150,
+        item_func = function(item)
+            local id = tonumber(item.path:match("/(%d+)%.epub$"))
+            local newsletter = id and cache:get(id)
+            if newsletter and not newsletter.deleted then
+                item.text = newsletter.title ~= "" and newsletter.title or item.text:gsub("%.epub$", "")
+                item.tribune_newsletter = {
+                    id = id,
+                    created_at = newsletter.created_at,
+                    read = newsletter.read,
+                }
+            end
+        end,
+        init_sort_func = function()
+            return function(a, b)
+                local left = a.tribune_newsletter
+                local right = b.tribune_newsletter
+                if not left or not right then return a.text < b.text end
+                if left.read ~= right.read then return not left.read end
+                if left.created_at ~= right.created_at then
+                    return left.created_at > right.created_at
+                end
+                return left.id > right.id
+            end
+        end,
+        mandatory_func = function(item)
+            local newsletter = item.tribune_newsletter
+            if newsletter then
+                local date = newsletter.created_at:sub(1, 10)
+                if newsletter.read then
+                    item.dim = true
+                    return "✓ " .. date
+                end
+                return date
+            end
+            return util.getFriendlySize(item.attr.size or 0)
+        end,
+    }
+    FileChooser.collates.tribune_unread_first = mode
+    self.sort_mode = mode
+end
+
+function Tribune:attachSortModeToBrowser()
+    local browser = self.ui.file_chooser
+    if browser and browser.getCollate then
+        self.sort_browser = browser
+        self.original_get_collate = browser.getCollate
+        self.get_collate_override = function(chooser)
+            if chooser.path == self.newsletters_dir then
+                return self.sort_mode, "tribune_unread_first"
+            end
+            return self.original_get_collate(chooser)
+        end
+        browser.getCollate = self.get_collate_override
+        if browser.path == self.newsletters_dir and browser.refreshPath then
+            browser:refreshPath()
+        end
+    end
+end
+
+function Tribune:onCloseWidget()
+    if self.ui and self.ui.removeFileDialogButtons then
+        self.ui:removeFileDialogButtons("tribune_newsletter_actions")
+    end
+    if self.sort_browser and self.sort_browser.getCollate == self.get_collate_override then
+        self.sort_browser.getCollate = self.original_get_collate
+    end
+    if FileChooser.collates.tribune_unread_first == self.sort_mode then
+        FileChooser.collates.tribune_unread_first = nil
+    end
+end
+
+function Tribune:refreshBrowser()
+    local browser = self.ui and self.ui.file_chooser
+    if browser then browser:refreshPath() end
 end
 
 --[[ settings ]]--
@@ -190,12 +341,8 @@ function Tribune:addToMainMenu(menu_items)
                 text_func = function()
                     return self:libraryText()
                 end,
-                help_text = _("What the plugin knows about the library, without asking the server."),
-                keep_menu_open = true,
-                -- nothing to do but say it again with today's numbers
-                callback = function(touchmenu_instance)
-                    if touchmenu_instance then touchmenu_instance:updateItems() end
-                end,
+                help_text = _("Open the downloaded newsletters."),
+                callback = function() self:openLibrary() end,
                 separator = true,
             },
             {
@@ -233,7 +380,7 @@ end
 -- own http proxy setting, which assigns luasocket's http.PROXY, and only
 -- socket.http requests honour it. see
 -- docs/adr/0002-plain-http-for-the-kindle.md.
-function Tribune:request(method, path, form_body, token)
+function Tribune:request(method, path, form_body, token, expect_json)
     local address = self:getServerAddress()
     if not address then
         return false, _("No server address is set."), nil
@@ -272,6 +419,8 @@ function Tribune:request(method, path, form_body, token)
         logger.err("tribune: request returned", tostring(status or code))
         return false, T(_("The server refused the request: %1"), tostring(status or code)), code
     end
+
+    if expect_json == false then return true, nil, code end
 
     local content = table.concat(sink)
     local ok, parsed = pcall(JSON.decode, content)
@@ -385,6 +534,23 @@ function Tribune:fetchPage(query)
     return result.result
 end
 
+function Tribune:sendPendingUpdates()
+    local cache = self:getCache()
+    cache:expirePendingUpdates()
+    while true do
+        local update = cache:pendingUpdates()[1]
+        if not update then break end
+        local method = update.kind == "delete" and "DELETE" or "PUT"
+        local path = "/newsletters/" .. update.id
+        if update.kind ~= "delete" then path = path .. "/" .. update.kind end
+        local ok, message, code = self:request(method, path,
+            nil, self:getToken(), false)
+        if not ok then return false, message, code end
+        cache:removePendingUpdate(update)
+    end
+    return true
+end
+
 --[[--
 Brings the cache up to date with the server.
 
@@ -411,6 +577,8 @@ function Tribune:sync()
     end
 
     local cache = self:getCache()
+    local updates_ok, updates_message, updates_code = self:sendPendingUpdates()
+    if not updates_ok then return false, updates_message, updates_code end
     -- everything at or below the mark is already known
     local mark = cache:getCursor() or BEGINNING
     local fetched, stored = 0, 0
@@ -431,6 +599,7 @@ function Tribune:sync()
             cache:compactIfNeeded()
             local download_ok, downloaded, download_code = self:downloadUnread()
             if not download_ok then return false, downloaded, download_code end
+            self:refreshBrowser()
             return true, { fetched = fetched, stored = stored, downloaded = downloaded }
         end
     end
@@ -579,6 +748,12 @@ function Tribune:libraryText()
              os.date("%Y-%m-%d %H:%M", last))
 end
 
+function Tribune:openLibrary()
+    local directory = self:getNewslettersDir()
+    local browser = self.ui and self.ui.file_chooser
+    if directory and browser then browser:changeToPath(directory) end
+end
+
 --[[ signing in and out ]]--
 
 function Tribune:signIn(touchmenu_instance)
@@ -683,11 +858,21 @@ end
 
 function Tribune:signOut(touchmenu_instance)
     self:clearSession()
+    self:removeDownloadedNewsletters()
     self:getCache():reset()
+    self:refreshBrowser()
     if touchmenu_instance then
         touchmenu_instance:updateItems()
     end
     UIManager:show(InfoMessage:new{ text = _("Signed out.") })
+end
+
+function Tribune:removeDownloadedNewsletters()
+    for id in pairs(self:getCache():all()) do
+        local filename = self.newsletters_dir .. "/" .. id .. ".epub"
+        os.remove(filename)
+        DocSettings:open(filename):purge(nil, { doc_settings = true })
+    end
 end
 
 function Tribune:checkAccount(touchmenu_instance)
