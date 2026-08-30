@@ -29,6 +29,9 @@ end
 
 local stored_settings = {}
 local directories = { ["/library"] = true }
+-- what ffiUtil.realpath answers. empty by default, which is what a path with no
+-- symlink in it looks like: the browser is handed the path it already had.
+local resolved_paths = {}
 local files = {}
 local purged = {}
 local messages = {}
@@ -44,6 +47,7 @@ local reset_plugin = function() end
 local function reset_environment()
     stored_settings = {}
     directories = { ["/library"] = true }
+    resolved_paths = {}
     files = {}
     purged = {}
     messages = {}
@@ -144,7 +148,10 @@ package.preload["ui/widget/filechooser"] = function()
     return FileChooser
 end
 package.preload["ffi/util"] = function()
-    return { template = function(format, value) return format:gsub("%%1", tostring(value)) end }
+    return {
+        template = function(format, value) return format:gsub("%%1", tostring(value)) end,
+        realpath = function(path) return resolved_paths[path] end,
+    }
 end
 package.preload["socket.http"] = function()
     return { request = function(request)
@@ -225,6 +232,20 @@ local function tribune(with_cache)
     return instance
 end
 
+-- a browser the way the file manager builds them: it owns a path and nothing
+-- else, and reaches getCollate through the class. one built after the plugin
+-- started is exactly what android's rebuild-on-rotate hands it.
+local function browser_at(path)
+    local FileChooser = require("ui/widget/filechooser")
+    return setmetatable({ path = path }, { __index = FileChooser })
+end
+
+-- the sort mode is registered nowhere the browser can find on its own, so the
+-- only way to reach it is a browser sitting in the library folder.
+local function sort_mode_of(instance)
+    return (browser_at(instance.newsletters_dir):getCollate())
+end
+
 local function row(id, fields)
     fields = fields or {}
     return {
@@ -293,8 +314,7 @@ test("registers an unread-first sort mode that decorates newsletter rows", funct
 
     instance:init()
 
-    local FileChooser = require("ui/widget/filechooser")
-    local sort_mode = FileChooser.collates.tribune_unread_first
+    local sort_mode = sort_mode_of(instance)
     assert_equal(sort_mode.text, "unread first")
 
     local older_unread = { text = "8.epub", path = "/library/newsletters/8.epub", attr = { size = 1 } }
@@ -323,7 +343,7 @@ test("an unindexed newsletter displays its cached title instead of its storage i
     instance:init()
 
     local item = { text = "6189.epub", path = "/library/newsletters/6189.epub", attr = { size = 1 } }
-    require("ui/widget/filechooser").collates.tribune_unread_first.item_func(item)
+    sort_mode_of(instance).item_func(item)
 
     assert_equal(item.text, "A link source")
     instance:onCloseWidget()
@@ -339,7 +359,7 @@ test("unread-first sorting matches the other clients including id ties", functio
     instance.cache:put(row(5, { created_at = "2026-01-03" }))
     instance:init()
 
-    local sort_mode = require("ui/widget/filechooser").collates.tribune_unread_first
+    local sort_mode = sort_mode_of(instance)
     local items = {}
     for _, id in ipairs({ 2, 3, 4, 5 }) do
         local item = { text = id .. ".epub", path = "/library/newsletters/" .. id .. ".epub", attr = { size = 1 } }
@@ -368,7 +388,7 @@ test("unread-first sorting reads cached newsletter state once per file", functio
     instance.ui = { menu = { registerToMainMenu = function() end } }
     instance:init()
 
-    local sort_mode = require("ui/widget/filechooser").collates.tribune_unread_first
+    local sort_mode = sort_mode_of(instance)
     local items = {}
     for id = 1, 20 do
         local item = { text = id .. ".epub", path = "/library/newsletters/" .. id .. ".epub", attr = { size = 1 } }
@@ -381,38 +401,48 @@ test("unread-first sorting reads cached newsletter state once per file", functio
     instance:onCloseWidget()
 end)
 
-test("stopping the plugin removes its sort mode", function()
+test("the sort mode never joins the browser's own sort modes", function()
     reset_environment()
     local instance = tribune()
     instance.ui = { menu = { registerToMainMenu = function() end } }
     instance:init()
-    local FileChooser = require("ui/widget/filechooser")
-    assert_true(FileChooser.collates.tribune_unread_first ~= nil)
 
-    FileChooser.selected_collate = "tribune_unread_first"
+    -- nothing the browser can offer in its Sort by menu, and so nothing it can
+    -- save the name of and fail to find on the next launch
+    local FileChooser = require("ui/widget/filechooser")
+    for id in pairs(FileChooser.collates) do
+        assert_true(id == "strcoll")
+    end
+
     instance:onCloseWidget()
 
-    assert_equal(FileChooser.collates.tribune_unread_first, nil)
-    local fallback, fallback_id = FileChooser:getCollate()
-    assert_equal(fallback.text, "name")
-    assert_equal(fallback_id, "strcoll")
+    local restored, restored_id = browser_at(instance.newsletters_dir):getCollate()
+    assert_equal(restored.text, "name")
+    assert_equal(restored_id, "strcoll")
+end)
+
+test("the library folder is recognised through a symlinked storage path", function()
+    reset_environment()
+    local instance = tribune()
+    instance.ui = { menu = { registerToMainMenu = function() end } }
+    instance:init()
+    -- what android and the kindle both do: the browser resolves the path it was
+    -- handed, so it is never the string the plugin built its own path from
+    resolved_paths["/library/newsletters"] = "/storage/emulated/0/newsletters"
+
+    local collate, collate_id = browser_at("/storage/emulated/0/newsletters"):getCollate()
+
+    assert_equal(collate.text, "unread first")
+    assert_equal(collate_id, "tribune_unread_first")
+    instance:onCloseWidget()
 end)
 
 test("the newsletters folder uses unread-first without changing other folders", function()
     reset_environment()
-    local post_init = {}
-    local browser = {
-        path = "/library",
-        getCollate = function() return { text = "name" }, "strcoll" end,
-    }
     local instance = tribune()
-    instance.ui = {
-        menu = { registerToMainMenu = function() end },
-        registerPostInitCallback = function(_, callback) post_init[#post_init + 1] = callback end,
-    }
+    instance.ui = { menu = { registerToMainMenu = function() end } }
     instance:init()
-    instance.ui.file_chooser = browser
-    post_init[1]()
+    local browser = browser_at("/library")
 
     local outside, outside_id = browser:getCollate()
     assert_equal(outside.text, "name")
@@ -425,14 +455,28 @@ test("the newsletters folder uses unread-first without changing other folders", 
     instance:onCloseWidget()
 end)
 
+test("a browser rebuilt after the plugin started still orders the library", function()
+    reset_environment()
+    local instance = tribune()
+    instance.ui = { menu = { registerToMainMenu = function() end } }
+    instance:init()
+
+    -- android throws the file browser away and builds another whenever the
+    -- window changes shape, without the plugin being told
+    local rebuilt = browser_at("/library/newsletters")
+    local collate, collate_id = rebuilt:getCollate()
+
+    assert_equal(collate.text, "unread first")
+    assert_equal(collate_id, "tribune_unread_first")
+    instance:onCloseWidget()
+    assert_equal((rebuilt:getCollate()).text, "name")
+end)
+
 test("returning to the newsletters folder refreshes it with unread-first sorting", function()
     reset_environment()
     local refreshes = 0
-    local browser = {
-        path = "/library/newsletters",
-        getCollate = function() return { text = "name" }, "strcoll" end,
-        refreshPath = function() refreshes = refreshes + 1 end,
-    }
+    local browser = browser_at("/library/newsletters")
+    browser.refreshPath = function() refreshes = refreshes + 1 end
     local instance = tribune()
     instance.ui = {
         menu = { registerToMainMenu = function() end },
@@ -465,7 +509,7 @@ test("a synced read-state change refreshes unread-first ordering", function()
     assert_true(instance:sync())
     assert_equal(refreshes, 1)
 
-    local sort_mode = require("ui/widget/filechooser").collates.tribune_unread_first
+    local sort_mode = sort_mode_of(instance)
     local changed = { text = "1.epub", path = "/library/newsletters/1.epub", attr = { size = 1 } }
     local unread = { text = "2.epub", path = "/library/newsletters/2.epub", attr = { size = 1 } }
     sort_mode.item_func(changed)

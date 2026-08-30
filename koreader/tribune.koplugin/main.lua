@@ -103,13 +103,9 @@ function Tribune:init()
     self:loadSettings()
     -- file browser menu only. the reader gets no entry of its own.
     if not self.ui.document then
-        self:registerSortMode()
+        self:buildSortMode()
         self:registerNewsletterActions()
-        if self.ui.registerPostInitCallback then
-            self.ui:registerPostInitCallback(function() self:attachSortModeToBrowser() end)
-        else
-            self:attachSortModeToBrowser()
-        end
+        self:attachSortMode()
         self.ui.menu:registerToMainMenu(self)
         -- coming back from a newsletter is the only thing that syncs a browser
         -- as it opens, since it has a position and often a read state to send.
@@ -263,11 +259,19 @@ end
 
 -- the browser asks item_func once per visible file, then compares the decorated
 -- items many times. keeping the cache lookup here makes sorting a folder cheap.
-function Tribune:registerSortMode()
+--
+-- the mode is deliberately not added to FileChooser.collates. a mode in that
+-- table is a mode in every browser's Sort by menu, and the browser remembers
+-- the chosen one by name in its own settings. it reads that name while it is
+-- being built, which happens before any plugin has been loaded, and a name it
+-- cannot find there it quietly replaces with sort by name -- so a mode that
+-- exists only while the plugin does loses the reader's choice every time the
+-- browser is rebuilt. out of the table there is no choice to lose, and no
+-- folder but the library can be ordered this way.
+function Tribune:buildSortMode()
     local cache = self:getCache()
-    local mode = {
+    self.sort_mode = {
         text = _("unread first"),
-        menu_order = 150,
         item_func = function(item)
             local id = tonumber(item.path:match("/(%d+)%.epub$"))
             local newsletter = id and cache:get(id)
@@ -305,25 +309,40 @@ function Tribune:registerSortMode()
             return util.getFriendlySize(item.attr.size or 0)
         end,
     }
-    FileChooser.collates.tribune_unread_first = mode
-    self.sort_mode = mode
 end
 
-function Tribune:attachSortModeToBrowser()
-    local browser = self.ui.file_chooser
-    if browser and browser.getCollate then
-        self.sort_browser = browser
-        self.original_get_collate = browser.getCollate
-        self.get_collate_override = function(chooser)
-            if chooser.path == self.newsletters_dir then
-                return self.sort_mode, "tribune_unread_first"
-            end
-            return self.original_get_collate(chooser)
+-- the browser resolves every path it is given, so the library's own path has to
+-- be resolved before the two can be compared. on a device that reaches its
+-- storage through a symlink the unresolved strings never match, and the library
+-- folder quietly sorts like any other.
+function Tribune:isLibraryPath(path)
+    if type(path) ~= "string" then return false end
+    if path == self.newsletters_dir then return true end
+    local resolved = ffiUtil.realpath(self.newsletters_dir)
+    return resolved ~= nil and path == resolved
+end
+
+-- the override goes on the class every browser is built from, not on the
+-- browser in front of us. android rebuilds the file browser from scratch every
+-- time the window changes shape -- a rotation, or the system resizing the app --
+-- and it does so without running the file manager's init, so no plugin hears
+-- about it and the browser that was patched is already gone. the class is the
+-- one place a rebuild cannot drop.
+function Tribune:attachSortMode()
+    if FileChooser.getCollate == self.get_collate_override then return end
+    self.original_get_collate = FileChooser.getCollate
+    self.get_collate_override = function(chooser)
+        if self:isLibraryPath(chooser.path) then
+            return self.sort_mode, "tribune_unread_first"
         end
-        browser.getCollate = self.get_collate_override
-        if browser.path == self.newsletters_dir and browser.refreshPath then
-            browser:refreshPath()
-        end
+        return self.original_get_collate(chooser)
+    end
+    FileChooser.getCollate = self.get_collate_override
+    -- a browser already listing the library was built before the override and
+    -- is showing an ordinary ordering. one built afterwards never is.
+    local browser = self.ui and self.ui.file_chooser
+    if browser and browser.refreshPath and self:isLibraryPath(browser.path) then
+        browser:refreshPath()
     end
 end
 
@@ -331,11 +350,8 @@ function Tribune:onCloseWidget()
     if self.ui and self.ui.removeFileDialogButtons then
         self.ui:removeFileDialogButtons("tribune_newsletter_actions")
     end
-    if self.sort_browser and self.sort_browser.getCollate == self.get_collate_override then
-        self.sort_browser.getCollate = self.original_get_collate
-    end
-    if FileChooser.collates.tribune_unread_first == self.sort_mode then
-        FileChooser.collates.tribune_unread_first = nil
+    if FileChooser.getCollate == self.get_collate_override then
+        FileChooser.getCollate = self.original_get_collate
     end
 end
 
