@@ -53,6 +53,41 @@ def koreader_data_dir
   File.join(Dir.home, 'Library', 'Application Support', 'koreader')
 end
 
+# android studio installs the platform tools outside the path, so fall back to
+# the sdk's own location before giving up. ADB overrides the search entirely.
+def adb_binary
+  explicit = ENV['ADB'].to_s
+  return File.executable?(explicit) ? explicit : nil unless explicit.empty?
+
+  sdk_roots = [ENV['ANDROID_HOME'].to_s, ENV['ANDROID_SDK_ROOT'].to_s, File.join(Dir.home, 'Library', 'Android', 'sdk')]
+  on_path = ENV['PATH'].to_s.split(File::PATH_SEPARATOR).map { |dir| File.join(dir, 'adb') }
+  in_sdk = sdk_roots.compact.reject(&:empty?).map { |root| File.join(root, 'platform-tools', 'adb') }
+
+  (on_path + in_sdk).find { |candidate| File.executable?(candidate) }
+end
+
+# `adb devices` prints a header line and then one "<serial>\t<state>" per device.
+# only a device in the "device" state is usable: "unauthorized" means the rsa
+# prompt hasn't been accepted yet, and "offline" means the connection went stale.
+def adb_devices(command, adb)
+  result = command.run!("#{adb.shellescape} devices")
+  return [] unless result.success?
+
+  result.out.lines.drop(1).filter_map do |line|
+    serial, state = line.split("\t").map(&:strip)
+    [serial, state] unless serial.to_s.empty? || state.to_s.empty?
+  end
+end
+
+def adb_ready_device(command, adb)
+  adb_devices(command, adb).find { |_serial, state| state == 'device' }&.first
+end
+
+def prompt(question)
+  print question
+  $stdin.gets.to_s.strip
+end
+
 command = TTY::Command.new
 
 ROOT = __dir__
@@ -408,6 +443,110 @@ namespace :koreader do
     abort "KOReader is not installed at #{launcher}" unless File.executable?(launcher)
 
     exec launcher, '-d', '-v'
+  end
+
+  desc 'Install the KOReader plugin on an android tablet over adb (ADB_DEVICE=<host:port> to skip the prompts)'
+  task :android do
+    pastel = Pastel.new
+    # the probes are noise, so run them silently and let the pair/connect/push
+    # commands the user cares about print themselves through the shared runner
+    quiet = TTY::Command.new(printer: :null)
+
+    adb = adb_binary
+    abort pastel.red('adb not found. install the android platform-tools, or set ADB to the binary.') if adb.nil?
+
+    serial = adb_ready_device(quiet, adb)
+
+    if serial.nil?
+      # a tablet paired earlier only needs connecting again, and the connect
+      # port changes whenever wireless debugging is toggled off and on
+      address = ENV['ADB_DEVICE'].to_s
+      if address.empty?
+        puts pastel.yellow('no device is connected. on the tablet:')
+        puts '  settings > about tablet > tap "build number" seven times to unlock developer options'
+        puts '  settings > system > developer options > wireless debugging > on'
+        puts
+        puts 'to pair for the first time, open "pair device with pairing code" there. it shows an'
+        puts 'ip:port and a six digit code. the pairing port is not the port on the wireless'
+        puts 'debugging screen itself, which is the one to connect to afterwards.'
+        puts
+
+        pairing = prompt('pairing ip:port (blank if this tablet is already paired): ')
+        unless pairing.empty?
+          code = prompt('pairing code: ')
+          command.run("#{adb.shellescape} pair #{pairing.shellescape} #{code.shellescape}")
+        end
+
+        address = prompt('connect ip:port (from the wireless debugging screen): ')
+        abort pastel.red('no address given.') if address.empty?
+      end
+
+      command.run("#{adb.shellescape} connect #{address.shellescape}")
+      serial = adb_ready_device(quiet, adb)
+    end
+
+    if serial.nil?
+      states = adb_devices(quiet, adb).map { |device, state| "#{device} (#{state})" }
+      abort pastel.red("no usable device. adb sees: #{states.empty? ? 'nothing' : states.join(', ')}")
+    end
+
+    source = File.join(ROOT, 'koreader', 'tribune.koplugin')
+    # koreader keeps its data in /sdcard/koreader on android unless it was sent
+    # elsewhere on first run, in which case help > about names the real path
+    data_dir = ENV.fetch('ANDROID_KO_HOME', '/sdcard/koreader')
+    dest = "#{data_dir}/plugins/tribune.koplugin"
+
+    puts pastel.green("pushing to #{serial}:#{dest}")
+
+    # clear the previous install first: pushing a directory onto one that already
+    # exists nests it inside rather than replacing it, and files dropped from the
+    # plugin since the last push would otherwise stay behind
+    command.run("#{adb.shellescape} -s #{serial.shellescape} shell rm -rf #{dest.shellescape}")
+    command.run("#{adb.shellescape} -s #{serial.shellescape} shell mkdir -p #{"#{data_dir}/plugins".shellescape}")
+    command.run("#{adb.shellescape} -s #{serial.shellescape} push #{source.shellescape} #{dest.shellescape}")
+
+    puts 'force stop koreader and open it again to pick it up.'
+    puts pastel.green("next time: ADB_DEVICE=#{serial} rake koreader:android")
+  end
+
+  desc 'Install the KOReader plugin on a jailbroken kindle over ssh (KINDLE_HOST=<host> to skip the prompt)'
+  task :kindle do
+    pastel = Pastel.new
+
+    host = ENV['KINDLE_HOST'].to_s
+    if host.empty?
+      host = prompt('kindle hostname or ip: ')
+      abort pastel.red('no host given.') if host.empty?
+    end
+
+    user = ENV.fetch('KINDLE_USER', 'root')
+    target = "#{user}@#{host}"
+
+    source = File.join(ROOT, 'koreader', 'tribune.koplugin')
+    data_dir = ENV.fetch('KINDLE_KO_HOME', '/mnt/us/koreader')
+    plugins_dir = "#{data_dir}/plugins"
+    dest = "#{plugins_dir}/tribune.koplugin"
+
+    puts pastel.green("pushing to #{target}:#{dest}")
+
+    # ssh goes through sh rather than the tty-command runner so that a password
+    # prompt or a host key confirmation reaches the terminal
+    #
+    # clear the previous install first: unpacking over a directory that already
+    # exists leaves files dropped from the plugin since the last copy behind
+    sh "ssh #{target.shellescape} #{"rm -rf #{dest.shellescape} && mkdir -p #{plugins_dir.shellescape}".shellescape}"
+
+    # the copy goes over a tar pipe rather than scp or rsync: a jailbroken kindle
+    # has neither, only the busybox tar, and its dropbear has no sftp server for
+    # openssh 9 to fall back on either
+    #
+    # COPYFILE_DISABLE keeps bsdtar on macos from shipping ._ appledouble files
+    sh "COPYFILE_DISABLE=1 tar -cf - -C #{File.dirname(source).shellescape} " \
+       "#{File.basename(source).shellescape} | " \
+       "ssh #{target.shellescape} #{"tar -xf - -C #{plugins_dir.shellescape}".shellescape}"
+
+    puts 'exit koreader and start it again to pick it up.'
+    puts pastel.green("next time: KINDLE_HOST=#{host} rake koreader:kindle")
   end
 end
 

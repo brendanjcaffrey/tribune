@@ -56,6 +56,10 @@ The plugin is `koreader/tribune.koplugin`. KOReader loads plugins from the `plug
 - Kindle: `/mnt/us/koreader/plugins/`
 - Android: `koreader/plugins/` in the app's storage directory
 
+`rake koreader:android` installs it on an Android tablet over adb. It walks through pairing if no device is connected: enable Developer options, turn on Wireless debugging, and it will ask for the pairing address and code, then the connect address (the two ports differ — the pairing one only appears in the "Pair device with pairing code" dialog). It prints an `ADB_DEVICE=<host:port>` line to skip the prompts next time; the port changes whenever wireless debugging is toggled off and on, so expect to re-pair occasionally. Set `ADB` if adb isn't on your path, and `ANDROID_KO_HOME` if KOReader's data directory isn't `/sdcard/koreader`.
+
+`rake koreader:kindle` copies it to a jailbroken Kindle over ssh, into `/mnt/us/koreader/plugins/`. It prompts for the hostname unless `KINDLE_HOST` is set — `192.168.15.244` over USBNetwork, or the machine name over Tailscale. `KINDLE_USER` (default `root`) and `KINDLE_KO_HOME` override the rest. It copies with `scp -O`: OpenSSH 9 speaks SFTP by default and the Kindle's dropbear has no sftp server to answer it.
+
 On macOS, `rake koreader:install` symlinks the plugin into `~/Library/Application Support/koreader/plugins/`. `COPY=1 rake koreader:install` installs a real copy instead of a symlink. Set `KO_HOME` to override the data directory. Run `rake koreader:run` to launch the macOS app with verbose logs printed in the terminal. Enable verbose logs by clicking the top of the screen, hitting the menu icon on the right, Help > Report a Bug > Enable verbose logging.
 
 The plugin's entry is in the file browser's menu under `Tools`. Set the server address first, then sign in with the same username and password as the web app. The token is kept in `settings/tribune.lua` in KOReader's data directory and survives a restart; signing out discards it.
