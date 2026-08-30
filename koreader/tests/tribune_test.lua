@@ -99,6 +99,12 @@ package.preload["ui/network/manager"] = function()
     }
 end
 package.preload["json"] = function() return { decode = function(value) return value end } end
+package.preload["optmath"] = function()
+    return { roundPercent = function(percent) return math.floor(percent * 10000) / 10000 end }
+end
+package.preload["ui/event"] = function()
+    return { new = function(_, name, ...) return { handler = "on" .. name, args = { ... } } end }
+end
 package.preload["luasettings"] = function() return { open = function() return {} end } end
 package.preload["ui/uimanager"] = function()
     return { show = function(_, message) messages[#messages + 1] = message end, close = function() end,
@@ -210,9 +216,35 @@ local function row(id, fields)
         created_at = fields.created_at or string.format("2026-01-%02d", id),
         updated_at = fields.updated_at or string.format("2026-02-%02d", id),
         epub_updated_at = fields.epub_updated_at or string.format("2026-03-%02d", id),
+        progress = fields.progress or "",
         read = fields.read == true,
         deleted = fields.deleted == true,
     }
+end
+
+-- a reader sitting on one page of a document of ten. the reader modules answer
+-- with a fraction of the document as laid out, which is what the plugin reads
+-- rather than the reading state on disk.
+local function reader(instance, id, page, pages)
+    local events = {}
+    instance.ui = {
+        document = {
+            file = "/library/newsletters/" .. id .. ".epub",
+            info = { has_pages = false },
+        },
+        doc_settings = { readSetting = function() return { status = "reading" } end },
+        rolling = {
+            getLastPercent = function(self) return self.page / pages end,
+            page = page,
+        },
+        handleEvent = function(_, event)
+            events[#events + 1] = event
+            if event.handler == "onGotoPercent" then
+                instance.ui.rolling.page = math.floor(event.args[1] * pages / 100 + 0.5)
+            end
+        end,
+    }
+    return events
 end
 
 test("cache orders unread newsletters newest first and preserves downloaded epubs", function()
@@ -636,6 +668,269 @@ test("closing a finished newsletter marks it read but an unfinished one does not
 
     assert_equal(instance.cache:get(7).read, false)
     assert_equal(#instance.cache:pendingUpdates(), 0)
+end)
+
+test("reading partway through and closing sends the progress to the server", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+    local events = reader(instance, 7, 1, 10)
+
+    instance:onReaderReady()
+    instance.ui.rolling.page = 5
+    instance:onCloseDocument()
+
+    assert_equal(#events, 0)
+    assert_equal(instance.cache:get(7).progress, "0.5000")
+    assert_equal(instance.cache:pendingUpdates()[1].kind, "progress")
+    assert_equal(instance.cache:pendingUpdates()[1].progress, "0.5000")
+
+    local sent
+    instance.request = function(_, method, path, body)
+        if method == "GET" then return true, { result = {} }, 200 end
+        sent = method .. " " .. path .. " " .. tostring(body)
+        return true, nil, 200
+    end
+    instance.downloadUnread = function() return true, 0 end
+
+    assert_true(instance:sync())
+    assert_equal(sent, "PUT /newsletters/7/progress progress=0.5000")
+    assert_equal(#instance.cache:pendingUpdates(), 0)
+end)
+
+test("opening a newsletter seeks to the progress the server knows about", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7, { progress = "0.6000" }))
+    local events = reader(instance, 7, 1, 10)
+
+    instance:onReaderReady()
+
+    assert_equal(#events, 1)
+    assert_equal(events[1].handler, "onGotoPercent")
+    assert_equal(events[1].args[1], 60)
+    assert_equal(instance.ui.rolling.page, 6)
+end)
+
+test("a progress still queued on the device is not overwritten by the server's", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7, { progress = "0.2000" }))
+    instance.cache:setProgress(7, "0.8000")
+    instance.cache:queueUpdate({ kind = "progress", id = 7, progress = "0.8000" })
+    local events = reader(instance, 7, 8, 10)
+
+    instance:onReaderReady()
+
+    assert_equal(#events, 0)
+    assert_equal(instance.ui.rolling.page, 8)
+end)
+
+test("an unreadable stored progress opens the newsletter at the beginning", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7, { progress = "epubcfi(/6/4!/4/2/2)" }))
+    local events = reader(instance, 7, 1, 10)
+
+    instance:onReaderReady()
+    instance:onCloseDocument()
+
+    assert_equal(#events, 0)
+    assert_equal(#instance.cache:pendingUpdates(), 0)
+end)
+
+test("closing a newsletter without reading further sends no progress", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7, { progress = "0.6000" }))
+    reader(instance, 7, 1, 10)
+
+    instance:onReaderReady()
+    instance:onCloseDocument()
+
+    assert_equal(instance.cache:get(7).progress, "0.6000")
+    assert_equal(#instance.cache:pendingUpdates(), 0)
+end)
+
+test("turning many pages queues one progress rather than one per page", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+    reader(instance, 7, 1, 10)
+
+    instance:onReaderReady()
+    for page = 2, 10 do
+        instance.ui.rolling.page = page
+        assert_equal(#instance.cache:pendingUpdates(), 0)
+    end
+    instance:onCloseDocument()
+
+    local updates = instance.cache:pendingUpdates()
+    assert_equal(#updates, 1)
+    assert_equal(updates[1].progress, "1.0000")
+end)
+
+test("repeated readings coalesce into one queued progress", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+
+    -- the third of these does not move, so it has nothing of its own to say and
+    -- leaves the position queued by the second one where it is
+    for _, page in ipairs({ 3, 5, 5, 9 }) do
+        reader(instance, 7, 1, 10)
+        instance:onReaderReady()
+        instance.ui.rolling.page = page
+        instance:onCloseDocument()
+        assert_equal(#instance.cache:pendingUpdates(), 1)
+    end
+
+    assert_equal(instance.cache:pendingUpdates()[1].progress, "0.9000")
+    assert_equal(instance.cache:get(7).progress, "0.9000")
+end)
+
+-- coalescing is about what is still waiting, not about what has already gone.
+-- a reading that syncs before the next one begins is its own update.
+test("a sync between two readings sends each one's final position", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+    local sent = {}
+    instance.request = function(_, method, path, body)
+        if method == "GET" then return true, { result = {} }, 200 end
+        sent[#sent + 1] = path .. " " .. tostring(body)
+        return true, nil, 200
+    end
+    instance.downloadUnread = function() return true, 0 end
+
+    for _, page in ipairs({ 3, 8 }) do
+        reader(instance, 7, 1, 10)
+        instance:onReaderReady()
+        instance.ui.rolling.page = page
+        instance:onCloseDocument()
+        assert_true(instance:sync())
+    end
+
+    assert_equal(#sent, 2)
+    assert_equal(sent[1], "/newsletters/7/progress progress=0.3000")
+    assert_equal(sent[2], "/newsletters/7/progress progress=0.8000")
+end)
+
+test("progress is truncated to four decimal places like the other clients", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+    reader(instance, 7, 1, 3)
+
+    instance:onReaderReady()
+    instance.ui.rolling.page = 2
+    instance:onCloseDocument()
+
+    assert_equal(instance.cache:get(7).progress, "0.6666")
+end)
+
+-- the same fixtures web/tests/ReadingPosition.spec.ts pins on its own quantiser.
+-- what makes a fraction carry between renderers is that neither of them rounds
+-- differently from the other, so both suites are held to the same values.
+test("progress is written in the form the other clients write", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+    for _, case in ipairs({
+        { fraction = 0.123456, stored = "0.1234" },
+        { fraction = 0.99999, stored = "0.9999" },
+        { fraction = 0, stored = "0.0000" },
+        { fraction = 1, stored = "1.0000" },
+    }) do
+        reader(instance, 7, 1, 10)
+        instance:onReaderReady()
+        instance.ui.rolling.getLastPercent = function() return case.fraction end
+        instance:onCloseDocument()
+        assert_equal(instance.cache:get(7).progress, case.stored)
+    end
+end)
+
+test("a stored progress is read in the form the other clients read", function()
+    reset_environment()
+    local instance = tribune()
+
+    -- a renderer that quantised further out still lands on our fraction
+    for _, stored in ipairs({ "0.3519", "0.35196" }) do
+        instance.cache:put(row(7, { progress = stored }))
+        local events = reader(instance, 7, 1, 10)
+        instance:onReaderReady()
+        assert_equal(#events, 1)
+        assert_equal(string.format("%.4f", events[1].args[1] / 100), "0.3519")
+    end
+
+    -- anything that is not a fraction means the newsletter has never been
+    -- opened, which is how the cfis stored before the change retire
+    for _, stored in ipairs({ "epubcfi(/6/2!/4/2/2/2)", "", "   ", "halfway", "1.5", "-0.2" }) do
+        instance.cache:put(row(7, { progress = stored }))
+        local events = reader(instance, 7, 1, 10)
+        instance:onReaderReady()
+        assert_equal(#events, 0)
+    end
+end)
+
+test("reaching the end of a newsletter does not on its own mark it read", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7))
+    reader(instance, 7, 1, 10)
+
+    instance:onReaderReady()
+    instance.ui.rolling.page = 10
+    instance:onCloseDocument()
+
+    assert_equal(instance.cache:get(7).read, false)
+    local updates = instance.cache:pendingUpdates()
+    assert_equal(#updates, 1)
+    assert_equal(updates[1].kind, "progress")
+    assert_equal(updates[1].progress, "1.0000")
+end)
+
+test("progress recorded offline is sent on the next sync", function()
+    reset_environment()
+    local first = cache()
+    first:put(row(7))
+    local instance = tribune(first)
+    reader(instance, 7, 1, 10)
+    instance:onReaderReady()
+    instance.ui.rolling.page = 4
+    instance:onCloseDocument()
+
+    instance.request = function() return false, "offline", nil end
+    assert_equal(instance:sync(), false)
+
+    local restarted = tribune(cache())
+    assert_equal(restarted.cache:pendingUpdates()[1].progress, "0.4000")
+    local sent = {}
+    restarted.request = function(_, method, path, body)
+        if method == "GET" then return true, { result = {} }, 200 end
+        sent[#sent + 1] = method .. " " .. path .. " " .. tostring(body)
+        return true, nil, 200
+    end
+    restarted.downloadUnread = function() return true, 0 end
+
+    assert_true(restarted:sync())
+    assert_equal(sent[1], "PUT /newsletters/7/progress progress=0.4000")
+    assert_equal(#restarted.cache:pendingUpdates(), 0)
+end)
+
+test("a synced progress from another client replaces the cached one", function()
+    reset_environment()
+    local instance = tribune()
+    instance.cache:put(row(7, { progress = "0.1000" }))
+    instance.cache:setDownloaded(7, instance.cache:get(7).epub_updated_at)
+    instance.request = function()
+        return true, { result = { row(7, { progress = "0.7500" }) } }, 200
+    end
+
+    assert_true(instance:sync())
+
+    assert_equal(instance.cache:get(7).progress, "0.7500")
+    assert_equal(instance.cache:get(7).downloaded_epub_updated_at, "2026-03-07")
 end)
 
 test("sync pages from an empty cache and resumes after an interrupted page", function()

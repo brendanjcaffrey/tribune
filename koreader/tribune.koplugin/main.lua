@@ -10,11 +10,13 @@ the library up to date against that server.
 local DataStorage = require("datastorage")
 local Device = require("device")
 local DocSettings = require("docsettings")
+local Event = require("ui/event")
 local FileChooser = require("ui/widget/filechooser")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local JSON = require("json")
 local LuaSettings = require("luasettings")
+local Math = require("optmath")
 local MultiInputDialog = require("ui/widget/multiinputdialog")
 local NetworkMgr = require("ui/network/manager")
 local NewsletterCache = require("newslettercache")
@@ -57,6 +59,32 @@ local AUTO_SYNC_INTERVAL = 5 * 60
 -- time a book is closed. this is remembered for as long as koreader is running.
 local last_auto_sync = nil
 
+-- progress is a fraction of the document between 0 and 1, quantised to four
+-- decimal places. koreader's own Math.roundPercent does the quantising, and the
+-- other clients copy it, so no renderer's value disagrees with another's. see
+-- docs/adr/0001-progress-as-a-fraction.md.
+local function isFraction(value)
+    -- a nan is the only number that is not equal to itself, and an infinity is
+    -- what a document of no height divides into
+    return type(value) == "number" and value == value
+        and value >= 0 and value <= 1
+end
+
+local function formatProgress(fraction)
+    return string.format("%.4f", Math.roundPercent(fraction))
+end
+
+-- a stored value that is not a fraction means the newsletter has never been
+-- opened. that is also what retires the epub cfis stored before progress became
+-- a fraction: nothing migrates them, each is overwritten the first time its
+-- newsletter is read on any client.
+local function parseProgress(stored)
+    if type(stored) ~= "string" then return nil end
+    local value = tonumber(stored)
+    if not isFraction(value) then return nil end
+    return Math.roundPercent(value)
+end
+
 local Tribune = WidgetContainer:extend{
     name = "tribune",
     -- the reader instantiates every plugin regardless of this flag, so all it
@@ -92,11 +120,19 @@ end
 
 --[[ file browser actions ]]--
 
+-- a path in the library names a newsletter by its id, and nothing else in the
+-- folder does. anything else -- a book the reader put there, a file browser
+-- somewhere else entirely -- is not ours and gets no id.
+function Tribune:newsletterIdFrom(path)
+    if type(path) ~= "string" then return nil end
+    return tonumber(path:match("^" .. self.newsletters_dir .. "/(%d+)%.epub$"))
+end
+
 function Tribune:registerNewsletterActions()
     if not self.ui.addFileDialogButtons then return end
     self.ui:addFileDialogButtons("tribune_newsletter_actions", function(path, is_file)
         if not is_file then return nil end
-        local id = tonumber(path:match("^" .. self.newsletters_dir .. "/(%d+)%.epub$"))
+        local id = self:newsletterIdFrom(path)
         if not id then return nil end
         return {
             {
@@ -137,15 +173,80 @@ function Tribune:deleteNewsletter(id)
     self:refreshBrowser()
 end
 
+--[[ reading a newsletter ]]--
+
+-- the reader's own position, as a fraction, read from the live reader. the
+-- reading state on disk cannot answer this when a document closes: the reader
+-- flushes it after the document has gone, so at that point it still holds the
+-- previous save's values.
+function Tribune:currentProgress()
+    local document = self.ui and self.ui.document
+    if not document then return nil end
+    -- crengine and the page-based renderers each know where they are and say so
+    -- the same way. either answer is a fraction of the document as laid out.
+    local module = document.info and document.info.has_pages
+        and self.ui.paging or self.ui.rolling
+    if not module or not module.getLastPercent then return nil end
+    local fraction = module:getLastPercent()
+    if not isFraction(fraction) then return nil end
+    return Math.roundPercent(fraction)
+end
+
+-- opening a newsletter seeks to the position the server knows about. a progress
+-- still sitting in the queue has not reached the server, so in that case this
+-- device holds the newer of the two and keeps the position koreader restored.
+--
+-- this runs after the reader modules have had the event, since they are
+-- registered before any plugin, so the seek moves off a restored position
+-- rather than being overwritten by one.
+function Tribune:onReaderReady()
+    local document = self.ui and self.ui.document
+    if not document then return end
+    local id = self:newsletterIdFrom(document.file)
+    if not id then return end
+
+    local cache = self:getCache()
+    if not cache:hasPendingUpdate(id, "progress") then
+        local newsletter = cache:get(id)
+        local fraction = newsletter and parseProgress(newsletter.progress)
+        if fraction and fraction ~= self:currentProgress() then
+            self.ui:handleEvent(Event:new("GotoPercent", fraction * 100))
+        end
+    end
+
+    -- where this reading started, so that closing without having read on can be
+    -- told from closing a page further along. it is taken after the seek, so an
+    -- approximate landing is the mark rather than the value that was aimed at.
+    self.opening_progress = self:currentProgress()
+end
+
 -- the reader has already asked whether this book was finished. its answer is
 -- recorded in summary before CloseDocument, unlike the position and percentage.
 function Tribune:onCloseDocument()
     local document = self.ui and self.ui.document
     local settings = self.ui and self.ui.doc_settings
     if not document or not settings then return end
-    local id = tonumber(document.file:match("^" .. self.newsletters_dir .. "/(%d+)%.epub$"))
+    local id = self:newsletterIdFrom(document.file)
+    if not id then return end
     local summary = settings:readSetting("summary")
-    if id and summary and summary.status == "complete" then self:markNewsletterRead(id) end
+    if summary and summary.status == "complete" then self:markNewsletterRead(id) end
+    self:recordProgress(id)
+end
+
+-- progress goes on the same queue as the other actions, so it survives being
+-- offline, and one queued value per newsletter supersedes the last rather than
+-- one being sent per page turn. reaching the end says nothing about whether the
+-- newsletter has been read: that stays a separate, deliberate act.
+function Tribune:recordProgress(id)
+    local fraction = self:currentProgress()
+    if not fraction or fraction == self.opening_progress then return end
+    local cache = self:getCache()
+    local newsletter = cache:get(id)
+    if not newsletter then return end
+    local progress = formatProgress(fraction)
+    if newsletter.progress == progress then return end
+    cache:setProgress(id, progress)
+    cache:queueUpdate({ kind = "progress", id = id, progress = progress })
 end
 
 --[[ file browser sorting ]]--
@@ -543,8 +644,12 @@ function Tribune:sendPendingUpdates()
         local method = update.kind == "delete" and "DELETE" or "PUT"
         local path = "/newsletters/" .. update.id
         if update.kind ~= "delete" then path = path .. "/" .. update.kind end
+        -- progress is the only one of these that carries a value; the rest say
+        -- everything they have to say in the route
+        local body = update.kind == "progress"
+            and ("progress=" .. util.urlEncode(update.progress)) or nil
         local ok, message, code = self:request(method, path,
-            nil, self:getToken(), false)
+            body, self:getToken(), false)
         if not ok then return false, message, code end
         cache:removePendingUpdate(update)
     end

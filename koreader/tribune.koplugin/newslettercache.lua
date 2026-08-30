@@ -3,9 +3,10 @@ the plugin's own picture of the library.
 
 only what the plugin needs is kept about a newsletter: its id, so it can be
 named on disk and on the server; when it was published and whether it has been
-read, so it can be ordered; when its epub last changed, so a downloaded copy can
-be told from a stale one; whether it has been deleted, so it stops being listed;
-and when it last changed, which is what the server pages on.
+read, so it can be ordered; how far through it the reader got, so opening it
+lands where the last device left off; when its epub last changed, so a
+downloaded copy can be told from a stale one; whether it has been deleted, so it
+stops being listed; and when it last changed, which is what the server pages on.
 
 the file is append-mostly. writing one newsletter appends one line rather than
 rewriting the library, because a sync of a few thousand newsletters would
@@ -57,6 +58,7 @@ local function reduce(row)
         created_at = row.created_at or "",
         updated_at = row.updated_at or "",
         epub_updated_at = row.epub_updated_at or "",
+        progress = row.progress or "",
         read = row.read == true,
         deleted = row.deleted == true,
     }
@@ -176,6 +178,15 @@ function Cache:expirePendingUpdates(now)
     self.data:saveSetting("pending_updates", kept)
 end
 
+-- whether this device is holding a change of that kind the server has not seen
+-- yet, which is what makes the device's own value the newer of the two.
+function Cache:hasPendingUpdate(id, kind)
+    for _, update in ipairs(self:pendingUpdates()) do
+        if update.id == id and update.kind == kind then return true end
+    end
+    return false
+end
+
 function Cache:removePendingUpdate(update)
     local updates = self:pendingUpdates()
     for index, pending in ipairs(updates) do
@@ -192,6 +203,16 @@ function Cache:setRead(id, read)
     local newsletter = self:get(id)
     if not newsletter then return false end
     newsletter.read = read
+    self.data:saveSetting(tonumber(id), newsletter)
+    return true
+end
+
+-- kept as the decimal string it is sent and received as, so that a value this
+-- device wrote and one the server sent back compare the same way.
+function Cache:setProgress(id, progress)
+    local newsletter = self:get(id)
+    if not newsletter then return false end
+    newsletter.progress = progress
     self.data:saveSetting(tonumber(id), newsletter)
     return true
 end
