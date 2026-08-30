@@ -49,15 +49,6 @@ local PAGE_SIZE = 100
 -- server keeps answering. this stops one sync after a hundred thousand rows,
 -- which is far more library than anyone has and far less than forever.
 local MAX_PAGES = 1000
--- opening the file browser syncs, but coming back to it from a book opens it
--- again, and a sync every time a book is closed is not what "when the file
--- browser is opened" means. so an automatic sync waits this long between goes.
-local AUTO_SYNC_INTERVAL = 5 * 60
-
--- module scope on purpose. closing a book destroys the file browser and builds
--- a new one, plugins and all, so anything remembered on self is forgotten every
--- time a book is closed. this is remembered for as long as koreader is running.
-local last_auto_sync = nil
 
 -- progress is a fraction of the document between 0 and 1, quantised to four
 -- decimal places. koreader's own Math.roundPercent does the quantising, and the
@@ -85,8 +76,14 @@ local function parseProgress(stored)
     return Math.roundPercent(value)
 end
 
+-- sync_on_return is on the module rather than on an instance. the plugin that
+-- sets it is the reader's, and the one that acts on it belongs to the file
+-- browser built afterwards, so an instance would not carry it across. it is
+-- written as Tribune.sync_on_return, never self.sync_on_return, which would put
+-- a copy on the instance and lose it again.
 local Tribune = WidgetContainer:extend{
     name = "tribune",
+    sync_on_return = false,
     -- the reader instantiates every plugin regardless of this flag, so all it
     -- really says is that the file browser wants us too. staying out of the
     -- reader's menu is done in init.
@@ -114,7 +111,13 @@ function Tribune:init()
             self:attachSortModeToBrowser()
         end
         self.ui.menu:registerToMainMenu(self)
-        self:scheduleAutoSync()
+        -- coming back from a newsletter is the only thing that syncs a browser
+        -- as it opens, since it has a position and often a read state to send.
+        -- opening the browser for any other reason has nothing new to say.
+        if Tribune.sync_on_return then
+            Tribune.sync_on_return = false
+            self:scheduleSync(true)
+        end
     end
 end
 
@@ -235,6 +238,9 @@ function Tribune:onCloseDocument()
     local summary = settings:readSetting("summary")
     if summary and summary.status == "complete" then self:markNewsletterRead(id) end
     self:recordProgress(id)
+    -- a position at the least, often a read state as well, for the browser
+    -- this is about to return to to send.
+    Tribune.sync_on_return = true
 end
 
 -- progress goes on the same queue as the other actions, so it survives being
@@ -785,23 +791,22 @@ end
 
 --[[ when syncing happens ]]--
 
--- a new file browser means a new plugin, so this runs every time the browser is
--- opened -- including on the way back from a book.
-function Tribune:scheduleAutoSync()
+-- a sync in the background, for the moments worth one: tapping "library", and
+-- coming back from a newsletter. there is no interval between them, because
+-- neither happens often enough to need one.
+function Tribune:scheduleSync(quiet)
     if not self:getToken() or not self:getServerAddress() then return end
-    local now = os.time()
-    if last_auto_sync and now - last_auto_sync < AUTO_SYNC_INTERVAL then return end
-    last_auto_sync = now
-
     -- two ticks, not one. koreader runs the tick queue before it repaints, so a
     -- task scheduled for the next tick would block the browser's first paint;
     -- the tick after that runs once it is on screen.
     UIManager:tickAfterNext(function()
-        self:autoSync()
+        self:autoSync(quiet)
     end)
 end
 
-function Tribune:autoSync()
+-- quiet says nobody asked for this sync: it came of closing a book rather than
+-- of the reader tapping something, so being offline is not worth a message.
+function Tribune:autoSync(quiet)
     -- neither of these prompts, brings the network up, or costs anything: one
     -- reads the radio's state and the other asks the interface for its address.
     -- NetworkMgr:isOnline() would be the stronger test, but it makes it by
@@ -810,10 +815,12 @@ function Tribune:autoSync()
     -- docs/adr/0002-plain-http-for-the-kindle.md.
     if not NetworkMgr:isWifiOn() or not NetworkMgr:isConnected() then
         logger.dbg("tribune: offline, not syncing")
-        UIManager:show(InfoMessage:new{
-            text = _("Tribune did not sync: this device is offline."),
-            timeout = 2,
-        })
+        if not quiet then
+            UIManager:show(InfoMessage:new{
+                text = _("Tribune did not sync: this device is offline."),
+                timeout = 2,
+            })
+        end
         return
     end
 
@@ -858,7 +865,6 @@ function Tribune:syncNow(touchmenu_instance)
     local ok, result, code = self:withProgress(_("Syncing with Tribune…"), function()
         return self:sync()
     end)
-    last_auto_sync = os.time()
 
     if not ok then
         if code == 401 then
@@ -896,6 +902,9 @@ function Tribune:openLibrary()
     local directory = self:getNewslettersDir()
     local browser = self.ui and self.ui.file_chooser
     if directory and browser then browser:changeToPath(directory) end
+    -- looking at the library is a moment for it to be up to date. this one is
+    -- on wifi only and does not prompt; "sync now" is the one that insists.
+    self:scheduleSync()
 end
 
 --[[ signing in and out ]]--

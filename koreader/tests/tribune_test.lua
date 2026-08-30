@@ -36,6 +36,10 @@ local free_space
 local http_response
 local network = {}
 local clock
+local scheduled = {}
+-- assigned once main.lua is loaded. what the reader left behind on closing a
+-- newsletter outlives the plugin that saw it, so each test starts from nothing.
+local reset_plugin = function() end
 
 local function reset_environment()
     stored_settings = {}
@@ -46,6 +50,8 @@ local function reset_environment()
     free_space = nil
     http_response = nil
     clock = nil
+    scheduled = {}
+    reset_plugin()
     network = { wifi_on = false, connected = false, rerun_when_connected = false }
 end
 
@@ -110,7 +116,8 @@ end
 package.preload["luasettings"] = function() return { open = function() return {} end } end
 package.preload["ui/uimanager"] = function()
     return { show = function(_, message) messages[#messages + 1] = message end, close = function() end,
-             forceRePaint = function() end, tickAfterNext = function() end, nextTick = function() end }
+             forceRePaint = function() end, nextTick = function() end,
+             tickAfterNext = function(_, callback) scheduled[#scheduled + 1] = callback end }
 end
 package.preload["ui/widget/container/widgetcontainer"] = function()
     local widget = {}
@@ -199,6 +206,10 @@ end
 local Cache = dofile(source_dir .. "newslettercache.lua")
 package.loaded["newslettercache"] = Cache
 local Tribune = require("main")
+
+reset_plugin = function()
+    Tribune.sync_on_return = false
+end
 
 local function cache()
     return Cache:open("/settings/cache.lua")
@@ -971,7 +982,7 @@ test("sync leaves deleted newsletters out of the library", function()
     assert_equal(instance.cache:list()[1].id, 1)
 end)
 
-test("opening the browser offline keeps the cached library and explains that it did not sync", function()
+test("a sync on an offline device keeps the cached library and explains that it did not run", function()
     reset_environment()
     local instance = tribune()
     instance.cache:put(row(1, { read = true }))
@@ -981,7 +992,7 @@ test("opening the browser offline keeps the cached library and explains that it 
     assert_equal(messages[1].text, "Tribune did not sync: this device is offline.")
 end)
 
-test("opening the browser online syncs without requesting a wifi prompt", function()
+test("a background sync does not ask for the wifi to be brought up", function()
     reset_environment()
     network.wifi_on = true
     network.connected = true
@@ -992,6 +1003,106 @@ test("opening the browser online syncs without requesting a wifi prompt", functi
 
     assert_equal(network.callback, nil)
     assert_true(instance.cache:getLastSync() ~= nil)
+end)
+
+test("tapping Library syncs the folder it opens", function()
+    reset_environment()
+    network.wifi_on = true
+    network.connected = true
+    local instance = tribune()
+    instance.ui = { file_chooser = { changeToPath = function() end, refreshPath = function() end } }
+    instance.request = function() return true, { result = {} }, 200 end
+    local menu_items = {}
+    instance:addToMainMenu(menu_items)
+
+    menu_items.tribune.sub_item_table[4].callback()
+    assert_equal(#scheduled, 1)
+    scheduled[1]()
+
+    assert_true(instance.cache:getLastSync() ~= nil)
+end)
+
+test("tapping Library offline leaves the library alone and says why", function()
+    reset_environment()
+    local instance = tribune()
+    instance.ui = { file_chooser = { changeToPath = function() end } }
+    instance.request = function() fail("an offline device must not be asked") end
+    local menu_items = {}
+    instance:addToMainMenu(menu_items)
+
+    menu_items.tribune.sub_item_table[4].callback()
+    scheduled[1]()
+
+    assert_equal(instance.cache:getLastSync(), nil)
+    assert_equal(messages[1].text, "Tribune did not sync: this device is offline.")
+end)
+
+test("opening the browser does not sync on its own", function()
+    reset_environment()
+    local instance = tribune()
+    instance.ui = { menu = { registerToMainMenu = function() end } }
+    instance.request = function() fail("opening the browser must not sync") end
+
+    instance:init()
+
+    assert_equal(#scheduled, 0)
+    instance:onCloseWidget()
+end)
+
+test("coming back from a newsletter syncs", function()
+    reset_environment()
+    network.wifi_on = true
+    network.connected = true
+    local local_cache = cache()
+    local_cache:put(row(7))
+    local reading = tribune(local_cache)
+    reader(reading, 7, 1, 10)
+    reading:onReaderReady()
+    reading.ui.rolling.page = 5
+    reading:onCloseDocument()
+
+    -- the browser that comes back is a new plugin opening the cache for itself,
+    -- so it only has the position if closing the book wrote it down first
+    local returned = tribune(cache())
+    returned.ui = { menu = { registerToMainMenu = function() end } }
+    returned.request = function(_, method)
+        if method == "GET" then return true, { result = {} }, 200 end
+        return true, nil, 200
+    end
+    http_response = function(request)
+        request.sink("epub seven")
+        return 1, 200, {}, "200 OK"
+    end
+    returned:init()
+    assert_equal(#scheduled, 1)
+    scheduled[1]()
+
+    -- the sync sent the position the reader queued, so it was on the queue
+    -- before the sync was scheduled rather than after it
+    assert_equal(#returned.cache:pendingUpdates(), 0)
+    assert_equal(returned.cache:get(7).progress, "0.5000")
+    returned:onCloseWidget()
+end)
+
+test("coming back from a newsletter offline says nothing about it", function()
+    reset_environment()
+    local local_cache = cache()
+    local_cache:put(row(7))
+    local reading = tribune(local_cache)
+    reader(reading, 7, 1, 10)
+    reading:onReaderReady()
+    reading.ui.rolling.page = 5
+    reading:onCloseDocument()
+
+    local returned = tribune(cache())
+    returned.ui = { menu = { registerToMainMenu = function() end } }
+    returned:init()
+    assert_equal(#scheduled, 1)
+    scheduled[1]()
+
+    assert_equal(#messages, 0)
+    assert_equal(#returned.cache:pendingUpdates(), 1)
+    returned:onCloseWidget()
 end)
 
 test("sync now asks the network manager to connect when the device is offline", function()
