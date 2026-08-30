@@ -36,6 +36,9 @@ jobs:
       with:
         node-version: '22.14.0'
 
+    - name: install luajit
+      run: sudo apt-get update && sudo apt-get install --yes luajit
+
     - name: npm ci
       run: cd web && npm ci
 
@@ -62,6 +65,11 @@ jobs:
       id: vitest
       timeout-minutes: 1
       run: bundle exec rake web:vitest_run
+
+    - name: koreader plugin tests
+      id: koreader
+      timeout-minutes: 1
+      run: bundle exec rake koreader:test
 
     - name: checks
       id: checks

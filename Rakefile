@@ -369,6 +369,11 @@ namespace :ios do
 end
 
 namespace :koreader do
+  desc 'Run the KOReader plugin tests'
+  task :test do
+    command.run('luajit koreader/tests/tribune_test.lua')
+  end
+
   desc 'Install the KOReader plugin into KOReader\'s data directory (COPY=1 to copy instead of symlink)'
   task :install do
     pastel = Pastel.new

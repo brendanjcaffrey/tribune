@@ -127,6 +127,40 @@ function Cache:counts()
     return total, unread
 end
 
+-- records the version of an epub that made it safely onto the device. this is
+-- deliberately separate from epub_updated_at: the latter is what the server
+-- currently has, while this says which version the local file contains.
+function Cache:setDownloaded(id, epub_updated_at)
+    local newsletter = self:get(id)
+    if not newsletter then return false end
+    newsletter.downloaded_epub_updated_at = epub_updated_at
+    self.data:saveSetting(tonumber(id), newsletter)
+    return true
+end
+
+function Cache:isDownloadedCurrent(id)
+    local newsletter = self:get(id)
+    return newsletter
+        and newsletter.downloaded_epub_updated_at == newsletter.epub_updated_at
+end
+
+-- unread, undeleted newsletters that need a local epub, in the library order.
+function Cache:downloads()
+    local out = {}
+    for id, newsletter in pairs(self.data.data) do
+        if type(id) == "number" and not newsletter.deleted and not newsletter.read
+            and newsletter.epub_updated_at ~= ""
+            and newsletter.downloaded_epub_updated_at ~= newsletter.epub_updated_at then
+            out[#out + 1] = { id = id, created_at = newsletter.created_at }
+        end
+    end
+    table.sort(out, function(a, b)
+        if a.created_at ~= b.created_at then return a.created_at < b.created_at end
+        return a.id < b.id
+    end)
+    return out
+end
+
 function Cache:isEmpty()
     for id in pairs(self.data.data) do
         if type(id) == "number" then return false end

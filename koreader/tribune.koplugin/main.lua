@@ -9,6 +9,7 @@ the library up to date against that server.
 
 local DataStorage = require("datastorage")
 local Device = require("device")
+local DocSettings = require("docsettings")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local JSON = require("json")
@@ -22,6 +23,7 @@ local ffiUtil = require("ffi/util")
 local http = require("socket.http")
 local logger = require("logger")
 local ltn12 = require("ltn12")
+local lfs = require("libs/libkoreader-lfs")
 local socket = require("socket")
 local socketutil = require("socketutil")
 local util = require("util")
@@ -34,6 +36,8 @@ local T = ffiUtil.template
 -- transfer once the first chunk has arrived.
 local BLOCK_TIMEOUT = 5
 local TOTAL_TIMEOUT = 15
+
+local GIGABYTE = 1024 * 1024 * 1024
 
 -- how many rows the server puts in one page. it is the server's number, not
 -- ours: a page that comes back full is the only sign that there may be more.
@@ -64,6 +68,7 @@ local Tribune = WidgetContainer:extend{
     -- large and appended to a page at a time, and putting them together would
     -- make every sign-in rewrite the library.
     cache_file = DataStorage:getSettingsDir() .. "/tribune_newsletters.lua",
+    newsletters_dir = DataStorage:getDataDir() .. "/newsletters",
     settings = nil,
     cache = nil,
 }
@@ -96,6 +101,17 @@ function Tribune:getCache()
         self.cache = NewsletterCache:open(self.cache_file)
     end
     return self.cache
+end
+
+function Tribune:getNewslettersDir()
+    if lfs.attributes(self.newsletters_dir, "mode") ~= "directory" then
+        local ok, err = lfs.mkdir(self.newsletters_dir)
+        if not ok then
+            logger.err("tribune: could not create newsletters directory:", tostring(err))
+            return nil
+        end
+    end
+    return self.newsletters_dir
 end
 
 function Tribune:getServerAddress()
@@ -266,6 +282,57 @@ function Tribune:request(method, path, form_body, token)
     return true, parsed, code
 end
 
+-- streams an epub into a temporary file. keeping response bytes out of memory
+-- matters on older devices, and renaming only after a complete 200 response
+-- means a failed transfer cannot replace a readable book with a partial one.
+function Tribune:download(path, destination)
+    local address = self:getServerAddress()
+    if not address then return false, _("No server address is set."), nil end
+
+    local partial = destination .. ".partial"
+    os.remove(partial)
+    local output, open_error = io.open(partial, "wb")
+    if not output then
+        return false, T(_("Could not write the epub: %1"), tostring(open_error)), nil
+    end
+
+    socketutil:set_timeout(BLOCK_TIMEOUT, TOTAL_TIMEOUT)
+    local write_error
+    local request = {
+        url = address .. path,
+        method = "GET",
+        headers = { ["Authorization"] = "Bearer " .. self:getToken() },
+        sink = function(chunk, err)
+            if chunk then
+                local ok, problem = output:write(chunk)
+                if not ok then write_error = problem end
+            end
+            return write_error and nil or 1, err
+        end,
+    }
+    local code, headers, status = socket.skip(1, http.request(request))
+    socketutil:reset_timeout()
+    output:close()
+
+    if headers == nil then
+        os.remove(partial)
+        return false, T(_("Could not reach the server: %1"), tostring(status or code)), nil
+    end
+    if write_error then
+        os.remove(partial)
+        return false, T(_("Could not write the epub: %1"), tostring(write_error)), code
+    end
+    if code ~= 200 then
+        os.remove(partial)
+        return false, T(_("The server refused the epub download: %1"), tostring(status or code)), code
+    end
+    if not os.rename(partial, destination) then
+        os.remove(partial)
+        return false, _("Could not put the epub in the library."), code
+    end
+    return true, nil, code
+end
+
 -- the interface cannot repaint while a synchronous request is in flight, so the
 -- message has to be on screen before the request starts. it has no timeout, so
 -- a request that takes its full fifteen seconds shows what it is waiting for
@@ -362,7 +429,9 @@ function Tribune:sync()
         if #rows < PAGE_SIZE then
             cache:setLastSync(os.time())
             cache:compactIfNeeded()
-            return true, { fetched = fetched, stored = stored }
+            local download_ok, downloaded, download_code = self:downloadUnread()
+            if not download_ok then return false, downloaded, download_code end
+            return true, { fetched = fetched, stored = stored, downloaded = downloaded }
         end
     end
 
@@ -371,6 +440,35 @@ function Tribune:sync()
     -- at the bottom of the library again.
     logger.warn("tribune: gave up after", MAX_PAGES, "pages")
     return false, _("The library was too big to sync in one go. Try again.")
+end
+
+-- downloads the unread library from oldest to newest. a cache entry changes
+-- only after its file has been renamed into place, so cancelling or a failed
+-- transfer leaves the next run with an honest, usable cache.
+function Tribune:downloadUnread()
+    local directory = self:getNewslettersDir()
+    if not directory then return false, _("Could not create the Tribune library.") end
+
+    local disk_usage = util.diskUsage(directory)
+    local free_space = disk_usage and disk_usage.available
+    if free_space and free_space < GIGABYTE then
+        return false, _("Tribune stopped downloading: less than 1 GB is free."), nil
+    end
+
+    local cache = self:getCache()
+    local downloaded = 0
+    for _, newsletter in ipairs(cache:downloads()) do
+        local filename = directory .. "/" .. newsletter.id .. ".epub"
+        local ok, message, code = self:download("/newsletters/" .. newsletter.id .. "/epub", filename)
+        if not ok then return false, message, code end
+        local previous = cache:get(newsletter.id)
+        if previous and previous.downloaded_epub_updated_at then
+            DocSettings:open(filename):purge(nil, { doc_settings = true })
+        end
+        cache:setDownloaded(newsletter.id, cache:get(newsletter.id).epub_updated_at)
+        downloaded = downloaded + 1
+    end
+    return true, downloaded
 end
 
 --[[ when syncing happens ]]--
