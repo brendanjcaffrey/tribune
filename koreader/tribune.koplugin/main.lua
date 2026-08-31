@@ -145,6 +145,7 @@ function Tribune:registerNewsletterActions()
             {
                 text = _("Mark as read"),
                 callback = function()
+                    self:closeFileDialog()
                     self:markNewsletterRead(id)
                     self:scheduleSync(true)
                 end,
@@ -152,6 +153,7 @@ function Tribune:registerNewsletterActions()
             {
                 text = _("Mark as unread"),
                 callback = function()
+                    self:closeFileDialog()
                     self:markNewsletterUnread(id)
                     self:scheduleSync(true)
                 end,
@@ -159,12 +161,23 @@ function Tribune:registerNewsletterActions()
             {
                 text = _("Delete"),
                 callback = function()
+                    self:closeFileDialog()
                     self:deleteNewsletter(id)
                     self:scheduleSync(true)
                 end,
             },
         }
     end)
+end
+
+-- the long-press dialog belongs to the browser that opened it, and an added
+-- action is handed no way to close it. every button koreader puts there closes
+-- it itself, so ours have to as well, or the dialog stays up over a row that
+-- has already changed under it.
+function Tribune:closeFileDialog()
+    local browser = self.ui and self.ui.file_chooser
+    local dialog = browser and browser.file_dialog
+    if dialog then UIManager:close(dialog) end
 end
 
 function Tribune:markNewsletterRead(id)

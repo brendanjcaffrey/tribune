@@ -35,6 +35,7 @@ local resolved_paths = {}
 local files = {}
 local purged = {}
 local messages = {}
+local closed = {}
 local free_space
 local http_response
 local network = {}
@@ -51,6 +52,7 @@ local function reset_environment()
     files = {}
     purged = {}
     messages = {}
+    closed = {}
     free_space = nil
     http_response = nil
     clock = nil
@@ -119,7 +121,8 @@ package.preload["ui/event"] = function()
 end
 package.preload["luasettings"] = function() return { open = function() return {} end } end
 package.preload["ui/uimanager"] = function()
-    return { show = function(_, message) messages[#messages + 1] = message end, close = function() end,
+    return { show = function(_, message) messages[#messages + 1] = message end,
+             close = function(_, widget) closed[#closed + 1] = widget end,
              forceRePaint = function() end, nextTick = function() end,
              tickAfterNext = function(_, callback) scheduled[#scheduled + 1] = callback end }
 end
@@ -591,6 +594,27 @@ test("long-pressing a newsletter offers its actions under a relative data dir", 
     local actions = rows.tribune_newsletter_actions("/mnt/us/koreader/newsletters/7.epub", true)
     assert_equal(actions[1].text, "Mark as read")
     assert_equal(rows.tribune_newsletter_actions("/mnt/us/koreader/books/7.epub", true), nil)
+end)
+
+test("a newsletter action closes the long-press dialog it was chosen from", function()
+    reset_environment()
+    local rows = {}
+    local instance = tribune()
+    instance.cache:put(row(7))
+    local dialog = {}
+    instance.ui = {
+        menu = { registerToMainMenu = function() end },
+        addFileDialogButtons = function(_, id, action_row) rows[id] = action_row end,
+        file_chooser = { file_dialog = dialog, refreshPath = function() end },
+    }
+    instance:init()
+
+    local actions = rows.tribune_newsletter_actions("/library/newsletters/7.epub", true)
+    for _, action in ipairs(actions) do
+        closed = {}
+        action.callback()
+        assert_equal(closed[1], dialog)
+    end
 end)
 
 test("closing the file-browser plugin unregisters its long-press actions", function()
