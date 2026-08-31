@@ -572,6 +572,27 @@ test("long-pressing a newsletter offers read unread and delete actions", functio
     assert_equal(rows.tribune_newsletter_actions("/library/newsletters/7.epub", false), nil)
 end)
 
+-- the kindle has no data dir of its own, so koreader calls its own directory
+-- "." and the library path is relative, while the browser hands back absolute
+-- paths. the actions have to appear there too.
+test("long-pressing a newsletter offers its actions under a relative data dir", function()
+    reset_environment()
+    local rows = {}
+    local instance = tribune()
+    instance.newsletters_dir = "./newsletters"
+    resolved_paths["./newsletters"] = "/mnt/us/koreader/newsletters"
+    instance.ui = {
+        menu = { registerToMainMenu = function() end },
+        addFileDialogButtons = function(_, id, row) rows[id] = row end,
+    }
+
+    instance:init()
+
+    local actions = rows.tribune_newsletter_actions("/mnt/us/koreader/newsletters/7.epub", true)
+    assert_equal(actions[1].text, "Mark as read")
+    assert_equal(rows.tribune_newsletter_actions("/mnt/us/koreader/books/7.epub", true), nil)
+end)
+
 test("closing the file-browser plugin unregisters its long-press actions", function()
     reset_environment()
     local added, removed

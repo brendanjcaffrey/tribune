@@ -122,9 +122,17 @@ end
 -- a path in the library names a newsletter by its id, and nothing else in the
 -- folder does. anything else -- a book the reader put there, a file browser
 -- somewhere else entirely -- is not ours and gets no id.
+--
+-- the folder is compared as a folder rather than matched as a string. the
+-- kindle has no data dir of its own, so koreader calls its own directory "."
+-- and the library path the plugin builds is relative, while every path the
+-- browser hands back is absolute. comparing the two as text finds nothing
+-- there, and the newsletter actions never appear.
 function Tribune:newsletterIdFrom(path)
     if type(path) ~= "string" then return nil end
-    return tonumber(path:match("^" .. self.newsletters_dir .. "/(%d+)%.epub$"))
+    local dir, name = path:match("^(.*)/([^/]+)$")
+    if not dir or not self:isLibraryPath(dir) then return nil end
+    return tonumber(name:match("^(%d+)%.epub$"))
 end
 
 function Tribune:registerNewsletterActions()
@@ -322,8 +330,9 @@ end
 
 -- the browser resolves every path it is given, so the library's own path has to
 -- be resolved before the two can be compared. on a device that reaches its
--- storage through a symlink the unresolved strings never match, and the library
--- folder quietly sorts like any other.
+-- storage through a symlink, or one whose data dir is relative -- the kindle's
+-- is "." -- the unresolved strings never match, and the library folder quietly
+-- sorts like any other.
 function Tribune:isLibraryPath(path)
     if type(path) ~= "string" then return false end
     if path == self.newsletters_dir then return true end
