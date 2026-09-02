@@ -619,6 +619,7 @@ export class EpubInteraction {
     iframeRef: RefObject<HTMLIFrameElement | null>,
     event: KeyboardEvent,
     closeNewsletter: () => void,
+    onPastEnd?: () => void,
   ) {
     const tag = (event.target as HTMLElement)?.tagName?.toLowerCase();
     if (
@@ -635,7 +636,7 @@ export class EpubInteraction {
     }
 
     if (event.key === "ArrowRight") {
-      EpubInteraction.scrollPage(iframeRef, "forward");
+      EpubInteraction.scrollPage(iframeRef, "forward", onPastEnd);
     } else if (event.key === "ArrowLeft") {
       EpubInteraction.scrollPage(iframeRef, "backward");
     }
@@ -660,6 +661,7 @@ export class EpubInteraction {
     iframeRef: RefObject<HTMLIFrameElement | null>,
     touchStartRef: RefObject<TouchStart | null>,
     event: TouchEvent,
+    onPastEnd?: () => void,
   ) {
     if (touchStartRef.current && event.changedTouches.length === 1) {
       const touchEndX = event.changedTouches[0].clientX;
@@ -670,6 +672,7 @@ export class EpubInteraction {
         EpubInteraction.scrollPage(
           iframeRef,
           deltaX < 0 ? "forward" : "backward",
+          onPastEnd,
         );
         event.preventDefault();
       } else {
@@ -688,6 +691,7 @@ export class EpubInteraction {
           EpubInteraction.scrollPage(
             iframeRef,
             touchEndX < screenWidth / 2 ? "backward" : "forward",
+            onPastEnd,
           );
           event.preventDefault();
         }
@@ -789,15 +793,22 @@ export class EpubInteraction {
     }
   }
 
+  // onPastEnd is called instead of scrolling when a forward turn is asked for
+  // on the last (or only) page
   static scrollPage(
     iframeRef: RefObject<HTMLIFrameElement | null>,
     direction: "forward" | "backward",
+    onPastEnd?: () => void,
   ) {
     const { current: iframe } = iframeRef;
     FootnotePreview.hide(iframeRef);
     if (iframe?.contentWindow) {
       const scrollAmount = iframe.clientWidth + COLUMN_GAP;
       if (direction === "forward") {
+        if (EpubInteraction.calculateReadingProgress(iframeRef).atEnd) {
+          onPastEnd?.();
+          return;
+        }
         iframe.contentWindow.scrollBy({
           left: scrollAmount,
           behavior: "instant",

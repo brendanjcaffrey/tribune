@@ -146,8 +146,14 @@ function setContent(spineItem) {
   document.close();
 }
 
+function markRead() {
+  window.webkit.messageHandlers.readerEvent.postMessage({
+    type: "at end",
+  });
+}
+
 function handleKeyDown(event) {
-  Bundle.EpubInteraction.handleKeyDown(iframeRef, event);
+  Bundle.EpubInteraction.handleKeyDown(iframeRef, event, () => {}, markRead);
 }
 
 function handleTouchStart(event) {
@@ -155,7 +161,12 @@ function handleTouchStart(event) {
 }
 
 function handleTouchEnd(event) {
-  Bundle.EpubInteraction.handleTouchEnd(iframeRef, touchStartRef, event);
+  Bundle.EpubInteraction.handleTouchEnd(
+    iframeRef,
+    touchStartRef,
+    event,
+    markRead,
+  );
 }
 
 function handleFootnoteClick(event) {
@@ -181,9 +192,7 @@ function handleScroll() {
   // shouldMarkRead filters out the scroll a footnote link causes, which lands on
   // the notes at the back of the article without any of it having been read
   if (Bundle.EpubInteraction.shouldMarkRead(endTrackingRef, progress)) {
-    window.webkit.messageHandlers.readerEvent.postMessage({
-      type: "at end",
-    });
+    markRead();
   }
 }
 

@@ -111,21 +111,37 @@ const EpubReader: React.FC<EpubReaderProps> = ({
   const seekOnNextLoad = useRef<PendingSeek | null>(null);
   const endTracking = useRef<EndTracking>(EpubInteraction.createEndTracking());
 
+  const markRead = useCallback(() => {
+    WorkerInstance.postMessage(
+      buildMainMessage("mark newsletter as read", {
+        id: newsletter.id,
+      }),
+    );
+  }, [newsletter.id]);
+
   // event handlers
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
-      EpubInteraction.handleKeyDown(iframeRef, event, closeNewsletter);
+      EpubInteraction.handleKeyDown(
+        iframeRef,
+        event,
+        closeNewsletter,
+        markRead,
+      );
     },
-    [closeNewsletter],
+    [closeNewsletter, markRead],
   );
 
   const handleTouchStart = useCallback((event: TouchEvent) => {
     EpubInteraction.handleTouchStart(touchStartRef, event);
   }, []);
 
-  const handleTouchEnd = useCallback((event: TouchEvent) => {
-    EpubInteraction.handleTouchEnd(iframeRef, touchStartRef, event);
-  }, []);
+  const handleTouchEnd = useCallback(
+    (event: TouchEvent) => {
+      EpubInteraction.handleTouchEnd(iframeRef, touchStartRef, event, markRead);
+    },
+    [markRead],
+  );
 
   const handleScrollToHref = useCallback((e: Event) => {
     EpubInteraction.handleScrollToHref(iframeRef, e, endTracking);
@@ -185,13 +201,9 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     );
 
     if (EpubInteraction.shouldMarkRead(endTracking, progress)) {
-      WorkerInstance.postMessage(
-        buildMainMessage("mark newsletter as read", {
-          id: newsletter.id,
-        }),
-      );
+      markRead();
     }
-  }, [newsletter.id]);
+  }, [newsletter.id, markRead]);
 
   useEffect(() => {
     // these events are added when parsing the epub content

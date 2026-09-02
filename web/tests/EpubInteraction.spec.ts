@@ -154,3 +154,111 @@ test("turning the page puts an open preview away", () => {
 
   expect(FootnotePreview.isOpen(iframeRef)).toBe(false);
 });
+
+// jsdom lays nothing out, so the paginated geometry that decides "last page"
+// has to be described rather than measured
+function paginated(pages: number, onPage: number) {
+  const iframe = document.createElement("iframe");
+  document.body.appendChild(iframe);
+  const clientWidth = 100;
+  Object.defineProperty(iframe, "clientWidth", { value: clientWidth });
+  Object.defineProperty(iframe.contentDocument!.body, "scrollWidth", {
+    value: clientWidth * pages,
+  });
+  Object.defineProperty(iframe.contentWindow!, "scrollX", {
+    value: clientWidth * onPage,
+  });
+  const scrolled: number[] = [];
+  iframe.contentWindow!.scrollBy = (options?: ScrollToOptions | number) => {
+    scrolled.push(typeof options === "number" ? options : options!.left!);
+  };
+  return { iframeRef: { current: iframe }, scrolled };
+}
+
+function arrowRight() {
+  return { key: "ArrowRight", target: null } as unknown as KeyboardEvent;
+}
+
+test("a page turn forward on the last page marks the newsletter read", () => {
+  const { iframeRef, scrolled } = paginated(3, 2);
+  let markedRead = false;
+
+  EpubInteraction.handleKeyDown(
+    iframeRef,
+    arrowRight(),
+    () => {},
+    () => {
+      markedRead = true;
+    },
+  );
+
+  expect(markedRead).toBe(true);
+  expect(scrolled).toEqual([]);
+});
+
+test("a page turn forward mid-document turns the page instead", () => {
+  const { iframeRef, scrolled } = paginated(3, 1);
+  let markedRead = false;
+
+  EpubInteraction.handleKeyDown(
+    iframeRef,
+    arrowRight(),
+    () => {},
+    () => {
+      markedRead = true;
+    },
+  );
+
+  expect(markedRead).toBe(false);
+  expect(scrolled.length).toBe(1);
+});
+
+test("a page turn forward on the only page marks the newsletter read", () => {
+  // one screen of content never paginates, so there is no last page to arrive
+  // at by scrolling - the turn is the only signal there is
+  const { iframeRef } = paginated(1, 0);
+  let markedRead = false;
+
+  EpubInteraction.handleKeyDown(
+    iframeRef,
+    arrowRight(),
+    () => {},
+    () => {
+      markedRead = true;
+    },
+  );
+
+  expect(markedRead).toBe(true);
+});
+
+test("a swipe forward on the last page marks the newsletter read", () => {
+  const { iframeRef } = paginated(3, 2);
+  let markedRead = false;
+
+  const event = {
+    target: iframeRef.current.contentDocument!.body,
+    changedTouches: [{ clientX: 10, clientY: 10 }],
+    preventDefault: () => {},
+  };
+  EpubInteraction.handleTouchEnd(
+    iframeRef,
+    { current: { x: 200, y: 10, targetIsAnchorOrButton: false } },
+    event as unknown as TouchEvent,
+    () => {
+      markedRead = true;
+    },
+  );
+
+  expect(markedRead).toBe(true);
+});
+
+test("a backward page turn at the start marks nothing", () => {
+  const { iframeRef } = paginated(3, 0);
+  let markedRead = false;
+
+  EpubInteraction.scrollPage(iframeRef, "backward", () => {
+    markedRead = true;
+  });
+
+  expect(markedRead).toBe(false);
+});
