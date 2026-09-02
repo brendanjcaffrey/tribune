@@ -170,7 +170,7 @@ function handleTouchEnd(event) {
 }
 
 function handleFootnoteClick(event) {
-  Bundle.EpubInteraction.handleFootnoteClick(iframeRef, event, endTrackingRef);
+  Bundle.EpubInteraction.handleFootnoteClick(iframeRef, event);
 }
 
 function handleOpenExternalLink(event) {
@@ -189,8 +189,6 @@ function handleScroll() {
 
   document.getElementById("progress").textContent =
     Math.round(progress.progress * 100).toString() + "%";
-  // shouldMarkRead filters out the scroll a footnote link causes, which lands on
-  // the notes at the back of the article without any of it having been read
   if (Bundle.EpubInteraction.shouldMarkRead(endTrackingRef, progress)) {
     markRead();
   }

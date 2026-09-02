@@ -26,29 +26,10 @@ test("does not mark read again while sitting on the last page", () => {
   expect(EpubInteraction.shouldMarkRead(ref, scroll(1, true))).toBe(false);
 });
 
-test("does not mark read when a footnote link jumps to the end", () => {
+test("marks read again after moving away from the end and back", () => {
   const ref = tracking();
-  EpubInteraction.shouldMarkRead(ref, scroll(0.2, false));
-
-  ref.current.jumpedByAnchor = true;
-  expect(EpubInteraction.shouldMarkRead(ref, scroll(1, true))).toBe(false);
-});
-
-test("stays suppressed while paging around inside the footnotes", () => {
-  const ref = tracking();
-  ref.current.jumpedByAnchor = true;
-  expect(EpubInteraction.shouldMarkRead(ref, scroll(1, true))).toBe(false);
-  expect(EpubInteraction.shouldMarkRead(ref, scroll(1, true))).toBe(false);
-});
-
-test("marks read after a footnote jump once the end is reached by reading", () => {
-  const ref = tracking();
-  ref.current.jumpedByAnchor = true;
-  // the jump lands on the last page
-  expect(EpubInteraction.shouldMarkRead(ref, scroll(1, true))).toBe(false);
-  // back into the body of the article, which clears the suppression
+  expect(EpubInteraction.shouldMarkRead(ref, scroll(1, true))).toBe(true);
   expect(EpubInteraction.shouldMarkRead(ref, scroll(0.4, false))).toBe(false);
-  // and now scrolling to the end counts
   expect(EpubInteraction.shouldMarkRead(ref, scroll(1, true))).toBe(true);
 });
 
@@ -100,11 +81,7 @@ test("a tap on a noteref previews the note instead of jumping to it", () => {
   const noteref = doc.getElementById("footnote-1-src")!;
 
   const event = tap(noteref);
-  EpubInteraction.handleFootnoteClick(
-    iframeRef,
-    event as unknown as Event,
-    tracking(),
-  );
+  EpubInteraction.handleFootnoteClick(iframeRef, event as unknown as Event);
 
   expect(FootnotePreview.isOpen(iframeRef)).toBe(true);
   // the noteref keeps its href, so the frame would follow it as well without

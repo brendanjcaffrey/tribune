@@ -144,7 +144,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
   );
 
   const handleScrollToHref = useCallback((e: Event) => {
-    EpubInteraction.handleScrollToHref(iframeRef, e, endTracking);
+    EpubInteraction.handleScrollToHref(iframeRef, e);
   }, []);
 
   const handleFootnoteHover = useCallback((e: Event) => {
