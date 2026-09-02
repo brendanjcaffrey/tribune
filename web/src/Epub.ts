@@ -18,6 +18,56 @@ export interface TouchStart {
   targetIsAnchorOrButton: boolean;
 }
 
+// whether a tap or click on a noteref jumps to the note at the back of the
+// article or shows it in place. the web does both - it previews on hover and
+// jumps on click - so only ios asks for "preview"
+export type FootnoteClickBehavior = "jump" | "preview";
+
+export interface Box {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface Size {
+  width: number;
+  height: number;
+}
+
+export interface Placement {
+  left: number;
+  top: number;
+}
+
+// the anchors epub marks up as references to a note. epub:type is rewritten to
+// epub_type when the spine item is parsed
+const NOTEREF_SELECTOR = "a[epub_type]";
+
+// event targets come from inside the reader's iframe, which is a different
+// realm, so instanceof Element would say no. ask for closest instead
+function closestElement(
+  target: EventTarget | null,
+  selector: string,
+): Element | null {
+  const element = target as {
+    closest?: (selector: string) => Element | null;
+  } | null;
+  return element?.closest?.(selector) ?? null;
+}
+
+// the part of a link after the "#", which is the id of the element it points at
+function fragmentId(href: string | null | undefined): string | null {
+  if (!href) return null;
+  const hash = href.indexOf("#");
+  if (hash < 0) return null;
+  return href.substring(hash + 1) || null;
+}
+
+function clamp(value: number, lowest: number, highest: number): number {
+  return Math.min(Math.max(value, lowest), highest);
+}
+
 export interface ReadingProgress {
   // a fraction of the document between 0 and 1, quantised to four decimal
   // places by ReadingPosition.quantise
@@ -208,6 +258,7 @@ export class Epub {
   public async getSpineItem(
     spineIndex: number,
     externalLinkBehavior: "target _blank" | "event",
+    footnoteClickBehavior: FootnoteClickBehavior,
   ): Promise<SpineItem> {
     if (spineIndex < 0 || spineIndex >= this.spine.length) {
       throw new Error("Spine index out of bounds");
@@ -244,7 +295,9 @@ export class Epub {
     for (const anchor of Array.from(anchors)) {
       const href = anchor.getAttribute("href");
       if (anchor.hasAttribute("epub_type")) {
-        if (href) {
+        // "preview" leaves the noteref alone. the reader shows the note in
+        // place instead, wired up on the document rather than on the anchor
+        if (href && footnoteClickBehavior === "jump") {
           anchor.setAttribute(
             "onclick",
             `window.parent.dispatchEvent(new CustomEvent('scrollToHref', { detail: { href: '${href}' } })); return false;`,
@@ -362,6 +415,34 @@ export class Epub {
                   max-height: ${maxImageSize}vh;
                   object-fit: contain;
                 }
+                #${FootnotePreview.ELEMENT_ID} {
+                  position: fixed;
+                  left: 0;
+                  top: 0;
+                  z-index: 2147483647;
+                  box-sizing: border-box;
+                  max-width: min(320px, calc(100vw - 24px));
+                  max-height: 45vh;
+                  overflow-y: auto;
+                  padding: 12px 14px;
+                  border-radius: 8px;
+                  text-align: left;
+                  /* the ground and the typography are copied off the body when
+                     the preview is shown, because each platform sets up its own
+                     palette and the preview hangs outside the body */
+                  box-shadow:
+                    0 0 0 1px rgba(128, 128, 128, 0.35),
+                    0 2px 12px rgba(0, 0, 0, 0.3);
+                }
+                #${FootnotePreview.ELEMENT_ID} > :first-child {
+                  margin-top: 0;
+                }
+                #${FootnotePreview.ELEMENT_ID} > :last-child {
+                  margin-bottom: 0;
+                }
+                #${FootnotePreview.ELEMENT_ID} img {
+                  max-width: 100%;
+                }
                 #__blank_epub_column {
                   display: inline-block;
                   height: 1px;
@@ -380,9 +461,159 @@ export class Epub {
   }
 }
 
-// some of these interfaces may look a little strange, but this code is used
-// by both the typescript/react web app and a plain javascript webview in the
-// ios app, so some indirection is needed
+// a note shown in place beside the noteref pointing at it.
+//
+// it lives in the reader's iframe, off the root element rather than the body,
+// because the body is the multi-column box the pages are cut from and the
+// preview has to sit still in the viewport instead of flowing into a column
+export class FootnotePreview {
+  static readonly ELEMENT_ID = "__footnote_preview";
+
+  // how far the preview keeps off the noteref and off the edge of the screen
+  private static readonly GAP = 8;
+  private static readonly MARGIN = 12;
+
+  // the pointer usually crosses a little body text on its way from the noteref
+  // into the preview, so hiding waits a moment for it to arrive
+  private static readonly HIDE_DELAY_MS = 200;
+  private static hideTimer: ReturnType<typeof setTimeout> | null = null;
+
+  static isInside(target: EventTarget | null): boolean {
+    return closestElement(target, `#${FootnotePreview.ELEMENT_ID}`) !== null;
+  }
+
+  static isOpen(iframeRef: RefObject<HTMLIFrameElement | null>): boolean {
+    const doc = iframeRef.current?.contentDocument;
+    return doc?.getElementById(FootnotePreview.ELEMENT_ID) != null;
+  }
+
+  // the note a noteref points at, ready to drop into the preview, or null when
+  // there is nothing worth showing
+  static extract(doc: Document, noteref: Element): string | null {
+    const id = fragmentId(noteref.getAttribute("href"));
+    if (!id) return null;
+
+    const note = doc.getElementById(id);
+    if (!note) return null;
+    // a noteref pointing at another noteref is the link back out of a note, not
+    // a note of its own, so there is nothing to preview
+    if (note.tagName.toLowerCase() === "a") return null;
+
+    // a note opens with a link back to the noteref, which is navigation the
+    // preview has no use for - the reader never left
+    const backHref = noteref.id ? `#${noteref.id}` : null;
+    const isBackLink = (link: Element) =>
+      backHref === null || link.getAttribute("href") === backHref;
+
+    // the marker the link back carries reads as part of the note, so it stays
+    // behind as plain text
+    const copy = note.cloneNode(true) as Element;
+    for (const link of Array.from(copy.querySelectorAll(NOTEREF_SELECTOR))) {
+      if (isBackLink(link)) link.replaceWith(...Array.from(link.childNodes));
+    }
+
+    // remove duplicate ids
+    copy.removeAttribute("id");
+    for (const element of Array.from(copy.querySelectorAll("[id]"))) {
+      element.removeAttribute("id");
+    }
+
+    // the marker isn't something the note says though, so a note that is
+    // nothing but the link back has nothing worth showing
+    const said = note.cloneNode(true) as Element;
+    for (const link of Array.from(said.querySelectorAll(NOTEREF_SELECTOR))) {
+      if (isBackLink(link)) link.remove();
+    }
+
+    return said.textContent?.trim() ? copy.innerHTML : null;
+  }
+
+  // below the noteref by default, above it when there is not enough room below
+  static place(anchor: Box, preview: Size, viewport: Size): Placement {
+    const { GAP, MARGIN } = FootnotePreview;
+
+    const rightmost = Math.max(MARGIN, viewport.width - MARGIN - preview.width);
+    const left = clamp(
+      anchor.left + anchor.width / 2 - preview.width / 2,
+      MARGIN,
+      rightmost,
+    );
+
+    const below = anchor.top + anchor.height + GAP;
+    const above = anchor.top - GAP - preview.height;
+    const lowest = Math.max(MARGIN, viewport.height - MARGIN - preview.height);
+    const wanted = below <= lowest ? below : above >= MARGIN ? above : lowest;
+
+    return { left, top: clamp(wanted, MARGIN, lowest) };
+  }
+
+  // shows the note the noteref points at and returns whether there was one
+  static show(
+    iframeRef: RefObject<HTMLIFrameElement | null>,
+    noteref: Element,
+  ): boolean {
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument;
+    const view = iframe?.contentWindow;
+    if (!doc || !view) return false;
+
+    const content = FootnotePreview.extract(doc, noteref);
+    if (content === null) return false;
+
+    FootnotePreview.cancelHide();
+
+    let preview = doc.getElementById(FootnotePreview.ELEMENT_ID);
+    if (!preview) {
+      preview = doc.createElement("div");
+      preview.id = FootnotePreview.ELEMENT_ID;
+      doc.documentElement.appendChild(preview);
+    }
+    preview.innerHTML = content;
+
+    // adding to the root element means inheriting none of the reader's
+    // typography, so copy it off the body
+    const body = view.getComputedStyle(doc.body);
+    preview.style.background = body.backgroundColor;
+    preview.style.color = body.color;
+    preview.style.fontFamily = body.fontFamily;
+    preview.style.fontSize = body.fontSize;
+    preview.style.lineHeight = body.lineHeight;
+
+    const placement = FootnotePreview.place(
+      noteref.getBoundingClientRect(),
+      { width: preview.offsetWidth, height: preview.offsetHeight },
+      { width: view.innerWidth, height: view.innerHeight },
+    );
+    preview.style.left = `${placement.left}px`;
+    preview.style.top = `${placement.top}px`;
+    return true;
+  }
+
+  static hide(iframeRef: RefObject<HTMLIFrameElement | null>) {
+    FootnotePreview.cancelHide();
+    iframeRef.current?.contentDocument
+      ?.getElementById(FootnotePreview.ELEMENT_ID)
+      ?.remove();
+  }
+
+  static scheduleHide(iframeRef: RefObject<HTMLIFrameElement | null>) {
+    if (FootnotePreview.hideTimer !== null) return;
+    FootnotePreview.hideTimer = setTimeout(() => {
+      FootnotePreview.hideTimer = null;
+      FootnotePreview.hide(iframeRef);
+    }, FootnotePreview.HIDE_DELAY_MS);
+  }
+
+  static cancelHide() {
+    if (FootnotePreview.hideTimer !== null) {
+      clearTimeout(FootnotePreview.hideTimer);
+      FootnotePreview.hideTimer = null;
+    }
+  }
+}
+
+// this code is used by both the typescript/react web app and a plain
+// javascript webview in the ios app so some indirection is needed
 export class EpubInteraction {
   static handleKeyDown(
     iframeRef: RefObject<HTMLIFrameElement | null>,
@@ -442,8 +673,16 @@ export class EpubInteraction {
         );
         event.preventDefault();
       } else {
+        const insidePreview = FootnotePreview.isInside(event.target);
         if (touchStartRef.current.targetIsAnchorOrButton) {
           // nop, let the link work normally
+        } else if (insidePreview) {
+          // a tap on the note itself neither turns the page nor dismisses it
+          event.preventDefault();
+        } else if (FootnotePreview.isOpen(iframeRef)) {
+          // a tap anywhere else hides the note
+          FootnotePreview.hide(iframeRef);
+          event.preventDefault();
         } else if (iframeRef.current?.contentWindow) {
           const screenWidth = iframeRef.current.clientWidth;
           EpubInteraction.scrollPage(
@@ -462,8 +701,63 @@ export class EpubInteraction {
     event: Event,
     endTrackingRef: RefObject<EndTracking | null>,
   ) {
+    const id = fragmentId((event as CustomEvent).detail.href);
+    if (id) {
+      EpubInteraction.scrollToId(iframeRef, id, endTrackingRef);
+    }
+  }
+
+  static handleFootnoteHover(
+    iframeRef: RefObject<HTMLIFrameElement | null>,
+    event: Event,
+  ) {
+    const noteref = closestElement(event.target, NOTEREF_SELECTOR);
+    if (noteref) {
+      FootnotePreview.show(iframeRef, noteref);
+    } else if (FootnotePreview.isInside(event.target)) {
+      // the pointer made it into the preview, so it stays up for as long as it
+      // is being read
+      FootnotePreview.cancelHide();
+    } else {
+      FootnotePreview.scheduleHide(iframeRef);
+    }
+  }
+
+  static handleFootnoteHoverOut(
+    iframeRef: RefObject<HTMLIFrameElement | null>,
+    event: Event,
+  ) {
+    if ((event as MouseEvent).relatedTarget === null) {
+      FootnotePreview.scheduleHide(iframeRef);
+    }
+  }
+
+  static handleFootnoteClick(
+    iframeRef: RefObject<HTMLIFrameElement | null>,
+    event: Event,
+    endTrackingRef: RefObject<EndTracking | null>,
+  ) {
+    const noteref = closestElement(event.target, NOTEREF_SELECTOR);
+    if (!noteref) return;
+
+    // the noteref keeps its href, so without this the frame would navigate to
+    // the note as well as previewing it
+    event.preventDefault();
+    if (FootnotePreview.show(iframeRef, noteref)) return;
+
+    const id = fragmentId(noteref.getAttribute("href"));
+    if (id) {
+      EpubInteraction.scrollToId(iframeRef, id, endTrackingRef);
+    }
+  }
+
+  static scrollToId(
+    iframeRef: RefObject<HTMLIFrameElement | null>,
+    id: string,
+    endTrackingRef: RefObject<EndTracking | null>,
+  ) {
     const { current: iframe } = iframeRef;
-    const id = (event as CustomEvent).detail.href.substring(1);
+    FootnotePreview.hide(iframeRef);
     if (iframe?.contentDocument && iframe?.contentWindow) {
       const element = iframe.contentDocument.getElementById(id);
       if (element) {
@@ -500,6 +794,7 @@ export class EpubInteraction {
     direction: "forward" | "backward",
   ) {
     const { current: iframe } = iframeRef;
+    FootnotePreview.hide(iframeRef);
     if (iframe?.contentWindow) {
       const scrollAmount = iframe.clientWidth + COLUMN_GAP;
       if (direction === "forward") {

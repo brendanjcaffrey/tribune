@@ -18,6 +18,7 @@ import {
   TouchStart,
   EndTracking,
   EpubInteraction,
+  FootnotePreview,
 } from "./Epub";
 import { WorkerInstance } from "./WorkerInstance";
 import { buildMainMessage } from "./WorkerTypes";
@@ -130,6 +131,48 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     EpubInteraction.handleScrollToHref(iframeRef, e, endTracking);
   }, []);
 
+  const handleFootnoteHover = useCallback((e: Event) => {
+    EpubInteraction.handleFootnoteHover(iframeRef, e);
+  }, []);
+
+  const handleFootnoteHoverOut = useCallback((e: Event) => {
+    EpubInteraction.handleFootnoteHoverOut(iframeRef, e);
+  }, []);
+
+  // the listeners that belong on the epub itself rather than on the page around
+  // it. they have to be attached to the iframe's own document, which is
+  // replaced every time the content is reframed
+  const contentListeners = useMemo<[string, EventListener][]>(
+    () => [
+      ["keydown", handleKeyDown as EventListener],
+      ["touchstart", handleTouchStart as EventListener],
+      ["touchend", handleTouchEnd as EventListener],
+      ["mouseover", handleFootnoteHover],
+      ["mouseout", handleFootnoteHoverOut],
+    ],
+    [
+      handleKeyDown,
+      handleTouchStart,
+      handleTouchEnd,
+      handleFootnoteHover,
+      handleFootnoteHoverOut,
+    ],
+  );
+
+  const attachContentListeners = useCallback(() => {
+    const doc = iframeRef.current?.contentDocument;
+    for (const [type, handler] of contentListeners) {
+      doc?.addEventListener(type, handler);
+    }
+  }, [contentListeners]);
+
+  const detachContentListeners = useCallback(() => {
+    const doc = iframeRef.current?.contentDocument;
+    for (const [type, handler] of contentListeners) {
+      doc?.removeEventListener(type, handler);
+    }
+  }, [contentListeners]);
+
   const saveProgress = useCallback(() => {
     const progress = EpubInteraction.calculateReadingProgress(iframeRef);
     setReadingProgress(progress.progress);
@@ -176,7 +219,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     const epub = new Epub(file);
     epub.parse().then(async () => {
       if (epub.spine.length > 0) {
-        setBookContent(await epub.getSpineItem(0, "target _blank"));
+        setBookContent(await epub.getSpineItem(0, "target _blank", "jump"));
         const progress = ReadingPosition.parse(newsletter.progress);
         if (progress !== null) {
           seekOnNextLoad.current = { kind: "progress", progress };
@@ -269,15 +312,7 @@ const EpubReader: React.FC<EpubReaderProps> = ({
 
     // have to attach after load or it won't work
     const onLoad = () => {
-      iframe.contentDocument?.addEventListener("keydown", handleKeyDown);
-      iframe.contentDocument?.addEventListener(
-        "touchstart",
-        handleTouchStart as EventListener,
-      );
-      iframe.contentDocument?.addEventListener(
-        "touchend",
-        handleTouchEnd as EventListener,
-      );
+      attachContentListeners();
       // ensure even number of columns on load
       ensureEvenColumns(windowWidth);
 
@@ -297,40 +332,24 @@ const EpubReader: React.FC<EpubReaderProps> = ({
     iframe.addEventListener("load", onLoad);
 
     // attach in case contentDocument already exists
-    iframe.contentDocument?.addEventListener("keydown", handleKeyDown);
-    iframe.contentDocument?.addEventListener(
-      "touchstart",
-      handleTouchStart as EventListener,
-    );
-    iframe.contentDocument?.addEventListener(
-      "touchend",
-      handleTouchEnd as EventListener,
-    );
+    attachContentListeners();
 
     // also run now in case iframe is already loaded
     ensureEvenColumns(windowWidth);
 
     return () => {
       iframe.removeEventListener("load", onLoad);
-      iframe.contentDocument?.removeEventListener("keydown", handleKeyDown);
-      iframe.contentDocument?.removeEventListener(
-        "touchstart",
-        handleTouchStart as EventListener,
-      );
-      iframe.contentDocument?.removeEventListener(
-        "touchend",
-        handleTouchEnd as EventListener,
-      );
+      detachContentListeners();
+      FootnotePreview.hide(iframeRef);
       const prev = iframe.contentDocument?.getElementById(SPACER_ID);
       if (prev) prev.remove();
     };
   }, [
-    handleKeyDown,
+    attachContentListeners,
+    detachContentListeners,
     windowWidth,
     windowHeight,
     iframeContent,
-    handleTouchStart,
-    handleTouchEnd,
   ]);
 
   return (

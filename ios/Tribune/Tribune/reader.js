@@ -158,8 +158,8 @@ function handleTouchEnd(event) {
   Bundle.EpubInteraction.handleTouchEnd(iframeRef, touchStartRef, event);
 }
 
-function handleScrollToHref(event) {
-  Bundle.EpubInteraction.handleScrollToHref(iframeRef, event, endTrackingRef);
+function handleFootnoteClick(event) {
+  Bundle.EpubInteraction.handleFootnoteClick(iframeRef, event, endTrackingRef);
 }
 
 function handleOpenExternalLink(event) {
@@ -195,14 +195,13 @@ async function openBook(path, initialProgress) {
   await book.parse();
 
   if (book.spine.length > 0) {
-    const bookContent = await book.getSpineItem(0, "event");
+    const bookContent = await book.getSpineItem(0, "event", "preview");
     setContent(bookContent);
   }
 
   window.addEventListener("touchstart", handleTouchStart);
   window.addEventListener("touchend", handleTouchEnd);
   window.addEventListener("keydown", handleKeyDown);
-  window.addEventListener("scrollToHref", handleScrollToHref);
   window.addEventListener("openExternalLink", handleOpenExternalLink);
 
   const iframe = document.getElementsByTagName("iframe")[0];
@@ -216,6 +215,7 @@ async function openBook(path, initialProgress) {
     iframe.contentWindow.addEventListener("touchstart", handleTouchStart);
     iframe.contentWindow.addEventListener("touchend", handleTouchEnd);
     iframe.contentWindow.addEventListener("keydown", handleKeyDown);
+    iframe.contentWindow.addEventListener("click", handleFootnoteClick);
   };
 
   // wire up the content window, restore the saved position, then fade the
