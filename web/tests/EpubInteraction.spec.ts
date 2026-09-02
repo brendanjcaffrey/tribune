@@ -4,6 +4,7 @@ import {
   EpubInteraction,
   FootnotePreview,
   type ReadingProgress,
+  type TouchStart,
 } from "../src/Epub";
 
 function tracking(): { current: EndTracking } {
@@ -66,8 +67,21 @@ function tap(target: EventTarget | null) {
   };
 }
 
-function touchStart(targetIsAnchorOrButton: boolean) {
-  return { current: { x: 10, y: 10, targetIsAnchorOrButton } };
+function touchStart(
+  targetIsAnchorOrButton: boolean,
+  targetIsInsidePreview = false,
+) {
+  return {
+    current: { x: 10, y: 10, targetIsAnchorOrButton, targetIsInsidePreview },
+  };
+}
+
+// a touch that ended somewhere other than where it started
+function swipe(target: EventTarget | null, endX: number) {
+  const event = tap(target);
+  return Object.create(event, {
+    changedTouches: { value: [{ clientX: endX, clientY: 10 }] },
+  }) as typeof event;
 }
 
 afterEach(() => {
@@ -114,12 +128,73 @@ test("a tap on the note itself leaves it up", () => {
   const event = tap(preview.firstElementChild);
   EpubInteraction.handleTouchEnd(
     iframeRef,
-    touchStart(false),
+    touchStart(false, true),
     event as unknown as TouchEvent,
   );
 
   expect(FootnotePreview.isOpen(iframeRef)).toBe(true);
   expect(event.defaultPrevented).toBe(true);
+});
+
+test("a swipe that starts on the note scrolls it rather than the page", () => {
+  const iframeRef = reader();
+  const doc = iframeRef.current.contentDocument!;
+  FootnotePreview.show(iframeRef, doc.getElementById("footnote-1-src")!);
+
+  // a finger that drifts off the box mid swipe still ends on the note, since a
+  // touch stays with the element it started on
+  const preview = doc.getElementById(FootnotePreview.ELEMENT_ID)!;
+  const event = swipe(preview.firstElementChild, 200);
+  let turned = false;
+  EpubInteraction.handleTouchEnd(
+    iframeRef,
+    touchStart(false, true),
+    event as unknown as TouchEvent,
+    () => {
+      turned = true;
+    },
+  );
+
+  expect(FootnotePreview.isOpen(iframeRef)).toBe(true);
+  expect(turned).toBe(false);
+});
+
+test("a swipe that starts away from the note turns the page", () => {
+  const iframeRef = reader();
+  const doc = iframeRef.current.contentDocument!;
+  FootnotePreview.show(iframeRef, doc.getElementById("footnote-1-src")!);
+
+  const event = swipe(doc.body, 200);
+  EpubInteraction.handleTouchEnd(
+    iframeRef,
+    touchStart(false),
+    event as unknown as TouchEvent,
+  );
+
+  expect(FootnotePreview.isOpen(iframeRef)).toBe(false);
+  expect(event.defaultPrevented).toBe(true);
+});
+
+test("a touch is recorded as starting on the note when it lands inside it", () => {
+  const iframeRef = reader();
+  const doc = iframeRef.current.contentDocument!;
+  FootnotePreview.show(iframeRef, doc.getElementById("footnote-1-src")!);
+
+  const preview = doc.getElementById(FootnotePreview.ELEMENT_ID)!;
+  const ref: { current: TouchStart | null } = { current: null };
+  EpubInteraction.handleTouchStart(ref, {
+    touches: [{ clientX: 10, clientY: 10 }],
+    target: preview.firstElementChild,
+  } as unknown as TouchEvent);
+
+  expect(ref.current?.targetIsInsidePreview).toBe(true);
+
+  EpubInteraction.handleTouchStart(ref, {
+    touches: [{ clientX: 10, clientY: 10 }],
+    target: doc.body,
+  } as unknown as TouchEvent);
+
+  expect(ref.current?.targetIsInsidePreview).toBe(false);
 });
 
 test("turning the page puts an open preview away", () => {
@@ -219,7 +294,14 @@ test("a swipe forward on the last page marks the newsletter read", () => {
   };
   EpubInteraction.handleTouchEnd(
     iframeRef,
-    { current: { x: 200, y: 10, targetIsAnchorOrButton: false } },
+    {
+      current: {
+        x: 200,
+        y: 10,
+        targetIsAnchorOrButton: false,
+        targetIsInsidePreview: false,
+      },
+    },
     event as unknown as TouchEvent,
     () => {
       markedRead = true;

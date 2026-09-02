@@ -16,6 +16,7 @@ export interface TouchStart {
   x: number;
   y: number;
   targetIsAnchorOrButton: boolean;
+  targetIsInsidePreview: boolean;
 }
 
 // whether a tap or click on a noteref jumps to the note at the back of the
@@ -651,6 +652,7 @@ export class EpubInteraction {
         targetIsAnchorOrButton:
           (event.target as HTMLElement).closest("a") != null ||
           (event.target as HTMLElement).closest("button") != null,
+        targetIsInsidePreview: FootnotePreview.isInside(event.target),
       };
     }
   }
@@ -666,33 +668,33 @@ export class EpubInteraction {
       const touchStartX = touchStartRef.current.x;
       const deltaX = touchEndX - touchStartX;
 
-      if (Math.abs(deltaX) >= SWIPE_THRESHOLD) {
+      const startedOnLink = touchStartRef.current.targetIsAnchorOrButton;
+
+      if (touchStartRef.current.targetIsInsidePreview) {
+        // if the scroll started inside a footnote preview, ignore it
+        // otherwise, it would close the preview & change the page
+        if (!startedOnLink) event.preventDefault();
+      } else if (Math.abs(deltaX) >= SWIPE_THRESHOLD) {
         EpubInteraction.scrollPage(
           iframeRef,
           deltaX < 0 ? "forward" : "backward",
           onPastEnd,
         );
         event.preventDefault();
-      } else {
-        const insidePreview = FootnotePreview.isInside(event.target);
-        if (touchStartRef.current.targetIsAnchorOrButton) {
-          // nop, let the link work normally
-        } else if (insidePreview) {
-          // a tap on the note itself neither turns the page nor dismisses it
-          event.preventDefault();
-        } else if (FootnotePreview.isOpen(iframeRef)) {
-          // a tap anywhere else hides the note
-          FootnotePreview.hide(iframeRef);
-          event.preventDefault();
-        } else if (iframeRef.current?.contentWindow) {
-          const screenWidth = iframeRef.current.clientWidth;
-          EpubInteraction.scrollPage(
-            iframeRef,
-            touchEndX < screenWidth / 2 ? "backward" : "forward",
-            onPastEnd,
-          );
-          event.preventDefault();
-        }
+      } else if (startedOnLink) {
+        // nop, let the link work normally
+      } else if (FootnotePreview.isOpen(iframeRef)) {
+        // a tap anywhere else hides the note
+        FootnotePreview.hide(iframeRef);
+        event.preventDefault();
+      } else if (iframeRef.current?.contentWindow) {
+        const screenWidth = iframeRef.current.clientWidth;
+        EpubInteraction.scrollPage(
+          iframeRef,
+          touchEndX < screenWidth / 2 ? "backward" : "forward",
+          onPastEnd,
+        );
+        event.preventDefault();
       }
       touchStartRef.current = null;
     }
