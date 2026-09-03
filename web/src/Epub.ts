@@ -415,7 +415,13 @@ export class Epub {
                   object-fit: contain;
                 }
                 #${FootnotePreview.ELEMENT_ID} {
-                  position: fixed;
+                  /* absolute rather than fixed on purpose: a fixed element is
+                     promoted to its own composited layer in the scrolling
+                     frame, which shrinks the tile coverage on a real device and
+                     makes every later page turn paint in two passes. the
+                     preview is dismissed by a page turn anyway, so it never
+                     needs to outlast the page it is anchored to */
+                  position: absolute;
                   left: 0;
                   top: 0;
                   z-index: 2147483647;
@@ -426,6 +432,9 @@ export class Epub {
                   padding: 12px 14px;
                   border-radius: 8px;
                   text-align: left;
+                  /* the preview is toggled rather than added and removed, so it
+                     starts hidden and stays in the document once created */
+                  visibility: hidden;
                   /* the ground and the typography are copied off the body when
                      the preview is shown, because each platform sets up its own
                      palette and the preview hangs outside the body */
@@ -481,9 +490,27 @@ export class FootnotePreview {
     return closestElement(target, `#${FootnotePreview.ELEMENT_ID}`) !== null;
   }
 
+  // creates the preview element, hidden, so that it is in the document from
+  // load rather than appearing the first time a note is looked at
+  static ensure(
+    iframeRef: RefObject<HTMLIFrameElement | null>,
+  ): HTMLElement | null {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return null;
+
+    let preview = doc.getElementById(FootnotePreview.ELEMENT_ID);
+    if (!preview) {
+      preview = doc.createElement("div");
+      preview.id = FootnotePreview.ELEMENT_ID;
+      doc.documentElement.appendChild(preview);
+    }
+    return preview;
+  }
+
   static isOpen(iframeRef: RefObject<HTMLIFrameElement | null>): boolean {
     const doc = iframeRef.current?.contentDocument;
-    return doc?.getElementById(FootnotePreview.ELEMENT_ID) != null;
+    const preview = doc?.getElementById(FootnotePreview.ELEMENT_ID);
+    return preview != null && preview.style.visibility === "visible";
   }
 
   // the note a noteref points at, ready to drop into the preview, or null when
@@ -561,12 +588,8 @@ export class FootnotePreview {
 
     FootnotePreview.cancelHide();
 
-    let preview = doc.getElementById(FootnotePreview.ELEMENT_ID);
-    if (!preview) {
-      preview = doc.createElement("div");
-      preview.id = FootnotePreview.ELEMENT_ID;
-      doc.documentElement.appendChild(preview);
-    }
+    const preview = FootnotePreview.ensure(iframeRef);
+    if (!preview) return false;
     preview.innerHTML = content;
 
     // adding to the root element means inheriting none of the reader's
@@ -583,16 +606,18 @@ export class FootnotePreview {
       { width: preview.offsetWidth, height: preview.offsetHeight },
       { width: view.innerWidth, height: view.innerHeight },
     );
-    preview.style.left = `${placement.left}px`;
-    preview.style.top = `${placement.top}px`;
+    preview.style.left = `${placement.left + view.scrollX}px`;
+    preview.style.top = `${placement.top + view.scrollY}px`;
+    preview.style.visibility = "visible";
     return true;
   }
 
   static hide(iframeRef: RefObject<HTMLIFrameElement | null>) {
     FootnotePreview.cancelHide();
-    iframeRef.current?.contentDocument
-      ?.getElementById(FootnotePreview.ELEMENT_ID)
-      ?.remove();
+    const preview = iframeRef.current?.contentDocument?.getElementById(
+      FootnotePreview.ELEMENT_ID,
+    );
+    if (preview) preview.style.visibility = "hidden";
   }
 
   static scheduleHide(iframeRef: RefObject<HTMLIFrameElement | null>) {
